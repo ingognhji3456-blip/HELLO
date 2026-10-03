@@ -234,6 +234,12 @@ const PLAYER2 = [
   "....d.d.d...."
 ];
 const PCOL2 = { a: "#f2c14e", b: "#b5651d", c: "#ffffff", w: "#ffffff", g: "#5fd3ff", d: "#9ff0ff" };
+const TIER_PAL = [null, PCOL, PCOL2,
+  { a: "#7cffb2", b: "#1f7a4d", c: "#ffffff", w: "#ffffff", g: "#ff5dc8", d: "#ffffff" },
+  { a: "#b48cff", b: "#4b2a8a", c: "#ffffff", w: "#ffffff", g: "#ff3d5a", d: "#ffffff" },
+  { a: "#ffffff", b: "#ff3d5a", c: "#ffd166", w: "#ffffff", g: "#ffd166", d: "#ffffff" }];
+const TIER_FX = [null, "#9ff0ff", "#f2c14e", "#ff5dc8", "#b48cff", "#ffffff"];
+const TIER_RGB = [null, "95,211,255", "242,193,78", "255,93,200", "180,140,255", "255,255,255"];
 const HEART = [".11.11.", "1111111", "1111111", ".11111.", "..111..", "...1..."];
 
 /* ---------- audio ---------- */
@@ -1000,20 +1006,21 @@ function newPlayer(pow = 1) {
   return { x: W / 2, y: H - 40, hp: 5, maxHp: 5, inv: 0, dashT: 0, dashCd: 0, dashMax: 0.85, dx: 0, dy: -1, shootT: 0, mslT: 0, dead: false, pow, msl: 0, shield: 0, tier: 1, gunFlash: 0, volley: 0 };
 }
 function powerUp() {
-  if (player.pow >= 5) return false;
-  player.pow++;
-  if (player.pow === 5 && player.tier < 2) evolve();
-  return true;
+  if (player.pow < 5) { player.pow++; return "up"; }
+  if (player.tier < 5) { evolve(); return "tier"; }
+  return false;
 }
-// max power: the ship transforms into its tier-2 form
+// a full power gauge transforms the ship into the next tier; the gun drops back to one heavier shot
 function evolve() {
-  player.tier = 2; player.inv = Math.max(player.inv, 1.5);
-  shock(player.x, player.y, 40, "#ffffff"); shock(player.x, player.y, 26, "#f2c14e"); shock(player.x, player.y, 14, "#5fd3ff");
-  burst(player.x, player.y, "#f2c14e", 30, 120); burst(player.x, player.y, "#5fd3ff", 20, 90);
-  bullets = bullets.filter(b => Math.hypot(b.x - player.x, b.y - player.y) > 60);
-  banner = { text: "TIER 2", t: 1.6 };
-  shake = 6;
-  [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => sfx(f, 0.18, "square", 0.05), i * 90));
+  player.tier++; player.pow = 1;
+  player.inv = Math.max(player.inv, 1.5);
+  const c = TIER_FX[player.tier];
+  shock(player.x, player.y, 46, "#ffffff"); shock(player.x, player.y, 30, c); shock(player.x, player.y, 16, "#5fd3ff");
+  burst(player.x, player.y, c, 34, 130); burst(player.x, player.y, "#ffffff", 16, 90);
+  bullets = bullets.filter(b => Math.hypot(b.x - player.x, b.y - player.y) > 70);
+  banner = { text: "TIER " + player.tier, t: 1.6 };
+  shake = 6 + player.tier;
+  [523, 659, 784, 1046, 1318].slice(0, player.tier).forEach((f, i) => setTimeout(() => sfx(f, 0.18, "square", 0.05), i * 90));
 }
 function saveBest() {
   if (score > best) { best = score; newBest = true; try { localStorage.setItem("striker-hiscore", String(best)); } catch (e) {} }
@@ -1033,7 +1040,7 @@ function damageEnemy(e, d) {
   score += e.d.score;
   popText(String(e.d.score), e.x, e.y - 6, "#ece6f6");
   explode(e.x, e.y, e.d.boom);
-  if (e.drop || Math.random() < 0.07) dropItem(e.x, e.y);
+  if (e.drop || Math.random() < 0.12) dropItem(e.x, e.y);
 }
 
 function updateEnemies() {
@@ -1052,7 +1059,7 @@ function updateEnemies() {
       it.taken = true;
       sfx(660, 0.08, "square", 0.04); sfx(990, 0.15, "square", 0.04);
       if (it.kind === "P") {
-        if (powerUp()) { if (player.tier < 2) popText("POWER UP!", it.x, it.y, "#ffd166"); }
+        const res = powerUp(); if (res) { if (res === "up") popText("POWER UP!", it.x, it.y, "#ffd166"); }
         else { score += 2000; popText("2000", it.x, it.y, "#ffd166"); }
       } else {
         player.hp = Math.min(player.maxHp, player.hp + 1); popText("REPAIR!", it.x, it.y, "#7cffb2");
@@ -1120,7 +1127,7 @@ function drawEnemies() {
 /* --- between stages: pick a reward, then fly the route map to the next stage --- */
 const MAP_PTS = [[40, 232], [110, 216], [190, 198], [150, 176], [70, 156], [40, 134], [120, 114], [200, 94], [140, 72], [120, 50]];
 const REWARDS = [
-  { id: "POWER", name: "POWER UP", desc: "MAIN GUN +1", ok: () => player.pow < 5, apply: () => powerUp() },
+  { id: "POWER", name: "POWER UP", desc: "MAIN GUN +1", ok: () => player.pow < 5 || player.tier < 5, apply: () => powerUp() },
   { id: "MISSILE", name: "MISSILE POD", desc: "HOMING +1", ok: () => player.msl < 3, apply: () => player.msl++ },
   { id: "HULL", name: "HULL +1", desc: "MAX HP +1", ok: () => player.maxHp < 8, apply: () => { player.maxHp++; player.hp++; } },
   { id: "REPAIR", name: "REPAIR", desc: "FULL HP", ok: () => player.hp < player.maxHp, apply: () => { player.hp = player.maxHp; } },
@@ -1167,7 +1174,7 @@ function drawMap() {
       text(c.desc, x + cw / 2, yy + 60, "#9087a3", 1, "center");
     });
     text("< > SELECT   ENTER OR TAP", W / 2, 214, "#5fd3ff", 1, "center");
-    text("PW" + player.pow + "  MS" + player.msl + "  HP" + player.hp + "/" + player.maxHp + "  SH" + player.shield, W / 2, 240, "#9087a3", 1, "center");
+    text("T" + player.tier + "-" + player.pow + "  MS" + player.msl + "  HP" + player.hp + "/" + player.maxHp + "  SH" + player.shield, W / 2, 240, "#9087a3", 1, "center");
     return;
   }
   shadowText("ROUTE MAP", W / 2, 14, "#ece6f6", 2, "center");
@@ -1335,21 +1342,17 @@ function updatePlayer() {
 
   player.shootT -= DT;
   if (player.shootT <= 0 && !player.dead) {
-    player.shootT = player.tier === 2 ? 0.08 : 0.09;
-    const L = player.pow, y = player.y - 5;
-    if (player.tier === 2) {
-      for (const [dx, a] of [[-6, 0], [-2, 0], [2, 0], [6, 0], [-8, -0.12], [8, 0.12], [-8, -0.26], [8, 0.26]])
-        pbullets.push({ x: player.x + dx, y: y - 1, vx: Math.sin(a) * 380, vy: -Math.cos(a) * 380, kind: "plasma", dmg: 2 });
-      player.gunFlash = 0.04;
-      if (++player.volley % 3 === 0) {
-        for (const s of [-1, 1]) pbullets.push({ x: player.x + s * 6, y: player.y - 2, vx: 0, vy: -520, kind: "lance", dmg: 3, hits: [] });
-        sfx(1200, 0.05, "square", 0.012, 2400);
-      }
-    } else {
-    const add = (dx, a) => pbullets.push({ x: player.x + dx, y, vx: Math.sin(a) * 330, vy: -Math.cos(a) * 330 });
-    const SHOTS = [[[-3, 0], [3, 0]], [[-4, 0], [0, 0], [4, 0]], [[-4, 0], [0, 0], [4, 0], [-5, -0.15], [5, 0.15]],
-      [[-5, 0], [-2, 0], [2, 0], [5, 0], [-6, -0.18], [6, 0.18]], [[-5, 0], [-2, 0], [2, 0], [5, 0], [-6, -0.14], [6, 0.14], [-6, -0.3], [6, 0.3]]];
-    for (const [dx, a] of SHOTS[L - 1]) add(dx, a);
+    const T = player.tier, L = player.pow, y = player.y - 5;
+    player.shootT = [0, 0.09, 0.08, 0.08, 0.075, 0.07][T];
+    const sp = [0, 330, 380, 400, 420, 450][T], dmg = [0, 1, 2, 3, 4, 6][T];
+    const SHOTS = [[[0, 0]], [[-3, 0], [3, 0]], [[-4, 0], [0, 0], [4, 0]],
+      [[-5, 0], [-2, 0], [2, 0], [5, 0], [-6, -0.15], [6, 0.15]],
+      [[-6, 0], [-2, 0], [2, 0], [6, 0], [-8, -0.12], [8, 0.12], [-8, -0.26], [8, 0.26]]];
+    for (const [dx, a] of SHOTS[L - 1]) pbullets.push({ x: player.x + dx, y, vx: Math.sin(a) * sp, vy: -Math.cos(a) * sp, kind: "shot", tier: T, dmg });
+    if (T >= 2) player.gunFlash = 0.04;
+    if (T >= 3 && ++player.volley % (T === 5 ? 2 : 3) === 0) {
+      for (const s of [-1, 1]) pbullets.push({ x: player.x + s * 6, y: player.y - 2, vx: 0, vy: -520, kind: "lance", dmg: T, hits: [] });
+      sfx(1200, 0.05, "square", 0.012, 2400);
     }
   }
   if (player.msl > 0 && !player.dead) {
@@ -1431,7 +1434,7 @@ function updateBullets() {
           b.hits.push(e); damageEnemy(e, b.dmg); burst(b.x, b.y, "#5fd3ff", 3, 50);
           continue;
         }
-        if (b.kind === "plasma") burst(b.x, b.y, "#f2c14e", 2, 40);
+        if (b.kind === "shot" && b.tier > 1) burst(b.x, b.y, TIER_FX[b.tier], 2, 40 + b.tier * 8);
         b.dead = true; damageEnemy(e, b.dmg || 1);
         if (b.kind === "pm") explode(b.x, b.y, 5);
         break;
@@ -1551,7 +1554,7 @@ function update() {
     if (stateT <= 0) {
       if (back) state = "title";
       else if (start) {
-        if (state === "over") { score = 0; player = newPlayer(Math.max(1, player.pow - 1)); startStage(stageN); }
+        if (state === "over") { const tr = player.tier; score = 0; player = newPlayer(Math.max(1, player.pow - 1)); player.tier = tr; startStage(stageN); }
         else startGame();
       }
     }
@@ -1633,7 +1636,7 @@ function drawHUD() {
     r(17 + i * cw, H - 10, cw - 1, 5, on ? (player.hp <= 1 ? "#ff3d5a" : "#5fd3ff") : "#2c2338");
     if (on) r(17 + i * cw, H - 10, cw - 1, 1, "#c8f3ff");
   }
-  text((player.tier === 2 ? "T2" : "PW" + player.pow) + " MS" + player.msl + (player.shield ? " SH" + player.shield : ""), 22 + player.maxHp * cw, H - 10, "#ffd166");
+  text("T" + player.tier + "-" + player.pow + " MS" + player.msl + (player.shield ? " SH" + player.shield : ""), 22 + player.maxHp * cw, H - 10, "#ffd166");
   const ready = player.dashCd <= 0;
   text("DASH", W - 40, H - 10, ready ? "#5fd3ff" : "#4a3d5e");
   r(W - 23, H - 9, 17, 3, "#2c2338");
@@ -1704,12 +1707,8 @@ function drawPlay() {
 
   for (const b of pbullets) {
     if (b.kind === "pm") { r(Math.round(b.x) - 1, Math.round(b.y) - 1, 2, 2, "#ffffff"); r(Math.round(b.x - b.vx * 0.012), Math.round(b.y - b.vy * 0.012), 1, 1, "#ff8a3d"); }
-    else if (b.kind === "plasma") {
-      ctx.save(); ctx.translate(Math.round(b.x), Math.round(b.y)); ctx.rotate(Math.atan2(b.vx, -b.vy));
-      ctx.fillStyle = "rgba(242,193,78,0.35)"; ctx.fillRect(-2, -1, 5, 8);
-      ctx.fillStyle = "#f2c14e"; ctx.fillRect(-1, 0, 3, 6);
-      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, 1, 4);
-      ctx.restore();
+    else if (b.kind === "shot") {
+      drawShot(b);
     } else if (b.kind === "lance") {
       r(Math.round(b.x) - 2, Math.round(b.y), 4, 14, "rgba(95,211,255,0.35)");
       r(Math.round(b.x) - 1, Math.round(b.y), 2, 14, "#5fd3ff");
@@ -1731,21 +1730,48 @@ function drawPlay() {
   }
 }
 
+function drawShot(b) {
+  const T = b.tier;
+  ctx.save(); ctx.translate(Math.round(b.x), Math.round(b.y)); ctx.rotate(Math.atan2(b.vx, -b.vy));
+  if (T === 1) { ctx.fillStyle = "#9ff0ff"; ctx.fillRect(0, 0, 1, 4); }
+  else if (T === 2) {
+    ctx.fillStyle = "rgba(242,193,78,0.35)"; ctx.fillRect(-2, -1, 5, 8);
+    ctx.fillStyle = "#f2c14e"; ctx.fillRect(-1, 0, 3, 6); ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, 1, 4);
+  } else if (T === 3) {
+    ctx.fillStyle = "rgba(255,93,200,0.35)"; ctx.fillRect(-3, -1, 7, 7);
+    ctx.fillStyle = "#ff5dc8"; ctx.fillRect(-2, 0, 5, 5); ctx.fillStyle = "#ffffff"; ctx.fillRect(-1, 1, 3, 3);
+  } else if (T === 4) {
+    ctx.fillStyle = "rgba(180,140,255,0.4)"; ctx.fillRect(-2, -2, 5, 15);
+    ctx.fillStyle = "#b48cff"; ctx.fillRect(-1, 0, 3, 12); ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, 1, 11);
+  } else {
+    ctx.fillStyle = "hsl(" + Math.floor((performance.now() / 3 + b.x * 4) % 360) + ",100%,65%)";
+    ctx.globalAlpha = 0.5; ctx.fillRect(-3, -2, 7, 15); ctx.globalAlpha = 1;
+    ctx.fillStyle = "#ffd166"; ctx.fillRect(-2, 0, 5, 12); ctx.fillStyle = "#ffffff"; ctx.fillRect(-1, 0, 3, 11);
+  }
+  ctx.restore();
+}
 function drawPlayer() {
   const cx = Math.round(player.x), cy = Math.round(player.y);
   // soft halo so the ship stands out from the bullets
   ctx.beginPath(); ctx.arc(cx, cy, 10, 0, TAU);
-  ctx.fillStyle = player.tier === 2 ? "rgba(242,193,78," + (0.16 + 0.08 * Math.sin(performance.now() / 120)) + ")" : "rgba(95,211,255,0.14)"; ctx.fill();
+  ctx.fillStyle = "rgba(" + TIER_RGB[player.tier] + "," + (player.tier > 1 ? 0.12 + player.tier * 0.02 + 0.08 * Math.sin(performance.now() / 120) : 0.14) + ")"; ctx.fill();
   if (player.shield > 0) { ctx.strokeStyle = Math.floor(performance.now() / 150) % 2 ? "#5fd3ff" : "#c8f3ff"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(cx, cy, 11, 0, TAU); ctx.stroke(); }
-  const t2 = player.tier === 2, spr = t2 ? PLAYER2 : PLAYER, pal = t2 ? PCOL2 : PCOL;
+  const t2 = player.tier >= 2, spr = t2 ? PLAYER2 : PLAYER, pal = TIER_PAL[player.tier];
+  if (player.tier === 5) pal.a = "hsl(" + Math.floor(performance.now() / 6 % 360) + ",90%,75%)";
   const px = cx - (t2 ? 6 : 5), py = cy - 5;
   for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) sprite(spr, pal, px + ox, py + oy, "#03101d");
-  if (t2) PCOL2.d = Math.random() < 0.5 ? "#9ff0ff" : "#ffffff";
+  if (t2) pal.d = Math.random() < 0.5 ? TIER_FX[player.tier] : "#ffffff";
   else PCOL.d = Math.random() < 0.5 ? "#ffb347" : "#ff6a3d";
   sprite(spr, pal, px, py, player.dashT > 0 ? "#ffffff" : null);
   if (t2) {
-    if (Math.random() < 0.5) parts.push({ x: cx + rand(-6, 6), y: cy + 7, vx: 0, vy: 40, life: 0.2, max: 0.2, c: Math.random() < 0.5 ? "#f2c14e" : "#5fd3ff", s: 1 });
-    if (player.gunFlash > 0) for (const s of [-6, 6]) { r(cx + s - 1, cy - 9, 3, 3, "#ffffff"); r(cx + s - 2, cy - 8, 5, 1, "#f2c14e"); }
+    const fx = TIER_FX[player.tier];
+    if (Math.random() < 0.3 + player.tier * 0.1) parts.push({ x: cx + rand(-6, 6), y: cy + 7, vx: 0, vy: 40, life: 0.2, max: 0.2, c: Math.random() < 0.5 ? fx : "#5fd3ff", s: 1 });
+    if (player.gunFlash > 0) for (const s of [-6, 6]) { r(cx + s - 1, cy - 9, 3, 3, "#ffffff"); r(cx + s - 2, cy - 8, 5, 1, fx); }
+    // tier 4+: orbiting sparks, tier 5 gets a second ring
+    for (let k = 0; k < (player.tier - 3) * 2; k++) {
+      const a = performance.now() / 300 + k * Math.PI / (player.tier - 3);
+      r(Math.round(cx + Math.cos(a) * 13), Math.round(cy + Math.sin(a) * 13), 2, 2, k % 2 ? fx : "#ffffff");
+    }
   }
   if (keys.shift) {
     r(cx - 1, cy - 1, 3, 3, "#ff3d5a");
