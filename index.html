@@ -207,33 +207,23 @@ function sprite(rows, pal, x, y, override) {
   }
 }
 const PLAYER = [
-  ".....w.....",
-  "....wbw....",
-  "....aba....",
-  "...aacaa...",
-  "...acwca...",
-  "..aaacaaa..",
-  ".aaaacaaaa.",
-  "aaaaacaaaaa",
-  "aa.aaaaa.aa",
-  "a...d.d...a",
-  "....d.d...."
+  ".......w.......",
+  "......wbw......",
+  "......aba......",
+  ".....aacaa.....",
+  ".....acwca.....",
+  "....aaacaaa....",
+  "...saaacaaas...",
+  "..saaaacaaaas..",
+  ".saaaaacaaaaas.",
+  "saaaaaacaaaaaas",
+  "saa.aaaaaaa.aas",
+  "sa...aa.aa...as",
+  ".....d...d.....",
+  ".....d...d....."
 ];
-const PCOL = { a: "#5fd3ff", b: "#2b6cb0", c: "#e8fbff", w: "#ffffff", d: "#ffb347" };
-const PLAYER2 = [
-  "......w......",
-  ".....wbw.....",
-  ".....aba.....",
-  "....aacaa....",
-  "g...acwca...g",
-  "gg.aaacaaa.gg",
-  "gaaaaacaaaaag",
-  "gaaaaacaaaaag",
-  "ggaaaacaaaagg",
-  "g.aa.aaa.aa.g",
-  "....d.d.d....",
-  "....d.d.d...."
-];
+const PCOL = { a: "#5fd3ff", b: "#2b6cb0", c: "#e8fbff", w: "#ffffff", d: "#ffb347", s: "#1d4f8a" };
+const PLAYER2 = PLAYER.map(row => row.replace(/s/g, "g"));
 const PCOL2 = { a: "#f2c14e", b: "#b5651d", c: "#ffffff", w: "#ffffff", g: "#5fd3ff", d: "#9ff0ff" };
 const TIER_PAL = [null, PCOL, PCOL2,
   { a: "#7cffb2", b: "#1f7a4d", c: "#ffffff", w: "#ffffff", g: "#ff5dc8", d: "#ffffff" },
@@ -395,7 +385,7 @@ const SPR_OX = 16, SPR_OY = 20;          // sprite origin inside the 80x80 offsc
 
 // local sprite pixel -> world position, following the boss rotation
 function hull(sx, sy) {
-  const lx = sx - 24, ly = sy - 20;
+  const lx = (sx - 24) * 2, ly = (sy - 20) * 2;
   const th = boss.ang - DOWN, c = Math.cos(th), s = Math.sin(th);
   return { x: boss.x + lx * c - ly * s, y: boss.y + lx * s + ly * c };
 }
@@ -498,7 +488,7 @@ function* sRam() {
     const sp = 330 + boss.lv * 30;
     const vx = Math.cos(a) * sp, vy = Math.sin(a) * sp;
     let f = 0;
-    while (boss.x > -40 && boss.x < W + 40 && boss.y > -60 && boss.y < H + 40) {
+    while (boss.x > -70 && boss.x < W + 70 && boss.y > -90 && boss.y < H + 70) {
       boss.x += vx * DT; boss.y += vy * DT;
       engineTrail(2); speedLines();
       f += DT;
@@ -514,7 +504,7 @@ function* sRam() {
     // loop around and come back in from the top
     boss.burn = boss.tBurn = 1.8;
     boss.ang = boss.tAng = DOWN;
-    boss.x = rand(40, W - 40); boss.y = -50;
+    boss.x = rand(56, W - 56); boss.y = -80;
     while (boss.y < 70) { boss.y += 230 * DT; engineTrail(1); yield 0; }
     boss.tBurn = 1;
     yield 0.15;
@@ -533,11 +523,11 @@ function* sBomb() {
   sfx(300, 0.5, "sawtooth", 0.03, 150);
   yield 0.4;
   boss.tBurn = 3;
-  while (boss.x > -40 && boss.x < W + 40) { boss.x -= dir * 260 * DT; engineTrail(1); yield 0; }
+  while (boss.x > -70 && boss.x < W + 70) { boss.x -= dir * 260 * DT; engineTrail(1); yield 0; }
   for (let p = 0; p < passes; p++) {
     const y = clamp(player.y - 95, 50, 140);
-    warns.push({ type: "band", y, h: 30, t: 0.8, max: 0.8 });
-    boss.y = y; boss.x = dir > 0 ? -40 : W + 40;
+    warns.push({ type: "band", y, h: 54, t: 0.8, max: 0.8 });
+    boss.y = y; boss.x = dir > 0 ? -70 : W + 70;
     boss.ang = boss.tAng = dir > 0 ? 0 : Math.PI;
     boss.burn = boss.tBurn = 2.5;
     sfx(120, 0.9, "sawtooth", 0.05, 420);
@@ -547,7 +537,7 @@ function* sBomb() {
     const sp = 200 + boss.lv * 20;
     const every = 0.2 - boss.lv * 0.03;
     let f = every;
-    while (dir > 0 ? boss.x < W + 40 : boss.x > -40) {
+    while (dir > 0 ? boss.x < W + 70 : boss.x > -70) {
       boss.x += dir * sp * DT;
       engineTrail(1);
       f += DT;
@@ -568,7 +558,7 @@ function* sBomb() {
   }
   boss.burn = boss.tBurn = 1.8;
   boss.ang = boss.tAng = DOWN;
-  boss.x = W / 2; boss.y = -50;
+  boss.x = W / 2; boss.y = -80;
   while (boss.y < 70) { boss.y += 200 * DT; engineTrail(1); yield 0; }
   boss.tBurn = 1; boss.tx = boss.x; boss.ty = 70;
   boss.lock = false; boss.face = "idle"; boss.turn = 3;
@@ -585,19 +575,19 @@ function* sDive() {
     yield 0.45;
     boss.tBurn = 3.5;
     let v = 0;
-    while (boss.y > -60) { v = Math.min(400, v + 900 * DT); boss.y -= v * DT; engineTrail(2); yield 0; }
+    while (boss.y > -90) { v = Math.min(400, v + 900 * DT); boss.y -= v * DT; engineTrail(2); yield 0; }
     const w = { type: "shadow", x: player.x, y: player.y, r: 10, t: 99, max: 99 };
     warns.push(w);
     for (let t = 0; t < 1.0; t += DT) {
       w.x += (player.x - w.x) * Math.min(1, DT * 6);
       w.y += (player.y - w.y) * Math.min(1, DT * 6);
-      w.r = 10 + t * 8;
+      w.r = 16 + t * 14;
       yield 0;
     }
     w.x = clamp(w.x, 26, W - 26); w.y = clamp(w.y, 60, H - 30);
     w.locked = true;
     sfx(1400, 0.6, "square", 0.02, 300);
-    for (let t = 0; t < 0.45; t += DT) { w.r = 18 + t * 10; yield 0; }
+    for (let t = 0; t < 0.45; t += DT) { w.r = 30 + t * 16; yield 0; }
     boss.x = w.x; boss.ang = boss.tAng = DOWN; boss.burn = boss.tBurn = 4.5;
     while (boss.y < w.y) { boss.y += 600 * DT; engineTrail(2); speedLines(); yield 0; }
     boss.y = w.y; w.t = 0;
@@ -726,7 +716,7 @@ function drawBossAt(x, y, ang, o) {
   if (o.rattle) { jx = Math.round(rand(-1.5, 1.5)); jy = Math.round(rand(-1, 1)); }
   ctx.translate(Math.round(x) + jx, Math.round(y) + jy);
   ctx.rotate(ang - DOWN);
-  ctx.drawImage(bc, -40, -40);
+  ctx.drawImage(upscale(bc), -80, -80);
   ctx.restore();
 }
 
@@ -746,6 +736,38 @@ const HEAVY = ["...ooooooooooo...", "..oaaaaaaaaaaao..", ".oawaaaaaaaaawao.", "o
 const LAUNCHER = ["..ooooooooo..", ".oaaaaaaaaao.", "oappaaaaappao", "oappaacaappao", "oappaaaaappao", ".oaaaoooaaao.", "..oaao.oaao..", "...oo...oo..."];
 const BEAMER = ["...ooooo...", "..oaaaaao..", ".oaaaaaaao.", "oaaoooooaao", "oaaocccoaao", "oaaocccoaao", "oaaoooooaao", ".oaaaaaaao.", "..oaaaaao..", "...oaoao...", "....o.o...."];
 
+function upscale(src) {
+  const w = src.width, h = src.height;
+  const sd = new Uint32Array(src.getContext("2d").getImageData(0, 0, w, h).data.buffer);
+  const out = document.createElement("canvas"); out.width = w * 2; out.height = h * 2;
+  const oc = out.getContext("2d"), img = oc.createImageData(w * 2, h * 2);
+  const od = new Uint32Array(img.data.buffer), W2 = w * 2;
+  const px = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : sd[y * w + x];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const P = sd[y * w + x], A = px(x, y - 1), B = px(x + 1, y), C = px(x - 1, y), D = px(x, y + 1);
+    const o = y * 2 * W2 + x * 2;
+    od[o] = (C === A && C !== D && A !== B) ? A : P;
+    od[o + 1] = (A === B && A !== C && B !== D) ? B : P;
+    od[o + W2] = (D === C && D !== B && C !== A) ? C : P;
+    od[o + W2 + 1] = (B === D && B !== A && D !== C) ? D : P;
+  }
+  // light from above: brighten pixels under an edge, darken pixels above one
+  const d = img.data, H2 = h * 2, src2 = new Uint8ClampedArray(d);
+  const lum = i => src2[i] * 0.3 + src2[i + 1] * 0.59 + src2[i + 2] * 0.11;
+  const edge = (x, y) => { if (y < 0 || y >= H2) return true; const i = (y * W2 + x) * 4; return src2[i + 3] === 0 || lum(i) < 40; };
+  for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) {
+    const i = (y * W2 + x) * 4;
+    if (src2[i + 3] === 0) continue;
+    const L = lum(i);
+    if (L < 40 || L > 235) continue;
+    let k = 0;
+    if (edge(x, y - 2)) k = 0.35; else if (edge(x, y + 2)) k = -0.3; else if (edge(x - 2, y)) k = 0.15; else if (edge(x + 2, y)) k = -0.15;
+    if (k > 0) for (let c = 0; c < 3; c++) d[i + c] = src2[i + c] + (255 - src2[i + c]) * k;
+    else if (k < 0) for (let c = 0; c < 3; c++) d[i + c] = src2[i + c] * (1 + k);
+  }
+  oc.putImageData(img, 0, 0);
+  return out;
+}
 function makeSpr(rows, pal) {
   const h = rows.length, w = rows[0].length;
   const mk = flat => {
@@ -758,15 +780,15 @@ function makeSpr(rows, pal) {
     }
     return c;
   };
-  return { img: mk(null), white: mk("#ffffff"), w, h };
+  return { img: upscale(mk(null)), white: upscale(mk("#ffffff")), w: w * 2, h: h * 2 };
 }
 const O = "#12141a";
 const EDEF = {
-  drone:    { spr: makeSpr(DRONE, { o: O, a: "#8a6bbf", c: "#ff5dc8", r: "#ff5dc8" }), r: 5, hp: n => 3 + Math.floor(n / 2), score: 100, nose: 4, boom: 8 },
-  fighter:  { spr: makeSpr(FIGHTER, { o: O, a: "#7d8799", c: "#5fd3ff", r: "#ff8a3d" }), r: 6, hp: n => 6 + n, score: 200, nose: 6, boom: 10 },
-  heavy:    { spr: makeSpr(HEAVY, { o: O, a: "#6f7d5c", w: "#c9d1de", c: "#ffd166", r: "#ff8a3d" }), r: 9, hp: n => 30 + n * 6, score: 800, nose: 0, boom: 20 },
-  launcher: { spr: makeSpr(LAUNCHER, { o: O, a: "#a89770", p: "#3a404d", c: "#ff3d5a" }), r: 7, hp: n => 16 + n * 4, score: 500, nose: 0, boom: 14 },
-  beamer:   { spr: makeSpr(BEAMER, { o: O, a: "#5d7aa8", c: "#7cffb2" }), r: 6, hp: n => 12 + n * 3, score: 400, nose: 5, boom: 12 }
+  drone:    { spr: makeSpr(DRONE, { o: O, a: "#8a6bbf", c: "#ff5dc8", r: "#ff5dc8" }), r: 9, hp: n => 3 + Math.floor(n / 2), score: 100, nose: 8, boom: 11 },
+  fighter:  { spr: makeSpr(FIGHTER, { o: O, a: "#7d8799", c: "#5fd3ff", r: "#ff8a3d" }), r: 11, hp: n => 6 + n, score: 200, nose: 11, boom: 14 },
+  heavy:    { spr: makeSpr(HEAVY, { o: O, a: "#6f7d5c", w: "#c9d1de", c: "#ffd166", r: "#ff8a3d" }), r: 17, hp: n => 30 + n * 6, score: 800, nose: 0, boom: 26 },
+  launcher: { spr: makeSpr(LAUNCHER, { o: O, a: "#a89770", p: "#3a404d", c: "#ff3d5a" }), r: 13, hp: n => 16 + n * 4, score: 500, nose: 0, boom: 18 },
+  beamer:   { spr: makeSpr(BEAMER, { o: O, a: "#5d7aa8", c: "#7cffb2" }), r: 11, hp: n => 12 + n * 3, score: 400, nose: 10, boom: 16 }
 };
 
 let stageN = 1, stage = null, enemies = [], items = [], texts = [], booms = [], score = 0, intro = null, introT = 0;
@@ -839,8 +861,8 @@ function* aiDrone(e, tx, ty) {
       const a = angTo(e.x, e.y), sp = 150 + stageN * 6;
       const vx = Math.cos(a) * sp, vy = Math.max(70, Math.sin(a) * sp);
       e.ang = Math.atan2(vy, vx);
-      while (e.y < H + 15) { e.x += vx * DT; e.y += vy * DT; yield 0; }
-      e.y = -15; e.x = tx; e.ang = DOWN;
+      while (e.y < H + 25) { e.x += vx * DT; e.y += vy * DT; yield 0; }
+      e.y = -25; e.x = tx; e.ang = DOWN;
       yield* eMove(e, tx, ty, 110);
     }
   }
@@ -875,7 +897,7 @@ function* aiHeavy(e, tx, ty) {
     }
     e.charge = 0;
     const n = 3 + Math.floor(stageN / 3);
-    const p = { x: e.x + Math.cos(e.tur) * 9, y: e.y + Math.sin(e.tur) * 9 };
+    const p = { x: e.x + Math.cos(e.tur) * 15, y: e.y + Math.sin(e.tur) * 15 };
     for (let i = 0; i < n; i++) fire(p.x, p.y, e.tur + (i - (n - 1) / 2) * 0.18, 70 + stageN * 3, { c: "#ff3d5a", r: 3 });
     e.muzzle = 0.1; sfx(160, 0.12, "square", 0.04); smoke(p.x, p.y, 2);
   }
@@ -888,7 +910,7 @@ function* aiLauncher(e, tx, ty) {
     for (let t = 0; t < 0.6; t += DT) { e.charge = t / 0.6; yield 0; }
     e.charge = 0;
     for (const s of [-1, 1]) {
-      const px = e.x + s * 4, py = e.y + 1;
+      const px = e.x + s * 8, py = e.y + 2;
       fire(px, py, DOWN + s * 0.8, 40, { kind: "missile", c: "#ff8a3d", home: 2.2, homeT: 1.4, accel: 140, max: 95 + stageN * 4, ignite: 0.25 });
       smoke(px, py, 3);
     }
@@ -925,14 +947,14 @@ function buildWave(n, i, last) {
 }
 function* runWave(list) {
   const slots = [];
-  for (let row = 0; row < 5; row++) for (let col = 0; col < 8; col++) slots.push({ x: 22 + col * 28, y: 38 + row * 22 });
+  for (let row = 0; row < 4; row++) for (let col = 0; col < 7; col++) slots.push({ x: 24 + col * 32, y: 42 + row * 26 });
   slots.sort(() => Math.random() - 0.5);
   let heavies = 0;
   for (const type of list) {
     let s;
-    if (type === "heavy") { s = { x: heavies++ ? W * 0.28 : W * 0.72, y: 45 }; if (list.filter(t => t === "heavy").length === 1) s.x = W / 2; }
+    if (type === "heavy") { s = { x: heavies++ ? W * 0.28 : W * 0.72, y: 52 }; if (list.filter(t => t === "heavy").length === 1) s.x = W / 2; }
     else s = slots.pop();
-    spawn(type, clamp(s.x + rand(-40, 40), 10, W - 10), -15, e => AI[type](e, s.x, s.y), type === "heavy");
+    spawn(type, clamp(s.x + rand(-40, 40), 10, W - 10), -25, e => AI[type](e, s.x, s.y), type === "heavy");
     yield 0.14;
   }
   while (enemies.length) yield 0;
@@ -967,7 +989,7 @@ function* bossIntro() {
   intro = "warn";
   for (let k = 0; k < 6; k++) { sfx(k % 2 ? 440 : 660, 0.4, "square", 0.035); yield 0.43; }
   intro = null;
-  boss.hidden = false; boss.x = W / 2; boss.y = -60; boss.lock = true; boss.inv = 99;
+  boss.hidden = false; boss.x = W / 2; boss.y = -100; boss.lock = true; boss.inv = 99;
   boss.ang = boss.tAng = DOWN; boss.burn = boss.tBurn = 4;
   noise(0.6, 0.1);
   while (boss.y < 150) { boss.y += 380 * DT; engineTrail(2); speedLines(); yield 0; }
@@ -1083,10 +1105,10 @@ function drawEnemies() {
   for (const e of enemies) {
     const s = e.d.spr, ex = Math.round(e.x), ey = Math.round(e.y);
     // telegraphs first, under the sprite
-    if (e.type === "beamer" && e.charge > 0 && Math.floor(e.charge * 16) % 2 === 0) r(ex, ey + 6, 1, H, "rgba(124,255,178,0.7)");
+    if (e.type === "beamer" && e.charge > 0 && Math.floor(e.charge * 16) % 2 === 0) r(ex, ey + 11, 1, H, "rgba(124,255,178,0.7)");
     if (e.beam > 0) {
       const w = e.beam < 0.1 ? 2 : 5;
-      r(ex - (w >> 1) - 1, ey + 5, w + 2, H, "#2ec27e"); r(ex - (w >> 1), ey + 5, w, H, "#c8ffe0");
+      r(ex - (w >> 1) - 1, ey + 10, w + 2, H, "#2ec27e"); r(ex - (w >> 1), ey + 10, w, H, "#c8ffe0");
     }
     if (e.warn > 0 && Math.floor(e.warn * 20) % 2 === 0) {
       ctx.save(); ctx.translate(ex, ey); ctx.rotate(e.type === "drone" ? angTo(e.x, e.y) : e.ang);
@@ -1099,16 +1121,16 @@ function drawEnemies() {
     ctx.restore();
     // weapon details
     if (e.type === "heavy") {
-      const tur = e.tur || DOWN, len = e.muzzle > 0 ? 6 : 8;
+      const tur = e.tur || DOWN, len = e.muzzle > 0 ? 11 : 14;
       const bx = Math.round(e.x + Math.cos(tur) * len), by = Math.round(e.y + Math.sin(tur) * len);
-      r(ex - 3, ey - 3, 6, 6, O);
-      for (let i = 0; i <= 8; i++) r(Math.round(e.x + (bx - e.x) * i / 8) - 1, Math.round(e.y + (by - e.y) * i / 8) - 1, 2, 2, "#3a404d");
-      r(ex - 2, ey - 2, 4, 4, "#c9d1de");
+      r(ex - 5, ey - 5, 10, 10, O);
+      for (let i = 0; i <= 8; i++) r(Math.round(e.x + (bx - e.x) * i / 8) - 1, Math.round(e.y + (by - e.y) * i / 8) - 1, 3, 3, "#3a404d");
+      r(ex - 3, ey - 3, 6, 6, "#c9d1de"); r(ex - 2, ey - 2, 2, 2, "#ffffff");
       if (e.charge > 0) r(bx - 1, by - 1, 3, 3, Math.floor(e.t * 20) % 2 ? "#ffd166" : "#ff3d5a");
       if (e.muzzle > 0) { r(bx - 3, by - 3, 7, 7, "#ffd166"); r(bx - 1, by - 1, 3, 3, "#ffffff"); }
     } else if (e.type === "launcher") {
-      if (e.charge > 0 && Math.floor(e.charge * 12) % 2 === 0) { r(ex - 5, ey - 2, 3, 3, "#ffd166"); r(ex + 3, ey - 2, 3, 3, "#ffd166"); }
-      if (e.muzzle > 0) { r(ex - 6, ey + 1, 4, 4, "#ffffff"); r(ex + 3, ey + 1, 4, 4, "#ffffff"); }
+      if (e.charge > 0 && Math.floor(e.charge * 12) % 2 === 0) { r(ex - 10, ey - 4, 5, 5, "#ffd166"); r(ex + 6, ey - 4, 5, 5, "#ffd166"); }
+      if (e.muzzle > 0) { r(ex - 11, ey + 1, 6, 6, "#ffffff"); r(ex + 6, ey + 1, 6, 6, "#ffffff"); }
     } else if (e.charge > 0) {
       const p = nose(e, e.d.nose), k = Math.ceil(e.charge * 3);
       r(Math.round(p.x) - k, Math.round(p.y) - k, k * 2 + 1, k * 2 + 1, e.type === "beamer" ? "#7cffb2" : "#ff5dc8");
@@ -1119,7 +1141,7 @@ function drawEnemies() {
       r(Math.round(p.x) - 2, Math.round(p.y) - 2, 5, 5, "#ffd166"); r(Math.round(p.x) - 1, Math.round(p.y) - 1, 3, 3, "#ffffff");
     }
     if (e.hp < e.maxHp) {
-      const w = e.type === "heavy" ? 18 : 10, y = ey - (s.h >> 1) - 4;
+      const w = e.type === "heavy" ? 30 : 16, y = ey - (s.h >> 1) - 4;
       r(ex - (w >> 1), y, w, 2, "#2c2338");
       r(ex - (w >> 1), y, Math.max(1, Math.round(w * e.hp / e.maxHp)), 2, "#ff3d5a");
     }
@@ -1491,7 +1513,7 @@ function* bossBrain() {
     yield* p();
     boss.lock = false; boss.face = "idle"; boss.turn = 3; boss.tBurn = 1;
     boss.spool = 0; boss.bay = 0; boss.aimT = 0;
-    boss.tx = rand(40, W - 40); boss.ty = 70;
+    boss.tx = rand(56, W - 56); boss.ty = 70;
     yield Math.max(0.35, 0.9 - boss.phase * 0.2);
   }
 }
@@ -1634,7 +1656,7 @@ function updateBoss() {
     burst(p.x, p.y, "#ffd166", 3, 40);
   }
 
-  if (boss.runner && !player.dead && Math.hypot(player.x - boss.x, player.y - boss.y) < 14) hurtPlayer();
+  if (boss.runner && !player.dead && Math.hypot(player.x - boss.x, player.y - boss.y) < 26) hurtPlayer();
 }
 
 function explodeBomb(b) {
@@ -1677,7 +1699,7 @@ function updateBullets() {
       if (m.kind === "missile" && !m.dead && Math.hypot(m.x - b.x, m.y - b.y) < 5) { m.dead = true; b.dead = true; explode(m.x, m.y, 7); score += 50; break; }
     }
     if (b.dead) continue;
-    if (Math.hypot(b.x - boss.x, b.y - boss.y) < 17 && !boss.hidden && !boss.dead && boss.y > -10) {
+    if (Math.hypot(b.x - boss.x, b.y - boss.y) < 32 && !boss.hidden && !boss.dead && boss.y > -10) {
       b.dead = true;
       if (boss.inv > 0) { burst(b.x, b.y, "#8f86a3", 2, 30); continue; }
       boss.hp -= b.dmg || 1; boss.flash = 0.05;
@@ -1772,7 +1794,7 @@ function update() {
     boss.y += DT * 10;
     if (Math.random() < 0.6) smoke(boss.x + rand(-12, 12), boss.y + rand(-10, 10));
     if (Math.random() < 0.3) {
-      const x = boss.x + rand(-20, 20), y = boss.y + rand(-16, 16);
+      const x = boss.x + rand(-40, 40), y = boss.y + rand(-32, 32);
       explode(x, y, rand(8, 14));
     }
     if (stateT <= 0) {
@@ -1861,7 +1883,7 @@ function drawHUD() {
     text(String(score).padStart(7, "0"), W - 5, 3, "#ece6f6", 1, "right");
   }
   // player bar: ship icon + segmented hull bar, same style as the boss bar
-  sprite(PLAYER, PCOL, 3, H - 13);
+  sprite(PLAYER, PCOL, 1, H - 15);
   const cw = 11;
   r(16, H - 11, player.maxHp * cw + 1, 7, "#1a0f26");
   for (let i = 0; i < player.maxHp; i++) {
@@ -1934,8 +1956,8 @@ function drawPlay() {
 
   if (boss.aimT > 0 && Math.floor(boss.aimT * 18) % 2 === 0) {
     ctx.save(); ctx.translate(Math.round(boss.x), Math.round(boss.y)); ctx.rotate(boss.aim);
-    ctx.fillStyle = "rgba(255,61,90,0.22)"; ctx.fillRect(0, -16, 500, 32);
-    ctx.fillStyle = "rgba(255,61,90,0.85)"; ctx.fillRect(0, -16, 500, 1); ctx.fillRect(0, 15, 500, 1);
+    ctx.fillStyle = "rgba(255,61,90,0.22)"; ctx.fillRect(0, -28, 500, 56);
+    ctx.fillStyle = "rgba(255,61,90,0.85)"; ctx.fillRect(0, -28, 500, 1); ctx.fillRect(0, 27, 500, 1);
     ctx.restore();
   }
 
@@ -1996,7 +2018,7 @@ function drawPlayer() {
   if (player.shield > 0) { ctx.strokeStyle = Math.floor(performance.now() / 150) % 2 ? "#5fd3ff" : "#c8f3ff"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(cx, cy, 11, 0, TAU); ctx.stroke(); }
   const t2 = player.tier >= 2, spr = t2 ? PLAYER2 : PLAYER, pal = TIER_PAL[player.tier];
   if (player.tier === 5) pal.a = "hsl(" + Math.floor(performance.now() / 6 % 360) + ",90%,75%)";
-  const px = cx - (t2 ? 6 : 5), py = cy - 5;
+  const px = cx - 7, py = cy - 7;
   for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) sprite(spr, pal, px + ox, py + oy, "#03101d");
   if (t2) pal.d = Math.random() < 0.5 ? TIER_FX[player.tier] : "#ffffff";
   else PCOL.d = Math.random() < 0.5 ? "#ffb347" : "#ff6a3d";
@@ -2004,7 +2026,7 @@ function drawPlayer() {
   if (t2) {
     const fx = TIER_FX[player.tier];
     if (Math.random() < 0.3 + player.tier * 0.1) parts.push({ x: cx + rand(-6, 6), y: cy + 7, vx: 0, vy: 40, life: 0.2, max: 0.2, c: Math.random() < 0.5 ? fx : "#5fd3ff", s: 1 });
-    if (player.gunFlash > 0) for (const s of [-6, 6]) { r(cx + s - 1, cy - 9, 3, 3, "#ffffff"); r(cx + s - 2, cy - 8, 5, 1, fx); }
+    if (player.gunFlash > 0) for (const s of [-7, 7]) { r(cx + s - 1, cy - 6, 3, 3, "#ffffff"); r(cx + s - 2, cy - 8, 5, 1, fx); }
     // tier 4+: orbiting sparks, tier 5 gets a second ring
     for (let k = 0; k < (player.tier - 3) * 2; k++) {
       const a = performance.now() / 300 + k * Math.PI / (player.tier - 3);
