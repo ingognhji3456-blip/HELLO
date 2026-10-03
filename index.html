@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Do+Hyeon&display=swap">
 <style>
-/* Layout: one arcade cabinet column. Game screen first, a compact control card under it. Single dark look by choice. */
+/* Layout: arcade cabinet. The game screen takes the full viewport height; controls sit below it. Single dark look by choice. */
 :root {
   --void: #0d0b14;
   --panel: #18131f;
@@ -31,33 +31,59 @@ body {
   line-height: 1.5;
 }
 .wrap {
-  max-width: 480px;
-  margin: 0 auto;
   padding-inline: 16px;
-  padding-block: 16px 32px;
+  padding-block: 10px 32px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  align-items: center;
+  gap: 10px;
 }
-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+header {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 h1 {
   margin: 0;
   font-family: var(--font-display);
   font-weight: 400;
-  font-size: 28px;
+  font-size: 24px;
   letter-spacing: 0.06em;
   color: var(--ink);
   text-shadow: 3px 3px 0 var(--eye);
 }
-header p { margin: 0; color: var(--muted); }
+header p { margin: 0; color: var(--muted); flex: 1; min-width: 0; }
+button {
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 2px solid var(--line);
+  border-bottom-width: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--glow); }
+button:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
 .screen {
-  width: min(100%, calc((100dvh - 170px) * 0.75));
+  width: min(100%, calc((100vh - 76px) * 0.75));
+  width: min(100%, calc((100dvh - 76px) * 0.75));
   min-width: min(100%, 240px);
-  margin: 0 auto;
   border: 4px solid var(--line);
   box-shadow: 0 0 0 4px var(--void), 0 0 0 6px var(--line);
   background: #000;
 }
+.screen:fullscreen {
+  width: min(100vw, 75vh);
+  border: 0;
+  box-shadow: none;
+  margin: auto;
+}
+.screen:fullscreen::backdrop { background: #000; }
 canvas {
   display: block;
   width: 100%;
@@ -68,8 +94,11 @@ canvas {
   touch-action: none;
   outline: none;
 }
-canvas:focus-visible { box-shadow: 0 0 0 2px var(--glow); }
 .help {
+  width: 100%;
+  max-width: 520px;
+  box-sizing: border-box;
+  margin-top: 8px;
   background: var(--panel);
   border: 2px solid var(--line);
   padding: 14px 16px;
@@ -106,17 +135,19 @@ kbd {
   <header>
     <h1>GLOOMEYE</h1>
     <p>패턴을 피하고 보스를 쓰러뜨려라</p>
+    <button id="fs" type="button">전체화면</button>
   </header>
-  <div class="screen"><canvas id="game" width="240" height="320" tabindex="0" aria-label="게임 화면"></canvas></div>
+  <div class="screen" id="screen"><canvas id="game" width="240" height="320" tabindex="0" aria-label="게임 화면"></canvas></div>
   <section class="help">
     <h2>CONTROLS</h2>
+    <div class="row"><span>보스 선택</span><span><kbd>←</kbd><kbd>→</kbd> 타이틀 화면에서</span></div>
     <div class="row"><span>이동</span><span><kbd>←↑↓→</kbd><kbd>WASD</kbd></span></div>
     <div class="row"><span>정밀 이동</span><span><kbd>SHIFT</kbd> 느려지고 판정점이 보임</span></div>
     <div class="row"><span>대시 (무적)</span><span><kbd>SPACE</kbd><kbd>X</kbd></span></div>
     <div class="row"><span>공격</span><span>자동 발사</span></div>
-    <div class="row"><span>일시정지 / 소리</span><span><kbd>P</kbd><kbd>M</kbd></span></div>
+    <div class="row"><span>기타</span><span><kbd>P</kbd>일시정지 <kbd>M</kbd>소리 <kbd>F</kbd>전체화면</span></div>
     <div class="row"><span>모바일</span><span>드래그로 이동, 두 번 탭하면 대시</span></div>
-    <p class="note">보스 체력 <b>66%</b>와 <b>33%</b>에서 페이즈가 바뀌고 레이저, 돌진, 복합 패턴이 추가됩니다. 판정은 기체 한가운데 한 점뿐입니다.</p>
+    <p class="note"><b>GLOOMEYE</b>는 탄막을 쏘는 외눈 괴물, <b>STRIKER</b>는 전투기형 로봇으로, 몸통 돌진, 급강하, 기총소사 비행으로 직접 덤벼듭니다. 두 보스 모두 체력 66%와 33%에서 페이즈가 바뀝니다.</p>
   </section>
 </main>
 
@@ -124,7 +155,6 @@ kbd {
 (() => {
 "use strict";
 const W = 240, H = 320, TAU = Math.PI * 2;
-const BOSS_HP = 900;
 const cv = document.getElementById("game");
 const ctx = cv.getContext("2d");
 ctx.imageSmoothingEnabled = false;
@@ -142,7 +172,8 @@ const GLYPHS = {
   U:"101101101101111",V:"101101101101010",W:"101101111111101",X:"101101010101101",
   Y:"101101010010010",Z:"111001010100111",
   ":":"000010000010000",".":"000000000000010","!":"010010010000010","-":"000000111000000",
-  "/":"001001010100100","%":"101001010100101"," ":"000000000000000"
+  "/":"001001010100100","%":"101001010100101","<":"001010100010001",">":"100010001010100",
+  "*":"000101010101000"," ":"000000000000000"
 };
 function text(s, x, y, c, sc = 1, align = "left") {
   s = String(s).toUpperCase();
@@ -175,8 +206,20 @@ function sprite(rows, pal, x, y, override) {
     }
   }
 }
-const PLAYER = ["...a...", "..aba..", "..aba..", ".aacaa.", "aacccaa", "a.ccc.a", "..d.d.."];
-const PCOL = { a: "#5fd3ff", b: "#ffffff", c: "#2b6cb0", d: "#ffb347" };
+const PLAYER = [
+  ".....w.....",
+  "....wbw....",
+  "....aba....",
+  "...aacaa...",
+  "...acwca...",
+  "..aaacaaa..",
+  ".aaaacaaaa.",
+  "aaaaacaaaaa",
+  "aa.aaaaa.aa",
+  "a...d.d...a",
+  "....d.d...."
+];
+const PCOL = { a: "#5fd3ff", b: "#2b6cb0", c: "#e8fbff", w: "#ffffff", d: "#ffb347" };
 const HEART = [".11.11.", "1111111", "1111111", ".11111.", "..111..", "...1..."];
 
 /* ---------- audio ---------- */
@@ -211,6 +254,17 @@ function noise(d, v = 0.12) {
   src.start();
 }
 
+/* ---------- fullscreen ---------- */
+const screenEl = document.getElementById("screen");
+function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else screenEl.requestFullscreen?.().catch(() => {});
+  } catch (e) {}
+  cv.focus();
+}
+document.getElementById("fs").addEventListener("click", toggleFullscreen);
+
 /* ---------- input ---------- */
 const keys = {}, pressed = {};
 const GAME_KEYS = ["arrowup", "arrowdown", "arrowleft", "arrowright", " ", "shift"];
@@ -219,6 +273,7 @@ addEventListener("keydown", e => {
   if (GAME_KEYS.includes(k)) e.preventDefault();
   if (!keys[k]) pressed[k] = true;
   keys[k] = true;
+  if (k === "f" && !e.repeat) toggleFullscreen();
   initAudio();
 });
 addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
@@ -230,8 +285,12 @@ cv.addEventListener("pointerdown", e => {
   initAudio();
   cv.focus();
   touch.ids.add(e.pointerId);
-  cv.setPointerCapture?.(e.pointerId);
-  if (state !== "play") { pressed.enter = true; return; }
+  try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+  if (state !== "play") {
+    const rect = cv.getBoundingClientRect();
+    pressed.tap = (e.clientX - rect.left) / rect.width;
+    return;
+  }
   const now = performance.now();
   if (touch.ids.size > 1 || now - touch.lastTap < 260) touch.dash = true;
   touch.lastTap = now;
@@ -256,31 +315,6 @@ function endPointer(e) {
 cv.addEventListener("pointerup", endPointer);
 cv.addEventListener("pointercancel", endPointer);
 
-/* ---------- state ---------- */
-let state = "title", stateT = 0, DT = 0;
-let player, boss, bullets, pbullets, lasers, parts, warns, banner;
-let shake = 0, time = 0, newBest = false;
-let best = 0;
-try { best = parseFloat(localStorage.getItem("gloomeye-best")) || 0; } catch (e) { best = 0; }
-
-const stars = [];
-for (let i = 0; i < 70; i++) {
-  const layer = i % 3;
-  stars.push({ x: Math.random() * W, y: Math.random() * H, s: 8 + layer * 14, c: ["#2c2338", "#4a3d5e", "#8f86a3"][layer] });
-}
-
-function reset() {
-  player = { x: W / 2, y: H - 40, hp: 5, maxHp: 5, inv: 0, dashT: 0, dashCd: 0, dx: 0, dy: -1, shootT: 0, dead: false };
-  boss = {
-    x: W / 2, y: -40, tx: W / 2, ty: 70, hp: BOSS_HP, maxHp: BOSS_HP, flash: 0, phase: 1,
-    inv: 0, lock: true, t: 0, rattle: 0, blink: 0, blinkT: 2, enter: 1.8, runner: null, hitSfx: 0
-  };
-  bullets = []; pbullets = []; lasers = []; parts = []; warns = [];
-  banner = { text: "GLOOMEYE", t: 1.8 };
-  time = 0; shake = 0; newBest = false;
-  boss.runner = runner(bossBrain());
-}
-
 /* ---------- helpers ---------- */
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -288,7 +322,8 @@ function angTo(x, y) { return Math.atan2(player.y - y, player.x - x); }
 function fire(x, y, a, sp, o = {}) {
   bullets.push({
     x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: o.r || 2, c: o.c || "#ff3d5a",
-    grav: o.grav || 0, drag: o.drag || 0, retarget: o.retarget || 0, rsp: o.rsp || 0, curve: o.curve || 0, life: 0
+    grav: o.grav || 0, drag: o.drag || 0, retarget: o.retarget || 0, rsp: o.rsp || 0,
+    home: o.home || 0, homeT: o.homeT || 0, trail: o.trail || false, life: 0
   });
 }
 function ring(x, y, n, sp, off, o) { for (let i = 0; i < n; i++) fire(x, y, off + i * TAU / n, sp, o); }
@@ -298,26 +333,30 @@ function burst(x, y, c, n = 8, sp = 60) {
     parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(0.25, 0.6), max: 0.6, c, s: Math.random() < 0.3 ? 2 : 1 });
   }
 }
+function r(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
 
 /* ---------- pattern runner (generators yield seconds to wait; 0 = next frame) ---------- */
+let DT = 0;
 function runner(g) { return { g, w: 0, done: false }; }
-function stepRunner(r) {
-  if (r.done) return;
-  r.w -= DT;
-  while (r.w <= 0) {
-    const n = r.g.next();
-    if (n.done) { r.done = true; return; }
-    if (!n.value || n.value <= 0) { r.w = 0; return; }
-    r.w += n.value;
+function stepRunner(rn) {
+  if (rn.done) return;
+  rn.w -= DT;
+  while (rn.w <= 0) {
+    const n = rn.g.next();
+    if (n.done) { rn.done = true; return; }
+    if (!n.value || n.value <= 0) { rn.w = 0; return; }
+    rn.w += n.value;
   }
 }
 function* parallel(...gens) {
   const rs = gens.map(runner);
-  while (rs.some(r => !r.done)) { rs.forEach(stepRunner); yield 0; }
+  while (rs.some(x => !x.done)) { rs.forEach(stepRunner); yield 0; }
 }
 
-/* ---------- boss patterns ---------- */
-function* pRing() {
+/* =========================================================
+   BOSS 1: GLOOMEYE (bullet curtains)
+   ========================================================= */
+function* gRing() {
   const n = [0, 14, 18, 22][boss.phase];
   for (let k = 0; k < 3 + boss.phase; k++) {
     ring(boss.x, boss.y, n, 52 + boss.phase * 8, k * 0.19, { c: "#ff3d5a" });
@@ -326,7 +365,7 @@ function* pRing() {
   }
   yield 0.4;
 }
-function* pAimed() {
+function* gAimed() {
   for (let k = 0; k < 4; k++) {
     const a = angTo(boss.x, boss.y + 8), m = boss.phase;
     for (let i = -m; i <= m; i++) fire(boss.x, boss.y + 8, a + i * 0.2, 92, { c: "#ffd166" });
@@ -335,7 +374,7 @@ function* pAimed() {
   }
   yield 0.3;
 }
-function* pSpiral() {
+function* gSpiral() {
   const arms = boss.phase + 1, dir = Math.random() < 0.5 ? 1 : -1;
   let a = Math.random() * TAU;
   boss.tx = W / 2;
@@ -347,7 +386,7 @@ function* pSpiral() {
   }
   yield 0.5;
 }
-function* pRain() {
+function* gRain() {
   const n = 8 + boss.phase * 5;
   for (let i = 0; i < n; i++) {
     const x = rand(8, W - 8);
@@ -356,7 +395,7 @@ function* pRain() {
   }
   yield 0.8;
 }
-function* pLaser() {
+function* gLaser() {
   const cnt = boss.phase === 3 ? 3 : 2;
   for (let k = 0; k < cnt; k++) {
     const a = angTo(boss.x, boss.y);
@@ -367,7 +406,7 @@ function* pLaser() {
   }
   yield 1.2;
 }
-function* pBloom() {
+function* gBloom() {
   for (let k = 0; k < boss.phase; k++) {
     const n = 12 + boss.phase * 2;
     ring(boss.x, boss.y, n, 115, k * 0.3, { c: "#7cffb2", drag: 2.4, retarget: 0.9, rsp: 105 });
@@ -376,7 +415,7 @@ function* pBloom() {
   }
   yield 0.8;
 }
-function* pCharge() {
+function* gCharge() {
   const times = boss.phase === 3 ? 3 : 2;
   for (let k = 0; k < times; k++) {
     boss.lock = false;
@@ -400,19 +439,310 @@ function* pCharge() {
   yield 0.5;
 }
 
-const POOLS = {
-  1: [pRing, pAimed, pSpiral, pRain],
-  2: [pRing, pAimed, pSpiral, pRain, pLaser, pCharge, pBloom],
-  3: [pAimed, pSpiral, pLaser, pCharge, pBloom,
-      () => parallel(pSpiral(), pAimed()),
-      () => parallel(pRain(), pLaser()),
-      () => parallel(pRing(), pBloom())]
-};
+function drawGloomeye(cx, cy, opts = {}) {
+  const enraged = opts.phase === 3;
+  const white = opts.flash ? "#ffffff" : null;
+  const C = {
+    out: white || "#1a0f26",
+    body: white || (enraged ? "#6b1f35" : "#4b2a6b"),
+    hi: white || (enraged ? "#a8344f" : "#7b4fa8"),
+    horn: white || "#d9c7a6",
+    eye: white || "#f4f0ff",
+    iris: white || (enraged ? "#ff1f3d" : "#ff3d5a"),
+    tooth: white || "#f4f0ff"
+  };
+  let ox = Math.round(cx) - 22, oy = Math.round(cy) - 17;
+  if (opts.rattle) { ox += Math.round(rand(-1.5, 1.5)); oy += Math.round(rand(-1, 1)); }
+  const R = (x, y, w, h, c) => r(ox + x, oy + y, w, h, c);
+  R(2, 0, 4, 4, C.horn); R(4, 4, 4, 4, C.horn); R(6, 8, 4, 3, C.horn);
+  R(38, 0, 4, 4, C.horn); R(36, 4, 4, 4, C.horn); R(34, 8, 4, 3, C.horn);
+  const wob = Math.round(Math.sin((opts.t || 0) * 4) * 2);
+  R(0, 17 + wob, 5, 3, C.body); R(-2, 19 + wob, 3, 3, C.horn);
+  R(39, 17 - wob, 5, 3, C.body); R(43, 19 - wob, 3, 3, C.horn);
+  R(6, 7, 32, 26, C.out); R(4, 9, 36, 22, C.out);
+  R(7, 8, 30, 24, C.body); R(5, 10, 34, 20, C.body);
+  R(8, 10, 10, 2, C.hi); R(7, 12, 2, 4, C.hi);
+  R(12, 12, 20, 12, C.out);
+  if (opts.blink) {
+    R(13, 13, 18, 10, C.body); R(13, 18, 18, 1, C.out);
+  } else {
+    R(13, 13, 18, 10, C.eye);
+    const lx = clamp(opts.lookX || 0, -5, 5), ly = clamp(opts.lookY || 0, -2, 2);
+    R(19 + lx, 15 + ly, 6, 6, C.iris);
+    R(21 + lx, 17 + ly, 2, 2, C.out);
+    R(20 + lx, 16 + ly, 1, 1, C.eye);
+  }
+  R(14, 26, 16, 3, C.out);
+  for (let i = 0; i < 4; i++) R(15 + i * 4, 26, 2, 2, C.tooth);
+}
+
+/* =========================================================
+   BOSS 2: STRIKER (jet fighter robot, rams and strafing runs)
+   ========================================================= */
+function* rRam() {
+  const n = boss.phase + 1;
+  boss.lock = true;
+  for (let k = 0; k < n; k++) {
+    let a = 0;
+    const aimTime = 0.75 - boss.phase * 0.08;
+    sfx(300, aimTime, "sawtooth", 0.03, 900);
+    for (let t = 0; t < aimTime; t += DT) {
+      if (t < aimTime - 0.2) a = angTo(boss.x, boss.y);
+      boss.aim = a; boss.aimT = aimTime - t; boss.rattle = 0.05;
+      boss.x -= Math.cos(a) * 12 * DT; boss.y -= Math.sin(a) * 12 * DT;
+      yield 0;
+    }
+    boss.aimT = 0;
+    noise(0.3, 0.1); sfx(140, 0.4, "sawtooth", 0.06, 60);
+    const sp = 330 + boss.phase * 30;
+    const vx = Math.cos(a) * sp, vy = Math.sin(a) * sp;
+    let f = 0;
+    while (boss.x > -40 && boss.x < W + 40 && boss.y > -60 && boss.y < H + 40) {
+      boss.x += vx * DT; boss.y += vy * DT;
+      parts.push({ x: boss.x - Math.cos(a) * 20 + rand(-2, 2), y: boss.y - Math.sin(a) * 20 + rand(-2, 2), vx: 0, vy: 0, life: 0.3, max: 0.3, c: Math.random() < 0.5 ? "#ff8a3d" : "#ffd166", s: 2 });
+      f += DT;
+      if (boss.phase >= 2 && f >= 0.08) {
+        f = 0;
+        fire(boss.x, boss.y, a + Math.PI / 2, 40, { c: "#ffd166" });
+        fire(boss.x, boss.y, a - Math.PI / 2, 40, { c: "#ffd166" });
+      }
+      yield 0;
+    }
+    boss.x = rand(40, W - 40); boss.y = -60;
+    while (boss.y < 70) { boss.y += 220 * DT; yield 0; }
+    yield 0.15;
+  }
+  boss.tx = boss.x; boss.ty = 70; boss.lock = false;
+  yield 0.6;
+}
+
+function* rDive() {
+  const times = boss.phase === 3 ? 2 : 1;
+  boss.lock = true;
+  for (let k = 0; k < times; k++) {
+    sfx(200, 0.5, "sawtooth", 0.04, 700);
+    while (boss.y > -60) { boss.y -= 280 * DT; parts.push({ x: boss.x + rand(-6, 6), y: boss.y + 22, vx: 0, vy: 40, life: 0.3, max: 0.3, c: "#ff8a3d", s: 2 }); yield 0; }
+    const w = { type: "shadow", x: player.x, y: player.y, r: 22, t: 99, max: 99 };
+    warns.push(w);
+    for (let t = 0; t < 1.0; t += DT) {
+      w.x += (player.x - w.x) * Math.min(1, DT * 6);
+      w.y += (player.y - w.y) * Math.min(1, DT * 6);
+      yield 0;
+    }
+    w.x = clamp(w.x, 26, W - 26); w.y = clamp(w.y, 60, H - 30);
+    w.locked = true;
+    sfx(900, 0.4, "square", 0.03, 200);
+    yield 0.45;
+    boss.x = w.x; boss.tx = w.x;
+    while (boss.y < w.y) { boss.y += 580 * DT; yield 0; }
+    boss.y = w.y; w.t = 0;
+    shake = 13; noise(0.45, 0.2); sfx(55, 0.5, "square", 0.1, 30);
+    burst(boss.x, boss.y + 18, "#c9d1de", 24, 110);
+    ring(boss.x, boss.y + 10, 12 + boss.phase * 4, 72, rand(0, TAU), { c: "#ffd166" });
+    yield 0.65;
+    while (boss.y > 70) { boss.y -= 150 * DT; yield 0; }
+  }
+  boss.ty = 70; boss.lock = false;
+  yield 0.5;
+}
+
+function* rGatling() {
+  boss.core = 0.6;
+  sfx(150, 0.6, "sawtooth", 0.04, 600);
+  yield 0.6;
+  boss.tx = rand(50, W - 50);
+  let a = angTo(boss.x, boss.y + 6);
+  const turn = 0.3 + boss.phase * 0.05;
+  const dur = 1.4 + boss.phase * 0.3;
+  let i = 0;
+  for (let t = 0; t < dur; t += 0.06) {
+    let d = angTo(boss.x, boss.y + 6) - a;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    a += clamp(d, -turn * 0.06, turn * 0.06);
+    fire(boss.x, boss.y + 6, a + rand(-0.07, 0.07), 135, { c: "#ffd166" });
+    boss.core = 0.08;
+    if (i++ % 2 === 0) sfx(260, 0.04, "square", 0.02);
+    yield 0.06;
+  }
+  yield 0.6;
+}
+
+function* rMissiles() {
+  const n = 2 + boss.phase * 2;
+  for (let i = 0; i < n; i++) {
+    const s = i % 2 ? 1 : -1;
+    fire(boss.x + s * 16, boss.y - 6, -Math.PI / 2 + s * 0.7, 105, { c: "#ff8a3d", home: 2.4, homeT: 1.3, trail: true });
+    sfx(250, 0.15, "sawtooth", 0.03, 500);
+    yield 0.18;
+  }
+  yield 1.2;
+}
+
+function* rStrafe() {
+  boss.lock = true;
+  const passes = boss.phase >= 2 ? 2 : 1;
+  for (let p = 0; p < passes; p++) {
+    const dir = boss.x < W / 2 ? 1 : -1;
+    const sx = dir > 0 ? -40 : W + 40;
+    const y = clamp(player.y - 80, 60, 150);
+    warns.push({ type: "band", y, h: 32, t: 0.9, max: 0.9 });
+    sfx(300, 0.8, "sawtooth", 0.03, 120);
+    for (let t = 0; t < 0.9; t += DT) {
+      boss.x += (sx - boss.x) * Math.min(1, DT * 6);
+      boss.y += (y - boss.y) * Math.min(1, DT * 6);
+      yield 0;
+    }
+    boss.x = sx; boss.y = y;
+    sfx(120, 0.9, "sawtooth", 0.05, 420); noise(0.4, 0.08);
+    const sp = 210 + boss.phase * 25;
+    let f = 0;
+    while (dir > 0 ? boss.x < W + 40 : boss.x > -40) {
+      boss.x += dir * sp * DT;
+      f += DT;
+      if (f >= 0.09) {
+        f = 0;
+        fire(boss.x, boss.y + 18, Math.PI / 2 + rand(-0.25, 0.25), 95, { c: "#ffd166" });
+        if (boss.phase === 3) fire(boss.x, boss.y + 18, Math.PI / 2 + rand(-0.6, 0.6), 70, { c: "#ff8a3d" });
+      }
+      parts.push({ x: boss.x - dir * 20, y: boss.y - 18 + rand(-2, 2), vx: -dir * 30, vy: 0, life: 0.3, max: 0.3, c: "#ff8a3d", s: 2 });
+      yield 0;
+    }
+  }
+  boss.x = W / 2; boss.y = -60; boss.tx = W / 2; boss.ty = 70;
+  boss.lock = false;
+  yield 1.0;
+}
+
+function drawStriker(cx, cy, opts = {}) {
+  const hot = opts.phase === 3;
+  const white = opts.flash ? "#ffffff" : null;
+  const C = {
+    out: white || "#12141a",
+    steel: white || (hot ? "#8c7a78" : "#7d8799"),
+    dark: white || (hot ? "#4a3434" : "#3a404d"),
+    hi: white || "#c9d1de",
+    acc: white || (hot ? "#ff8a3d" : "#ffd166"),
+    visor: white || "#ff3d5a",
+    glass: white || "#5fd3ff"
+  };
+  let ox = Math.round(cx) - 24, oy = Math.round(cy) - 20;
+  if (opts.rattle) { ox += Math.round(rand(-1.5, 1.5)); oy += Math.round(rand(-1, 1)); }
+  const R = (x, y, w, h, c) => r(ox + x, oy + y, w, h, c);
+  const t = opts.t || 0;
+
+  // afterburners (engines face up, the nose points down at the player)
+  if (!white) {
+    for (const ex of [20, 25]) {
+      const fl = 3 + Math.floor(Math.random() * 4);
+      R(ex, -fl, 3, fl, "#ff8a3d"); R(ex + 1, -fl + 1, 1, fl - 1, "#ffd166");
+    }
+  }
+  // tail fins
+  R(16, 0, 2, 3, C.dark); R(15, 3, 2, 3, C.dark); R(14, 6, 2, 3, C.dark);
+  R(30, 0, 2, 3, C.dark); R(31, 3, 2, 3, C.dark); R(32, 6, 2, 3, C.dark);
+  // swept wings: tips lean back toward the engines
+  for (let i = 0; i < 18; i++) {
+    const top = 10 - Math.floor(i / 4), bot = 22 - Math.floor(i * 0.6);
+    for (const x of [18 - i, 29 + i]) {
+      R(x, top, 1, bot - top, C.out);
+      R(x, top + 1, 1, bot - top - 2, i < 3 ? C.dark : C.steel);
+      if (i >= 8 && i <= 11) R(x, top + 2, 1, 1, C.acc);
+      if (i >= 4 && i <= 14) R(x, top + 1, 1, 1, C.hi);
+    }
+  }
+  // underwing missiles
+  for (const mx of [6, 40]) { R(mx, 14, 2, 5, C.hi); R(mx, 19, 2, 1, C.visor); }
+  // engines
+  R(19, 0, 5, 4, C.out); R(24, 0, 5, 4, C.out);
+  R(20, 0, 3, 3, C.dark); R(25, 0, 3, 3, C.dark);
+  // fuselage
+  R(18, 3, 12, 30, C.out); R(19, 4, 10, 28, C.steel); R(19, 4, 2, 28, C.hi);
+  R(17, 11, 2, 7, C.dark); R(29, 11, 2, 7, C.dark);
+  // chest core (gatling)
+  R(21, 12, 6, 6, C.out);
+  const pulse = opts.core > 0 ? (Math.floor(t * 20) % 2 ? "#ffffff" : C.acc) : hot ? "#ff3d5a" : C.glass;
+  R(22, 13, 4, 4, white || pulse);
+  R(23, 14, 2, 2, white || "#ffffff");
+  // canopy face with a scanning visor
+  R(20, 21, 8, 9, C.out); R(21, 22, 6, 7, C.glass); R(21, 22, 2, 2, white || "#c8f3ff");
+  const lx = clamp(Math.round((opts.lookX || 0) * 0.4) + 2, 0, 4);
+  R(21 + lx, 25, 2, 2, C.visor);
+  // nose cone
+  R(19, 32, 10, 2, C.out); R(20, 32, 8, 1, C.steel);
+  R(20, 34, 8, 2, C.out); R(21, 34, 6, 1, C.steel);
+  R(21, 36, 6, 2, C.out); R(22, 36, 4, 1, C.acc);
+  R(22, 38, 4, 2, C.out); R(23, 38, 2, 1, C.visor);
+}
+
+
+/* ---------- boss roster ---------- */
+const BOSSES = [
+  {
+    id: "gloomeye", name: "GLOOMEYE", tag: "BULLET CURTAIN", hp: 900, stars: 2,
+    hit: { w: 21, h: 16, oy: 0 }, contact: { w: 18, h: 14 },
+    draw: drawGloomeye,
+    pools: {
+      1: [gRing, gAimed, gSpiral, gRain],
+      2: [gRing, gAimed, gSpiral, gRain, gLaser, gCharge, gBloom],
+      3: [gAimed, gSpiral, gLaser, gCharge, gBloom,
+          () => parallel(gSpiral(), gAimed()),
+          () => parallel(gRain(), gLaser()),
+          () => parallel(gRing(), gBloom())]
+    }
+  },
+  {
+    id: "striker", name: "STRIKER", tag: "JET FIGHTER ROBOT", hp: 1000, stars: 3,
+    hit: { w: 22, h: 18, oy: 0 }, contact: { w: 18, h: 16 },
+    draw: drawStriker,
+    pools: {
+      1: [rRam, rGatling, rStrafe, rMissiles],
+      2: [rRam, rGatling, rStrafe, rMissiles, rDive],
+      3: [rRam, rDive, rStrafe,
+          () => parallel(rStrafe(), rMissiles()),
+          () => parallel(rRam(), rMissiles()),
+          () => parallel(rGatling(), rMissiles())]
+    }
+  }
+];
+
+/* ---------- state ---------- */
+let state = "title", stateT = 0, sel = 0;
+let player, boss, bullets = [], pbullets = [], lasers = [], parts = [], warns = [], banner;
+let shake = 0, time = 0, newBest = false;
+const best = {};
+for (const b of BOSSES) {
+  try { best[b.id] = parseFloat(localStorage.getItem("gloomeye-best-" + b.id)) || 0; } catch (e) { best[b.id] = 0; }
+}
+
+const stars = [];
+for (let i = 0; i < 70; i++) {
+  const layer = i % 3;
+  stars.push({ x: Math.random() * W, y: Math.random() * H, s: 8 + layer * 14, c: ["#2c2338", "#4a3d5e", "#8f86a3"][layer] });
+}
+
+function reset(def) {
+  player = { x: W / 2, y: H - 40, hp: 5, maxHp: 5, inv: 0, dashT: 0, dashCd: 0, dx: 0, dy: -1, shootT: 0, dead: false };
+  boss = {
+    def, x: W / 2, y: -40, tx: W / 2, ty: 70, hp: def.hp, maxHp: def.hp, flash: 0, phase: 1,
+    inv: 0, lock: true, t: 0, rattle: 0, blink: 0, blinkT: 2, enter: 1.8, runner: null, hitSfx: 0, core: 0, aim: 0, aimT: 0
+  };
+  bullets = []; pbullets = []; lasers = []; parts = []; warns = [];
+  banner = { text: def.name, t: 1.8 };
+  time = 0; shake = 0; newBest = false;
+  boss.runner = runner(bossBrain());
+}
+function startBoss(i) {
+  sel = i;
+  reset(BOSSES[i]);
+  state = "play";
+  sfx(523, 0.1); sfx(784, 0.2, "square", 0.04);
+}
+
 function* bossBrain() {
   let last = null;
   yield 0.6;
   while (true) {
-    const pool = POOLS[boss.phase];
+    const pool = boss.def.pools[boss.phase];
     let p;
     do { p = pool[Math.floor(Math.random() * pool.length)]; } while (p === last && pool.length > 1);
     last = p;
@@ -423,7 +753,7 @@ function* bossBrain() {
   }
 }
 function* phaseShift() {
-  boss.inv = 2; boss.lock = false; boss.rattle = 1.4;
+  boss.inv = 2; boss.lock = false; boss.rattle = 1.4; boss.aimT = 0;
   boss.tx = W / 2; boss.ty = 70;
   bullets.forEach(b => burst(b.x, b.y, b.c, 2, 30));
   bullets.length = 0; lasers.length = 0; warns.length = 0;
@@ -466,25 +796,25 @@ function updatePlayer() {
   if (player.dashT > 0) {
     player.dashT -= DT;
     player.x += player.dx * 270 * DT; player.y += player.dy * 270 * DT;
-    parts.push({ x: player.x, y: player.y, vx: 0, vy: 0, life: 0.2, max: 0.2, c: "#2b6cb0", s: 3 });
+    parts.push({ x: player.x, y: player.y, vx: 0, vy: 0, life: 0.2, max: 0.2, c: "#2b6cb0", s: 4 });
   } else {
     const sp = keys.shift ? 45 : 95;
     player.x += mx * sp * DT; player.y += my * sp * DT;
   }
-  player.x = clamp(player.x, 5, W - 5);
-  player.y = clamp(player.y, 24, H - 6);
+  player.x = clamp(player.x, 6, W - 6);
+  player.y = clamp(player.y, 24, H - 7);
   player.inv -= DT; player.dashCd -= DT;
 
   player.shootT -= DT;
   if (player.shootT <= 0 && !player.dead) {
     player.shootT = 0.09;
-    pbullets.push({ x: player.x - 3, y: player.y - 4 }, { x: player.x + 3, y: player.y - 4 });
+    pbullets.push({ x: player.x - 3, y: player.y - 5 }, { x: player.x + 3, y: player.y - 5 });
   }
 }
 
 function updateBoss() {
   boss.t += DT;
-  boss.flash -= DT; boss.inv -= DT; boss.rattle -= DT; boss.hitSfx -= DT;
+  boss.flash -= DT; boss.inv -= DT; boss.rattle -= DT; boss.hitSfx -= DT; boss.core -= DT;
   boss.blinkT -= DT;
   if (boss.blinkT <= 0) { boss.blink = 0.12; boss.blinkT = rand(1.5, 4); }
   boss.blink -= DT;
@@ -493,24 +823,27 @@ function updateBoss() {
     boss.enter -= DT;
     boss.y += (70 - boss.y) * Math.min(1, DT * 3);
     if (boss.enter <= 0) boss.lock = false;
-    return;
+  } else {
+    stepRunner(boss.runner);
+    if (!boss.lock) {
+      boss.x += (boss.tx - boss.x) * Math.min(1, DT * 2.2);
+      boss.y += (boss.ty + Math.sin(boss.t * 2) * 5 - boss.y) * Math.min(1, DT * 3);
+    }
+    const ratio = boss.hp / boss.maxHp;
+    const ph = ratio > 0.66 ? 1 : ratio > 0.33 ? 2 : 3;
+    if (ph > boss.phase) { boss.phase = ph; boss.runner = runner(phaseShift()); }
   }
-  stepRunner(boss.runner);
-  if (!boss.lock) {
-    boss.x += (boss.tx - boss.x) * Math.min(1, DT * 2.2);
-    boss.y += (boss.ty + Math.sin(boss.t * 2) * 5 - boss.y) * Math.min(1, DT * 3);
-  }
-  const ratio = boss.hp / boss.maxHp;
-  const ph = ratio > 0.66 ? 1 : ratio > 0.33 ? 2 : 3;
-  if (ph > boss.phase) { boss.phase = ph; boss.runner = runner(phaseShift()); }
 
-  if (!player.dead && Math.abs(player.x - boss.x) < 18 && Math.abs(player.y - boss.y) < 14) hurtPlayer();
+  const c = boss.def.contact;
+  if (!player.dead && Math.abs(player.x - boss.x) < c.w && Math.abs(player.y - boss.y) < c.h) hurtPlayer();
 }
 
 function updateBullets() {
+  const hb = boss.def.hit;
   for (const b of pbullets) {
     b.y -= 330 * DT;
-    if (!b.dead && Math.abs(b.x - boss.x) < 21 && Math.abs(b.y - boss.y) < 16 && boss.enter <= 0) {
+    if (b.dead) continue;
+    if (Math.abs(b.x - boss.x) < hb.w && Math.abs(b.y - boss.y - hb.oy) < hb.h && boss.enter <= 0 && boss.y > 0) {
       b.dead = true;
       if (boss.inv > 0) { burst(b.x, b.y, "#8f86a3", 2, 30); continue; }
       boss.hp -= 1; boss.flash = 0.05;
@@ -531,11 +864,20 @@ function updateBullets() {
         b.vx = Math.cos(a) * b.rsp; b.vy = Math.sin(a) * b.rsp;
       }
     }
+    if (b.home && b.life < b.homeT) {
+      const sp = Math.hypot(b.vx, b.vy);
+      let a = Math.atan2(b.vy, b.vx);
+      let d = Math.atan2(player.y - b.y, player.x - b.x) - a;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      a += clamp(d, -b.home * DT, b.home * DT);
+      b.vx = Math.cos(a) * sp; b.vy = Math.sin(a) * sp;
+    }
+    if (b.trail && Math.random() < 0.5) parts.push({ x: b.x, y: b.y, vx: 0, vy: 0, life: 0.2, max: 0.2, c: "#6b5a4a", s: 1 });
     b.vy += b.grav * DT;
     b.x += b.vx * DT; b.y += b.vy * DT;
     if (!player.dead && Math.hypot(b.x - player.x, b.y - player.y) < b.r + 1.5) { b.dead = true; hurtPlayer(); }
   }
-  bullets = bullets.filter(b => !b.dead && b.x > -10 && b.x < W + 10 && b.y > -20 && b.y < H + 10);
+  bullets = bullets.filter(b => !b.dead && b.x > -10 && b.x < W + 10 && b.y > -30 && b.y < H + 10);
 
   for (const l of lasers) {
     l.x = boss.x; l.y = boss.y;
@@ -555,9 +897,10 @@ function killBoss() {
   state = "bossdying"; stateT = 2.6;
   bullets.forEach(b => burst(b.x, b.y, b.c, 2, 30));
   bullets = []; lasers = []; warns = [];
-  if (!best || time < best) {
-    best = time; newBest = true;
-    try { localStorage.setItem("gloomeye-best", String(best)); } catch (e) {}
+  const id = boss.def.id;
+  if (!best[id] || time < best[id]) {
+    best[id] = time; newBest = true;
+    try { localStorage.setItem("gloomeye-best-" + id, String(time)); } catch (e) {}
   }
 }
 
@@ -570,23 +913,28 @@ function updateStars(speed = 1) {
 }
 
 function update() {
-  const start = pressed.enter || pressed[" "] || pressed.z;
+  const tap = pressed.tap;
+  const start = pressed.enter || pressed[" "] || pressed.z || (tap !== undefined && tap >= 0.3 && tap <= 0.7);
+  const back = pressed.escape;
   if (pressed.m) muted = !muted;
   stateT -= DT;
   updateStars(state === "play" ? 1 : 0.4);
   shake = Math.max(0, shake - DT * 20);
 
   if (state === "title") {
-    if (start) { reset(); state = "play"; sfx(523, 0.1); sfx(784, 0.2, "square", 0.04); }
+    const n = BOSSES.length;
+    if (start) startBoss(sel);
+    else if (pressed.arrowleft || pressed.a || (tap !== undefined && tap < 0.3)) { sel = (sel + n - 1) % n; sfx(330, 0.05); }
+    else if (pressed.arrowright || pressed.d || (tap !== undefined && tap > 0.7)) { sel = (sel + 1) % n; sfx(330, 0.05); }
   } else if (state === "play") {
-    if (pressed.p || pressed.escape) { state = "pause"; }
+    if (pressed.p || back) { state = "pause"; }
     else {
       time += DT;
       if (banner.t > 0) banner.t -= DT;
       updatePlayer(); updateBoss(); updateBullets(); updateParts();
     }
   } else if (state === "pause") {
-    if (pressed.p || pressed.escape || pressed.enter) state = "play";
+    if (pressed.p || back || pressed.enter || tap !== undefined) state = "play";
   } else if (state === "dying") {
     updateBoss(); updateBullets(); updateParts();
     if (stateT <= 0) { state = "over"; stateT = 0.6; }
@@ -605,56 +953,20 @@ function update() {
     }
   } else if (state === "over" || state === "win") {
     updateParts();
-    if (start && stateT <= 0) { reset(); state = "play"; }
+    if (stateT <= 0) {
+      if (back) state = "title";
+      else if (start || tap !== undefined) {
+        if (state === "win") {
+          if (sel + 1 < BOSSES.length) startBoss(sel + 1);
+          else state = "title";
+        } else startBoss(sel);
+      }
+    }
   }
   for (const k in pressed) delete pressed[k];
 }
 
 /* ---------- draw ---------- */
-function r(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
-
-function drawBoss(cx, cy, opts = {}) {
-  const enraged = opts.phase === 3;
-  const white = opts.flash ? "#ffffff" : null;
-  const C = {
-    out: white || "#1a0f26",
-    body: white || (enraged ? "#6b1f35" : "#4b2a6b"),
-    hi: white || (enraged ? "#a8344f" : "#7b4fa8"),
-    horn: white || "#d9c7a6",
-    eye: white || "#f4f0ff",
-    iris: white || (enraged ? "#ff1f3d" : "#ff3d5a"),
-    tooth: white || "#f4f0ff"
-  };
-  let ox = Math.round(cx) - 22, oy = Math.round(cy) - 17;
-  if (opts.rattle) { ox += Math.round(rand(-1.5, 1.5)); oy += Math.round(rand(-1, 1)); }
-  const R = (x, y, w, h, c) => r(ox + x, oy + y, w, h, c);
-  // horns
-  R(2, 0, 4, 4, C.horn); R(4, 4, 4, 4, C.horn); R(6, 8, 4, 3, C.horn);
-  R(38, 0, 4, 4, C.horn); R(36, 4, 4, 4, C.horn); R(34, 8, 4, 3, C.horn);
-  // side claws
-  const wob = Math.round(Math.sin((opts.t || 0) * 4) * 2);
-  R(0, 17 + wob, 5, 3, C.body); R(-2, 19 + wob, 3, 3, C.horn);
-  R(39, 17 - wob, 5, 3, C.body); R(43, 19 - wob, 3, 3, C.horn);
-  // body
-  R(6, 7, 32, 26, C.out); R(4, 9, 36, 22, C.out);
-  R(7, 8, 30, 24, C.body); R(5, 10, 34, 20, C.body);
-  R(8, 10, 10, 2, C.hi); R(7, 12, 2, 4, C.hi);
-  // eye
-  R(12, 12, 20, 12, C.out);
-  if (opts.blink) {
-    R(13, 13, 18, 10, C.body); R(13, 18, 18, 1, C.out);
-  } else {
-    R(13, 13, 18, 10, C.eye);
-    const lx = clamp(opts.lookX || 0, -5, 5), ly = clamp(opts.lookY || 0, -2, 2);
-    R(19 + lx, 15 + ly, 6, 6, C.iris);
-    R(21 + lx, 17 + ly, 2, 2, C.out);
-    R(20 + lx, 16 + ly, 1, 1, C.eye);
-  }
-  // mouth
-  R(14, 26, 16, 3, C.out);
-  for (let i = 0; i < 4; i++) R(15 + i * 4, 26, 2, 2, C.tooth);
-}
-
 function drawBullet(b) {
   const x = Math.round(b.x), y = Math.round(b.y), s = b.r;
   r(x - s, y - s + 1, s * 2, s * 2 - 2, b.c);
@@ -667,9 +979,13 @@ function drawStars(tint) {
   if (tint) { ctx.fillStyle = tint; ctx.fillRect(0, 0, W, H); }
 }
 
+function fmt(t) {
+  const m = Math.floor(t / 60), s = Math.floor(t % 60), cs = Math.floor((t * 10) % 10);
+  return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + "." + cs;
+}
+
 function drawHUD() {
-  // boss bar
-  shadowText("GLOOMEYE", 6, 5, "#ece6f6", 1);
+  shadowText(boss.def.name, 6, 5, "#ece6f6", 1);
   text("PHASE " + boss.phase, W - 6, 5, boss.phase === 3 ? "#ff3d5a" : "#9087a3", 1, "right");
   r(6, 12, W - 12, 6, "#1a0f26");
   r(7, 13, W - 14, 4, "#2c2338");
@@ -677,12 +993,9 @@ function drawHUD() {
   r(7, 13, w, 4, boss.inv > 0 ? "#8f86a3" : boss.phase === 3 ? "#ff1f3d" : "#ff3d5a");
   r(7, 13, w, 1, "#ff9aa9");
   for (const f of [0.66, 0.33]) r(7 + Math.round((W - 14) * f), 12, 1, 6, "#ece6f6");
-  // hearts
   for (let i = 0; i < player.maxHp; i++) {
-    const c = i < player.hp ? "#ff3d5a" : "#2c2338";
-    sprite(HEART, { 1: c }, 6 + i * 9, H - 11);
+    sprite(HEART, { 1: i < player.hp ? "#ff3d5a" : "#2c2338" }, 6 + i * 9, H - 11);
   }
-  // dash meter
   const ready = player.dashCd <= 0;
   text("DASH", W - 40, H - 10, ready ? "#5fd3ff" : "#4a3d5e");
   r(W - 23, H - 9, 17, 3, "#2c2338");
@@ -691,23 +1004,32 @@ function drawHUD() {
   if (muted) text("MUTE", W - 6, 22, "#4a3d5e", 1, "right");
 }
 
-function fmt(t) {
-  const m = Math.floor(t / 60), s = Math.floor(t % 60), cs = Math.floor((t * 10) % 10);
-  return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + "." + cs;
-}
-
-function drawPlay() {
-  drawStars(boss.phase === 3 ? "rgba(255,31,61,0.06)" : null);
-
+function drawWarns() {
   for (const w of warns) {
-    const on = Math.floor(w.t * 14) % 2 === 0;
+    const rate = w.locked ? 26 : 14;
+    const on = Math.floor(performance.now() / 1000 * rate) % 2 === 0;
     if (w.type === "drop") {
       if (on) { r(Math.round(w.x) - 2, 24, 5, 1, "#5fd3ff"); r(Math.round(w.x) - 1, 25, 3, 1, "#5fd3ff"); r(Math.round(w.x), 26, 1, 1, "#5fd3ff"); }
     } else if (w.type === "lane") {
       ctx.fillStyle = on ? "rgba(255,61,90,0.28)" : "rgba(255,61,90,0.12)";
       ctx.fillRect(Math.round(w.x - w.w / 2), Math.round(boss.y), w.w, H);
+    } else if (w.type === "band") {
+      ctx.fillStyle = on ? "rgba(255,61,90,0.28)" : "rgba(255,61,90,0.12)";
+      ctx.fillRect(0, Math.round(w.y - w.h / 2), W, w.h);
+      if (on) { r(0, Math.round(w.y - w.h / 2), W, 1, "#ff3d5a"); r(0, Math.round(w.y + w.h / 2) - 1, W, 1, "#ff3d5a"); }
+    } else if (w.type === "circle" || w.type === "shadow") {
+      ctx.beginPath();
+      ctx.ellipse(Math.round(w.x), Math.round(w.y), w.r, w.type === "shadow" ? w.r * 0.6 : w.r, 0, 0, TAU);
+      ctx.fillStyle = w.type === "shadow" ? "rgba(0,0,0,0.55)" : on ? "rgba(255,61,90,0.3)" : "rgba(255,61,90,0.12)";
+      ctx.fill();
+      if (on) { ctx.strokeStyle = "#ff3d5a"; ctx.lineWidth = 1; ctx.stroke(); }
     }
   }
+}
+
+function drawPlay() {
+  drawStars(boss.phase === 3 ? "rgba(255,31,61,0.06)" : null);
+  drawWarns();
 
   for (const l of lasers) {
     ctx.save();
@@ -722,27 +1044,24 @@ function drawPlay() {
     }
     ctx.restore();
   }
-
+  if (boss.aimT > 0 && Math.floor(boss.aimT * 18) % 2 === 0) {
+    ctx.save(); ctx.translate(Math.round(boss.x), Math.round(boss.y)); ctx.rotate(boss.aim);
+    ctx.fillStyle = "rgba(255,61,90,0.22)"; ctx.fillRect(0, -16, 500, 32);
+    ctx.fillStyle = "rgba(255,61,90,0.85)"; ctx.fillRect(0, -16, 500, 1); ctx.fillRect(0, 15, 500, 1);
+    ctx.restore();
+  }
   if (state !== "win") {
     const dx = player.x - boss.x, dy = player.y - boss.y, d = Math.hypot(dx, dy) || 1;
-    drawBoss(boss.x, boss.y, {
+    boss.def.draw(boss.x, boss.y, {
       phase: boss.phase, t: boss.t, flash: boss.flash > 0 || (boss.inv > 0 && Math.floor(boss.inv * 10) % 2 === 0),
-      rattle: boss.rattle > 0 || state === "bossdying", blink: boss.blink > 0,
+      rattle: boss.rattle > 0 || state === "bossdying", blink: boss.blink > 0, core: boss.core,
       lookX: Math.round(dx / d * 5), lookY: Math.round(dy / d * 2)
     });
   }
 
   for (const b of pbullets) { r(Math.round(b.x), Math.round(b.y), 1, 4, "#9ff0ff"); }
 
-  if (!player.dead && !(player.inv > 0 && Math.floor(player.inv * 12) % 2 === 0)) {
-    const px = Math.round(player.x) - 3, py = Math.round(player.y) - 3;
-    PCOL.d = Math.random() < 0.5 ? "#ffb347" : "#ff6a3d";
-    sprite(PLAYER, PCOL, px, py, player.dashT > 0 ? "#ffffff" : null);
-    if (keys.shift) {
-      r(Math.round(player.x) - 1, Math.round(player.y) - 1, 3, 3, "#ff3d5a");
-      r(Math.round(player.x), Math.round(player.y), 1, 1, "#ffffff");
-    }
-  }
+  if (!player.dead && !(player.inv > 0 && Math.floor(player.inv * 12) % 2 === 0)) drawPlayer();
 
   for (const b of bullets) drawBullet(b);
   for (const p of parts) r(Math.round(p.x), Math.round(p.y), p.s, p.s, p.c);
@@ -750,11 +1069,47 @@ function drawPlay() {
   drawHUD();
 
   if (banner.t > 0 && Math.floor(banner.t * 6) % 2 === 0) {
-    shadowText(banner.text, W / 2, H / 2 - 20, banner.text === "GLOOMEYE" ? "#ece6f6" : "#ff3d5a", 3, "center");
+    shadowText(banner.text, W / 2, H / 2 - 20, banner.text.startsWith("PHASE") ? "#ff3d5a" : "#ece6f6", 3, "center");
+  }
+}
+
+function drawPlayer() {
+  const cx = Math.round(player.x), cy = Math.round(player.y);
+  // soft halo so the ship stands out from the bullets
+  ctx.beginPath(); ctx.arc(cx, cy, 10, 0, TAU);
+  ctx.fillStyle = "rgba(95,211,255,0.14)"; ctx.fill();
+  const px = cx - 5, py = cy - 5;
+  for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) sprite(PLAYER, PCOL, px + ox, py + oy, "#03101d");
+  PCOL.d = Math.random() < 0.5 ? "#ffb347" : "#ff6a3d";
+  sprite(PLAYER, PCOL, px, py, player.dashT > 0 ? "#ffffff" : null);
+  if (keys.shift) {
+    r(cx - 1, cy - 1, 3, 3, "#ff3d5a");
+    r(cx, cy, 1, 1, "#ffffff");
   }
 }
 
 function overlay(alpha) { ctx.fillStyle = "rgba(13,11,20," + alpha + ")"; ctx.fillRect(0, 0, W, H); }
+
+function drawTitle(blinkOn) {
+  drawStars();
+  const t = performance.now() / 1000;
+  shadowText("PIXEL BOSS RUSH", W / 2, 22, "#ece6f6", 2, "center");
+  text("SELECT BOSS", W / 2, 46, "#9087a3", 1, "center");
+  const def = BOSSES[sel];
+  const by = 112 + Math.sin(t * 2) * 4;
+  def.draw(W / 2, by, { t, lookX: Math.round(Math.sin(t) * 5), lookY: 1, blink: t % 3.5 < 0.12, phase: 1 });
+  text("<", 22, by - 6, blinkOn ? "#5fd3ff" : "#4a3d5e", 3);
+  text(">", W - 31, by - 6, blinkOn ? "#5fd3ff" : "#4a3d5e", 3);
+  shadowText(def.name, W / 2, 162, "#ff3d5a", 3, "center");
+  text(def.tag, W / 2, 186, "#ece6f6", 1, "center");
+  text("DANGER " + "*".repeat(def.stars), W / 2, 197, "#ffd166", 1, "center");
+  text("BOSS " + (sel + 1) + "/" + BOSSES.length, W / 2, 208, "#9087a3", 1, "center");
+  if (best[def.id]) text("BEST " + fmt(best[def.id]), W / 2, 219, "#7cffb2", 1, "center");
+  if (blinkOn) text("PRESS ENTER OR TAP", W / 2, 246, "#5fd3ff", 1, "center");
+  text("MOVE ARROWS/WASD  DASH SPACE", W / 2, 272, "#9087a3", 1, "center");
+  text("FOCUS SHIFT  PAUSE P  MUTE M", W / 2, 282, "#9087a3", 1, "center");
+  text("FULLSCREEN F", W / 2, 292, "#9087a3", 1, "center");
+}
 
 function draw() {
   ctx.save();
@@ -763,15 +1118,7 @@ function draw() {
   const blinkOn = Math.floor(performance.now() / 450) % 2 === 0;
 
   if (state === "title") {
-    drawStars();
-    const t = performance.now() / 1000;
-    drawBoss(W / 2, 110 + Math.sin(t * 2) * 4, { t, lookX: Math.round(Math.sin(t) * 5), lookY: 1, blink: t % 3.5 < 0.12 });
-    shadowText("GLOOMEYE", W / 2, 160, "#ece6f6", 4, "center");
-    text("BOSS RUSH", W / 2, 186, "#ff3d5a", 2, "center");
-    if (blinkOn) text("PRESS ENTER OR TAP", W / 2, 230, "#5fd3ff", 1, "center");
-    text("MOVE ARROWS/WASD  DASH SPACE", W / 2, 260, "#9087a3", 1, "center");
-    text("FOCUS SHIFT  PAUSE P  MUTE M", W / 2, 270, "#9087a3", 1, "center");
-    if (best) text("BEST " + fmt(best), W / 2, 296, "#ffd166", 1, "center");
+    drawTitle(blinkOn);
   } else {
     drawPlay();
     if (state === "pause") {
@@ -781,16 +1128,23 @@ function draw() {
     } else if (state === "over") {
       overlay(0.75);
       shadowText("GAME OVER", W / 2, 120, "#ff3d5a", 3, "center");
-      text("BOSS HP " + Math.ceil(boss.hp / boss.maxHp * 100) + "%", W / 2, 150, "#ece6f6", 1, "center");
+      text(boss.def.name + " HP " + Math.ceil(boss.hp / boss.maxHp * 100) + "%", W / 2, 150, "#ece6f6", 1, "center");
       text("TIME " + fmt(time), W / 2, 162, "#9087a3", 1, "center");
-      if (blinkOn && stateT <= 0) text("ENTER OR TAP TO RETRY", W / 2, 200, "#5fd3ff", 1, "center");
+      if (stateT <= 0) {
+        if (blinkOn) text("ENTER OR TAP TO RETRY", W / 2, 200, "#5fd3ff", 1, "center");
+        text("ESC: BOSS SELECT", W / 2, 214, "#9087a3", 1, "center");
+      }
     } else if (state === "win") {
       overlay(0.55);
       shadowText("VICTORY!", W / 2, 110, "#ffd166", 3, "center");
-      text("GLOOMEYE DEFEATED", W / 2, 140, "#ece6f6", 1, "center");
+      text(boss.def.name + " DEFEATED", W / 2, 140, "#ece6f6", 1, "center");
       text("TIME " + fmt(time), W / 2, 156, "#ece6f6", 2, "center");
-      text((newBest ? "NEW BEST!" : "BEST " + fmt(best)), W / 2, 176, newBest ? "#7cffb2" : "#9087a3", 1, "center");
-      if (blinkOn && stateT <= 0) text("ENTER OR TAP TO PLAY AGAIN", W / 2, 210, "#5fd3ff", 1, "center");
+      text(newBest ? "NEW BEST!" : "BEST " + fmt(best[boss.def.id]), W / 2, 176, newBest ? "#7cffb2" : "#9087a3", 1, "center");
+      if (stateT <= 0) {
+        const next = sel + 1 < BOSSES.length ? "ENTER: NEXT BOSS " + BOSSES[sel + 1].name : "ENTER: BOSS SELECT";
+        if (blinkOn) text(next, W / 2, 210, "#5fd3ff", 1, "center");
+        text("ESC: BOSS SELECT", W / 2, 224, "#9087a3", 1, "center");
+      }
     }
   }
   ctx.restore();
@@ -805,7 +1159,7 @@ function frame(now) {
   draw();
   requestAnimationFrame(frame);
 }
-reset();
+reset(BOSSES[0]);
 state = "title";
 requestAnimationFrame(frame);
 })();
