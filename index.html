@@ -309,6 +309,7 @@ cv.addEventListener("pointerdown", e => {
   if (state !== "play") {
     const rect = cv.getBoundingClientRect();
     pressed.tap = (e.clientX - rect.left) / rect.width;
+    pressed.tapY = (e.clientY - rect.top) / rect.height;
     return;
   }
   const now = performance.now();
@@ -956,7 +957,8 @@ function* stageScript() {
   yield 3;
   intro = null;
   if (stageN >= 10) { state = "win"; stateT = 1; saveBest(); return; }
-  openMap(stageN + 1, true);
+  cleared.add(stageN);
+  openMap(true);
 }
 
 function* bossIntro() {
@@ -982,7 +984,10 @@ function* bossIntro() {
 }
 
 function makeBoss() {
-  const hp = 2600;
+  // scale to the player's firepower so a maxed ship still needs about a minute
+  const T = player.tier, shots = [1, 2, 3, 6, 8][player.pow - 1];
+  const dps = [0, 1, 2, 3, 4, 6][T] * shots / [0, 0.09, 0.08, 0.08, 0.075, 0.07][T];
+  const hp = Math.max(5000, Math.round(dps * 70));
   const p = BOSS_PALS[0];
   return {
     name: "STRIKER OMEGA", pal: { steel: p[0], dark: p[1], acc: p[2] },
@@ -1135,9 +1140,12 @@ const REWARDS = [
   { id: "DASH", name: "QUICK DASH", desc: "DASH FASTER", ok: () => player.dashMax > 0.4, apply: () => { player.dashMax -= 0.15; } }
 ];
 let map = null;
-function openMap(next, reward) {
+let cleared = new Set();
+function unlockedMax() { let n = 1; while (cleared.has(n) && n < 10) n++; return n; }
+function openMap(reward) {
   const cards = REWARDS.filter(c => c.ok()).sort(() => Math.random() - 0.5).slice(0, 3);
-  map = { next, phase: reward && cards.length ? "reward" : "route", cards, sel: 1, t: 0 };
+  const sel = unlockedMax();
+  map = { last: stageN, phase: reward && cards.length ? "reward" : "route", cards, sel: 1, stageSel: sel, shipX: MAP_PTS[sel - 1][0], shipY: MAP_PTS[sel - 1][1], t: 0 };
   state = "map";
 }
 function updateMap(tap) {
@@ -1153,14 +1161,27 @@ function updateMap(tap) {
       sfx(660, 0.1, "square", 0.04); sfx(990, 0.2, "square", 0.04);
       map.phase = "route"; map.t = 0;
     }
-  } else if (map.t > 1.2 && (pressed.enter || pressed[" "] || pressed.z || tap !== undefined)) {
-    startStage(map.next);
+  } else {
+    // stage select: any cleared stage or the next locked-in one
+    const maxN = unlockedMax();
+    if (pressed.arrowright || pressed.arrowup || pressed.d || pressed.w) { map.stageSel = Math.min(maxN, map.stageSel + 1); sfx(330, 0.05); }
+    if (pressed.arrowleft || pressed.arrowdown || pressed.a || pressed.s) { map.stageSel = Math.max(1, map.stageSel - 1); sfx(330, 0.05); }
+    let go = (pressed.enter || pressed[" "] || pressed.z) && map.t > 0.3;
+    if (tap !== undefined && map.t > 0.3) {
+      const tx = tap * W, ty = pressed.tapY * H;
+      const i = MAP_PTS.findIndex(([x, y]) => Math.hypot(x - tx, y - ty) < 14);
+      if (i >= 0 && i + 1 <= maxN) { if (i + 1 === map.stageSel) go = true; else { map.stageSel = i + 1; sfx(330, 0.05); } }
+      else if (ty > 250) go = true;
+    }
+    const [sx, sy] = MAP_PTS[map.stageSel - 1];
+    map.shipX += (sx - map.shipX) * Math.min(1, DT * 8); map.shipY += (sy - map.shipY) * Math.min(1, DT * 8);
+    if (go) { sfx(523, 0.1); sfx(784, 0.2, "square", 0.04); startStage(map.stageSel); }
   }
 }
 function drawMap() {
   drawStars();
   if (map.phase === "reward") {
-    shadowText("STAGE " + (map.next - 1) + " CLEAR", W / 2, 40, "#7cffb2", 2, "center");
+    shadowText("STAGE " + map.last + " CLEAR", W / 2, 40, "#7cffb2", 2, "center");
     text("CHOOSE AN UPGRADE", W / 2, 66, "#ece6f6", 1, "center");
     const n = map.cards.length, cw = 70, gap = 6, x0 = (W - (n * cw + (n - 1) * gap)) / 2;
     map.cards.forEach((c, i) => {
@@ -1177,30 +1198,28 @@ function drawMap() {
     text("T" + player.tier + "-" + player.pow + "  MS" + player.msl + "  HP" + player.hp + "/" + player.maxHp + "  SH" + player.shield, W / 2, 240, "#9087a3", 1, "center");
     return;
   }
-  shadowText("ROUTE MAP", W / 2, 14, "#ece6f6", 2, "center");
+  shadowText("SELECT STAGE", W / 2, 14, "#ece6f6", 2, "center");
+  const maxN = unlockedMax();
   for (let i = 0; i < 9; i++) {
     const [x1, y1] = MAP_PTS[i], [x2, y2] = MAP_PTS[i + 1];
-    for (let k = 0; k <= 12; k++) r(Math.round(x1 + (x2 - x1) * k / 12), Math.round(y1 + (y2 - y1) * k / 12), 1, 1, i + 1 < map.next ? "#7cffb2" : "#4a3d5e");
+    for (let k = 0; k <= 12; k++) r(Math.round(x1 + (x2 - x1) * k / 12), Math.round(y1 + (y2 - y1) * k / 12), 1, 1, cleared.has(i + 1) ? "#7cffb2" : "#4a3d5e");
   }
   MAP_PTS.forEach(([x, y], i) => {
-    const n = i + 1, done = n < map.next, cur = n === map.next;
-    const c = done ? "#7cffb2" : cur ? (Math.floor(map.t * 4) % 2 ? "#5fd3ff" : "#ffffff") : n === 10 ? "#ff3d5a" : "#4a3d5e";
+    const n = i + 1, done = cleared.has(n), open = n <= maxN, sel = n === map.stageSel;
+    const c = done ? "#7cffb2" : open ? "#5fd3ff" : n === 10 ? "#7a2030" : "#2c2338";
+    if (sel) r(x - 6, y - 6, 13, 13, Math.floor(map.t * 4) % 2 ? "#ffffff" : "#ffd166");
     r(x - 4, y - 4, 9, 9, O); r(x - 3, y - 3, 7, 7, c);
-    text(String(n), x, y - 2, O, 1, "center");
+    text(open ? String(n) : "-", x, y - 2, O, 1, "center");
     const left = x > 120;
-    text(STAGE_NAMES[i], left ? x - 8 : x + 8, y - 2, cur ? "#ece6f6" : "#5a5268", 1, left ? "right" : "left");
+    text(STAGE_NAMES[i], left ? x - 9 : x + 9, y - 2, sel ? "#ffd166" : open ? "#ece6f6" : "#4a4258", 1, left ? "right" : "left");
   });
-  if (map.next === 10) sprite(ICON, { o: O, a: "#4a3038", c: "#5fd3ff", r: "#ff3d5a" }, MAP_PTS[9][0] - 5, MAP_PTS[9][1] - 18);
-  // ship flies from the previous node to the next
-  const k = Math.min(1, map.t / 1.1), a = MAP_PTS[Math.max(0, map.next - 2)], b = MAP_PTS[map.next - 1];
-  const sx = map.next === 1 ? b[0] : a[0] + (b[0] - a[0]) * k, sy = map.next === 1 ? b[1] + 20 * (1 - k) : a[1] + (b[1] - a[1]) * k;
-  sprite(PLAYER, PCOL, Math.round(sx) - 5, Math.round(sy) + 6);
-  if (map.t > 1.2) {
-    r(0, 252, W, 46, "rgba(0,0,0,0.6)");
-    text("NEXT: STAGE " + map.next, W / 2, 258, "#ffd166", 1, "center");
-    shadowText(STAGE_NAMES[map.next - 1], W / 2, 268, "#ece6f6", 2, "center");
-    if (Math.floor(map.t * 2.2) % 2) text("ENTER OR TAP TO LAUNCH", W / 2, 288, "#5fd3ff", 1, "center");
-  }
+  sprite(ICON, { o: O, a: "#4a3038", c: "#5fd3ff", r: "#ff3d5a" }, MAP_PTS[9][0] - 5, MAP_PTS[9][1] - 18);
+  sprite(PLAYER, PCOL, Math.round(map.shipX) - 5, Math.round(map.shipY) + 7);
+  const n = map.stageSel;
+  r(0, 250, W, 50, "rgba(0,0,0,0.6)");
+  text("STAGE " + n + (cleared.has(n) ? "  CLEARED" : n === 10 ? "  FINAL BOSS" : "  NEW"), W / 2, 256, cleared.has(n) ? "#7cffb2" : "#ffd166", 1, "center");
+  shadowText(STAGE_NAMES[n - 1], W / 2, 266, "#ece6f6", 2, "center");
+  text("< > CHOOSE   ENTER OR TAP TO LAUNCH", W / 2, 288, Math.floor(map.t * 2.2) % 2 ? "#5fd3ff" : "#9087a3", 1, "center");
 }
 
 function drawIntro() {
@@ -1247,7 +1266,8 @@ for (let i = 0; i < 70; i++) {
 function startGame() {
   score = 0; newBest = false; time = 0;
   player = newPlayer();
-  openMap(1, false);
+  cleared = new Set();
+  openMap(false);
   sfx(523, 0.1); sfx(784, 0.2, "square", 0.04);
 }
 
