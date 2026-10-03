@@ -146,7 +146,7 @@ kbd {
     <div class="row"><span>공격</span><span>자동 발사</span></div>
     <div class="row"><span>기타</span><span><kbd>P</kbd>일시정지 <kbd>M</kbd>소리 <kbd>F</kbd>전체화면</span></div>
     <div class="row"><span>모바일</span><span>드래그로 이동, 두 번 탭하면 대시</span></div>
-    <p class="note">10개 스테이지에서 체력을 가진 잡졸을 격추하고 <b>P</b>(무기 강화), <b>R</b>(수리) 아이템을 모으면, 스테이지 끝에 보스가 등장합니다. <b>STRIKER</b>는 기수를 돌려 조준하는 전투기형 로봇입니다. 날개 밑 개틀링, 날개 미사일, 폭탄창 폭격, 애프터버너 돌진, 급강하로 공격합니다. 빨간 띠, 표적, 그림자가 공격을 예고하고, 체력 66%와 33%에서 페이즈가 바뀝니다.</p>
+    <p class="note">1~9스테이지는 잡졸 웨이브를 전멸시켜야 넘어가고, 10스테이지 끝에 보스가 등장합니다. 클리어할 때마다 업그레이드 카드 1장을 고르고 루트 맵에서 다음 스테이지로 출격합니다. 잡졸은 <b>P</b>(무기 강화), <b>R</b>(수리) 아이템을 떨어뜨립니다. <b>STRIKER</b>는 기수를 돌려 조준하는 전투기형 로봇입니다. 날개 밑 개틀링, 날개 미사일, 폭탄창 폭격, 애프터버너 돌진, 급강하로 공격합니다. 빨간 띠, 표적, 그림자가 공격을 예고하고, 체력 66%와 33%에서 페이즈가 바뀝니다.</p>
   </section>
 </main>
 
@@ -172,7 +172,7 @@ const GLYPHS = {
   Y:"101101010010010",Z:"111001010100111",
   ":":"000010000010000",".":"000000000000010","!":"010010010000010","-":"000000111000000",
   "/":"001001010100100","%":"101001010100101","<":"001010100010001",">":"100010001010100",
-  "*":"000101010101000"," ":"000000000000000"
+  "*":"000101010101000","+":"000010111010000"," ":"000000000000000"
 };
 function text(s, x, y, c, sc = 1, align = "left") {
   s = String(s).toUpperCase();
@@ -707,123 +707,235 @@ function drawBossAt(x, y, ang, o) {
 }
 
 /* =========================================================
-   STAGES: waves of enemies, items, then the boss
+   STAGES: 9 stages of enemy waves, stage 10 ends with the boss.
+   Every wave must be wiped out before the next one comes in.
    ========================================================= */
-const BOSS_PALS = [
-  ["#7d8799", "#3a404d", "#ffd166"], ["#a89770", "#5c5038", "#ff8a3d"], ["#5d7aa8", "#2c3d5c", "#ffd166"],
-  ["#6f8a5c", "#36452c", "#ffd166"], ["#a85d5d", "#5c2c2c", "#ffd166"], ["#c4cad6", "#6a7080", "#5fd3ff"],
-  ["#55556a", "#22222b", "#ff3d5a"], ["#8a6bbf", "#45336b", "#7cffb2"], ["#c9a74a", "#6b5520", "#ff3d5a"],
-  ["#4a3038", "#1a1014", "#ff3d5a"]
-];
-const BG = ["#0d0b14", "#120d0b", "#0b0f14", "#0b120d", "#140b0d", "#0f1014", "#08080c", "#100b14", "#13110a", "#14080a"];
+const STAGE_NAMES = ["OUTER ORBIT", "ASTEROID FIELD", "ICE RING", "DESERT CANYON", "SEA FORTRESS",
+  "STORM FRONT", "MAGMA BASE", "DEAD CITY", "SKY CARRIER", "STRIKER NEST"];
+const BG = ["#0d0b14", "#120f0b", "#0a1018", "#16100a", "#08111a", "#0f1014", "#160a08", "#0e0e10", "#0a0d16", "#14080a"];
+const BOSS_PALS = [["#4a3038", "#1a1014", "#ff3d5a"]];
 const ICON = ["....o.o....", "o..oaaao..o", "oaoaaaaaoao", "oaaaaaaaaao", ".ooaacaaoo.", "...oaaao...", "...oaaao...", "....oro....", ".....o....."];
+
 const DRONE = [".o.....o.", "oaoo.ooao", "oaaaoaaao", ".oacccao.", "..oacao..", "...oro...", "....o...."];
 const FIGHTER = ["....ooo....", "...oaaao...", "o..oaaao..o", "oo.oacao.oo", "oaooacaoaoo", "oaaaacaaaao", ".ooaacaaoo.", "...oaaao...", "....oro....", ".....o....."];
 const HEAVY = ["...ooooooooooo...", "..oaaaaaaaaaaao..", ".oawaaaaaaaaawao.", "oaaaaaaoooaaaaaao", "oaccaaoaaaoaaccao", "oaaaaaoaaaoaaaaao", ".oaaaaaoooaaaaao.", "..ooaaaaaaaaaoo..", "....oooaaaooo....", "......orrro......"];
-const EDEF = {
-  drone: { spr: DRONE, a: "#8a6bbf", r: 5, hp: n => 2 + Math.floor(n / 3), score: 100 },
-  fighter: { spr: FIGHTER, a: "#7d8799", r: 6, hp: n => 5 + n, score: 200 },
-  heavy: { spr: HEAVY, a: "#6f7d5c", r: 9, hp: n => 25 + n * 6, score: 800 }
-};
-let stageN = 1, stage = null, enemies = [], items = [], texts = [], score = 0, intro = null, introT = 0;
+const LAUNCHER = ["..ooooooooo..", ".oaaaaaaaaao.", "oappaaaaappao", "oappaacaappao", "oappaaaaappao", ".oaaaoooaaao.", "..oaao.oaao..", "...oo...oo..."];
+const BEAMER = ["...ooooo...", "..oaaaaao..", ".oaaaaaaao.", "oaaoooooaao", "oaaocccoaao", "oaaocccoaao", "oaaoooooaao", ".oaaaaaaao.", "..oaaaaao..", "...oaoao...", "....o.o...."];
 
+function makeSpr(rows, pal) {
+  const h = rows.length, w = rows[0].length;
+  const mk = flat => {
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    const x = c.getContext("2d");
+    for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) {
+      const k = rows[yy][xx];
+      if (k === ".") continue;
+      x.fillStyle = flat || pal[k]; x.fillRect(xx, yy, 1, 1);
+    }
+    return c;
+  };
+  return { img: mk(null), white: mk("#ffffff"), w, h };
+}
+const O = "#12141a";
+const EDEF = {
+  drone:    { spr: makeSpr(DRONE, { o: O, a: "#8a6bbf", c: "#ff5dc8", r: "#ff5dc8" }), r: 5, hp: n => 3 + Math.floor(n / 2), score: 100, nose: 4, boom: 8 },
+  fighter:  { spr: makeSpr(FIGHTER, { o: O, a: "#7d8799", c: "#5fd3ff", r: "#ff8a3d" }), r: 6, hp: n => 6 + n, score: 200, nose: 6, boom: 10 },
+  heavy:    { spr: makeSpr(HEAVY, { o: O, a: "#6f7d5c", w: "#c9d1de", c: "#ffd166", r: "#ff8a3d" }), r: 9, hp: n => 30 + n * 6, score: 800, nose: 0, boom: 20 },
+  launcher: { spr: makeSpr(LAUNCHER, { o: O, a: "#a89770", p: "#3a404d", c: "#ff3d5a" }), r: 7, hp: n => 16 + n * 4, score: 500, nose: 0, boom: 14 },
+  beamer:   { spr: makeSpr(BEAMER, { o: O, a: "#5d7aa8", c: "#7cffb2" }), r: 6, hp: n => 12 + n * 3, score: 400, nose: 5, boom: 12 }
+};
+
+let stageN = 1, stage = null, enemies = [], items = [], texts = [], booms = [], score = 0, intro = null, introT = 0;
+
+/* --- explosions: fireball + debris + smoke + shock ring --- */
+function explode(x, y, size) {
+  booms.push({ x, y, t: 0, life: 0.25 + size * 0.02, size });
+  for (let i = 0; i < size; i++) {
+    const a = Math.random() * TAU, s = rand(20, 40 + size * 5);
+    parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(0.3, 0.7), max: 0.7, c: ["#ffd166", "#ff8a3d", "#ffffff", "#3a404d"][i % 4], s: Math.random() < 0.4 ? 2 : 1 });
+  }
+  smoke(x, y, Math.ceil(size / 3));
+  shock(x, y, size * 1.6, size > 12 ? "#ffffff" : "#ffd166");
+  noise(0.1 + size * 0.015, Math.min(0.2, 0.05 + size * 0.006));
+  if (size >= 14) shake = Math.max(shake, size * 0.4);
+}
+function drawBooms() {
+  for (const b of booms) {
+    const k = b.t / b.life, rad = b.size * (0.35 + 0.75 * k);
+    const layers = k < 0.3 ? [["#ff8a3d", 1], ["#ffd166", 0.75], ["#ffffff", 0.45]]
+      : k < 0.65 ? [["#c0392b", 1], ["#ff8a3d", 0.7], ["#ffd166", 0.35]]
+      : [["#3a3440", 1], ["#5a2a20", 0.5]];
+    for (const [c, f] of layers) {
+      ctx.beginPath(); ctx.arc(Math.round(b.x), Math.round(b.y), Math.max(1, rad * f), 0, TAU);
+      ctx.fillStyle = c; ctx.globalAlpha = k < 0.65 ? 1 : 1 - (k - 0.65) / 0.35; ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* --- enemies --- */
 function spawn(type, x, y, ai, drop) {
   const d = EDEF[type];
-  const e = { type, d, x, y, hp: d.hp(stageN), maxHp: d.hp(stageN), flash: 0, muzzle: 0, warn: 0, t: 0, drop };
+  const hp = d.hp(stageN);
+  const e = { type, d, x, y, ang: DOWN, hp, maxHp: hp, flash: 0, muzzle: 0, warn: 0, charge: 0, beam: 0, t: 0, seed: rand(0, TAU), drop };
   e.runner = runner(ai(e));
   enemies.push(e);
 }
-function eShoot(e, a, sp, o) { fire(e.x, e.y + e.d.r, a, sp, o); e.muzzle = 0.07; }
-function* eMove(e, tx, ty, sp) {
+function nose(e, len = e.d.nose) { return { x: e.x + Math.cos(e.ang) * len, y: e.y + Math.sin(e.ang) * len }; }
+function eShoot(e, a, sp, o) { const p = nose(e); fire(p.x, p.y, a, sp, o); e.muzzle = 0.07; }
+function* eMove(e, tx, ty, sp, face = true) {
   while (Math.hypot(tx - e.x, ty - e.y) > sp * DT) {
     const a = Math.atan2(ty - e.y, tx - e.x);
     e.x += Math.cos(a) * sp * DT; e.y += Math.sin(a) * sp * DT;
+    if (face) e.ang = turnToward(e.ang, a, 6 * DT);
     yield 0;
   }
   e.x = tx; e.y = ty;
+  if (face) for (let t = 0; t < 0.25; t += DT) { e.ang = turnToward(e.ang, DOWN, 8 * DT); yield 0; }
 }
-function* aiDrone(e, x0, amp) {
-  let shot = rand(1, 2.5);
-  while (e.y < H + 15) {
-    e.y += (42 + stageN * 2) * DT;
-    e.x = x0 + Math.sin(e.t * 2.2) * amp;
-    shot -= DT;
-    if (shot <= 0 && e.y < H * 0.6) { shot = rand(1.8, 3); if (Math.random() < 0.3 + stageN * 0.05) eShoot(e, angTo(e.x, e.y), 70 + stageN * 4, { c: "#ff3d5a" }); }
+function* hover(e, tx, ty, time) {
+  for (let t = 0; t < time; t += DT) {
+    e.x = tx + Math.sin(e.t * 1.5 + e.seed) * 8; e.y = ty + Math.sin(e.t * 2 + e.seed) * 3;
     yield 0;
   }
 }
-function* aiFighter(e, tx, ty) {
-  yield* eMove(e, tx, ty, 130);
-  for (let t = 0; t < 0.5; t += DT) { e.warn = 0.5 - t; yield 0; }
-  e.warn = 0;
-  for (let i = 0; i < 3 + Math.floor(stageN / 4); i++) { eShoot(e, angTo(e.x, e.y), 105 + stageN * 5, { kind: "tracer" }); sfx(300, 0.04, "square", 0.015); yield 0.13; }
-  yield 0.4;
-  const dir = e.x < W / 2 ? -1 : 1;
-  let sp = 40;
-  while (e.y > -30 && e.x > -30 && e.x < W + 30) { sp = Math.min(200, sp + 250 * DT); e.x += dir * sp * 0.6 * DT; e.y -= sp * DT; yield 0; }
-}
-function* aiHeavy(e, tx, ty) {
-  yield* eMove(e, tx, ty, 45);
-  e.tur = DOWN;
-  let fireT = 1;
-  for (let t = 0; t < 7; t += DT) {
-    e.x = tx + Math.sin(t * 0.8) * 25;
-    e.tur = turnToward(e.tur, angTo(e.x, e.y), 2.5 * DT);
-    fireT -= DT;
-    if (fireT <= 0) {
-      fireT = 1.5 - stageN * 0.06;
-      const n = 3 + Math.floor(stageN / 3);
-      const tx2 = e.x + Math.cos(e.tur) * 9, ty2 = e.y + Math.sin(e.tur) * 9;
-      for (let i = 0; i < n; i++) fire(tx2, ty2, e.tur + (i - (n - 1) / 2) * 0.18, 70 + stageN * 3, { c: "#ff3d5a" });
-      e.muzzle = 0.08; sfx(200, 0.08, "square", 0.03);
+
+// drone: holds formation, glows its eye before each shot, sometimes dives at you and loops back
+function* aiDrone(e, tx, ty) {
+  yield* eMove(e, tx, ty, 110);
+  while (true) {
+    yield* hover(e, tx, ty, rand(1.5, 3.2) - stageN * 0.12);
+    for (let t = 0; t < 0.5; t += DT) { e.charge = t / 0.5; yield 0; }
+    e.charge = 0;
+    eShoot(e, angTo(e.x, e.y), 70 + stageN * 4, { c: "#ff5dc8" });
+    sfx(520, 0.06, "triangle", 0.02);
+    if (Math.random() < 0.12 + stageN * 0.03) {
+      for (let t = 0; t < 0.45; t += DT) { e.warn = 0.45 - t; e.x += rand(-0.6, 0.6); yield 0; }
+      e.warn = 0;
+      const a = angTo(e.x, e.y), sp = 150 + stageN * 6;
+      const vx = Math.cos(a) * sp, vy = Math.max(70, Math.sin(a) * sp);
+      e.ang = Math.atan2(vy, vx);
+      while (e.y < H + 15) { e.x += vx * DT; e.y += vy * DT; yield 0; }
+      e.y = -15; e.x = tx; e.ang = DOWN;
+      yield* eMove(e, tx, ty, 110);
     }
-    yield 0;
-  }
-  while (e.y > -30) { e.y -= 40 * DT; yield 0; }
-}
-function* wDrones() {
-  const n = 5 + Math.floor(stageN / 2), x0 = rand(50, W - 50), amp = rand(25, 45);
-  for (let i = 0; i < n; i++) { spawn("drone", x0, -10, e => aiDrone(e, x0, amp)); yield 0.32; }
-}
-function* wFighters() {
-  const n = 3 + Math.floor(stageN / 3);
-  for (let i = 0; i < n; i++) {
-    const k = i - (n - 1) / 2, tx = W / 2 + k * 30, ty = 90 - Math.abs(k) * 12;
-    spawn("fighter", tx, -15, e => aiFighter(e, tx, ty));
-    yield 0.15;
   }
 }
-function* wHeavy() {
-  const n = stageN >= 6 ? 2 : 1;
-  for (let i = 0; i < n; i++) { const tx = n === 1 ? W / 2 : (i ? W * 0.72 : W * 0.28); spawn("heavy", tx, -20, e => aiHeavy(e, tx, 60), true); }
+// fighter: turns its nose to you with an aim line, fires a tracer burst from the nose, then repositions
+function* aiFighter(e, tx, ty) {
+  yield* eMove(e, tx, ty, 140);
+  while (true) {
+    yield* hover(e, e.x, e.y, rand(0.4, 1.2));
+    for (let t = 0; t < 0.6; t += DT) { e.ang = turnToward(e.ang, angTo(e.x, e.y), 5 * DT); e.warn = 0.6 - t; yield 0; }
+    e.warn = 0;
+    for (let i = 0; i < 3 + Math.floor(stageN / 3); i++) {
+      e.ang = turnToward(e.ang, angTo(e.x, e.y), 0.6 * 0.12);
+      eShoot(e, e.ang, 115 + stageN * 5, { kind: "tracer" });
+      e.x -= Math.cos(e.ang) * 1.5; e.y -= Math.sin(e.ang) * 1.5;
+      sfx(300, 0.04, "square", 0.015);
+      yield 0.12;
+    }
+    yield* eMove(e, clamp(e.x + rand(-60, 60), 20, W - 20), clamp(e.y + rand(-25, 25), 30, 140), 90);
+  }
+}
+// heavy: turret tracks you, barrel glows, then a spread volley
+function* aiHeavy(e, tx, ty) {
+  yield* eMove(e, tx, ty, 45, false);
+  e.tur = DOWN;
+  while (true) {
+    for (let t = 0; t < 1.4 - stageN * 0.05; t += DT) {
+      e.x = tx + Math.sin(e.t * 0.8) * 25;
+      e.tur = turnToward(e.tur, angTo(e.x, e.y), 2.5 * DT);
+      e.charge = Math.max(0, (t - 0.8) / 0.6);
+      yield 0;
+    }
+    e.charge = 0;
+    const n = 3 + Math.floor(stageN / 3);
+    const p = { x: e.x + Math.cos(e.tur) * 9, y: e.y + Math.sin(e.tur) * 9 };
+    for (let i = 0; i < n; i++) fire(p.x, p.y, e.tur + (i - (n - 1) / 2) * 0.18, 70 + stageN * 3, { c: "#ff3d5a", r: 3 });
+    e.muzzle = 0.1; sfx(160, 0.12, "square", 0.04); smoke(p.x, p.y, 2);
+  }
+}
+// launcher: pods light up, then a rocket leaves each pod and homes in; rockets explode
+function* aiLauncher(e, tx, ty) {
+  yield* eMove(e, tx, ty, 70, false);
+  while (true) {
+    yield* hover(e, tx, ty, rand(2, 3.2) - stageN * 0.1);
+    for (let t = 0; t < 0.6; t += DT) { e.charge = t / 0.6; yield 0; }
+    e.charge = 0;
+    for (const s of [-1, 1]) {
+      const px = e.x + s * 4, py = e.y + 1;
+      fire(px, py, DOWN + s * 0.8, 40, { kind: "missile", c: "#ff8a3d", home: 2.2, homeT: 1.4, accel: 140, max: 95 + stageN * 4, ignite: 0.25 });
+      smoke(px, py, 3);
+    }
+    e.muzzle = 0.1; sfx(180, 0.15, "square", 0.03, 90);
+  }
+}
+// beamer: lens charges with a thin guide line, then fires a beam straight down
+function* aiBeamer(e, tx, ty) {
+  yield* eMove(e, tx, ty, 80, false);
+  while (true) {
+    yield* hover(e, tx, ty, rand(1.8, 3) - stageN * 0.08);
+    sfx(300, 0.9, "sawtooth", 0.02, 900);
+    for (let t = 0; t < 0.9; t += DT) { e.charge = t / 0.9; yield 0; }
+    e.charge = 0; e.beam = 0.6;
+    noise(0.4, 0.05);
+    while (e.beam > 0) { e.beam -= DT; if (!player.dead && Math.abs(player.x - e.x) < 3 && player.y > e.y) hurtPlayer(); yield 0; }
+  }
+}
+const AI = { drone: aiDrone, fighter: aiFighter, heavy: aiHeavy, launcher: aiLauncher, beamer: aiBeamer };
+
+function buildWave(n, i, last) {
+  const list = [];
+  const count = 4 + Math.floor(n * 0.9) + i;
+  for (let k = 0; k < count; k++) {
+    const roll = Math.random();
+    if (n >= 5 && roll < 0.12) list.push("beamer");
+    else if (n >= 3 && roll < 0.27) list.push("launcher");
+    else if (roll < 0.55) list.push("fighter");
+    else list.push("drone");
+  }
+  if (last || (n >= 4 && i === 1)) list.push("heavy");
+  if (n >= 7 && last) list.push("heavy");
+  return list;
+}
+function* runWave(list) {
+  const slots = [];
+  for (let row = 0; row < 5; row++) for (let col = 0; col < 8; col++) slots.push({ x: 22 + col * 28, y: 38 + row * 22 });
+  slots.sort(() => Math.random() - 0.5);
+  let heavies = 0;
+  for (const type of list) {
+    let s;
+    if (type === "heavy") { s = { x: heavies++ ? W * 0.28 : W * 0.72, y: 45 }; if (list.filter(t => t === "heavy").length === 1) s.x = W / 2; }
+    else s = slots.pop();
+    spawn(type, clamp(s.x + rand(-40, 40), 10, W - 10), -15, e => AI[type](e, s.x, s.y), type === "heavy");
+    yield 0.14;
+  }
+  while (enemies.length) yield 0;
 }
 
 function* stageScript() {
-  banner = { text: "STAGE " + stageN, t: 2 };
-  yield 2;
-  const waves = 5 + Math.floor(stageN / 2);
+  banner = { text: "STAGE " + stageN, t: 2.2 };
+  yield 2.2;
+  const waves = stageN === 10 ? 2 : 3 + Math.floor(stageN / 2);
   stage.total = waves;
   for (let i = 0; i < waves; i++) {
     stage.done = i;
-    if (i === Math.floor(waves / 2) || i === waves - 1) yield* wHeavy();
-    else if (Math.random() < 0.5) yield* wDrones();
-    else yield* wFighters();
-    if (stageN >= 5 && Math.random() < 0.4) yield* wDrones();
-    yield 4.5 - Math.min(1.5, stageN * 0.12);
+    yield* runWave(buildWave(stageN, i, i === waves - 1));
+    stage.done = i + 1;
+    yield 1;
   }
-  stage.done = waves;
-  for (let w = 0; enemies.length && w < 6; w += DT) yield 0;
-  yield* bossIntro();
-  while (!boss.dead) yield 0;
-  // stage clear
+  if (stageN === 10) {
+    yield* bossIntro();
+    while (!boss.dead) yield 0;
+  }
   intro = "clear"; introT = 0;
-  score += 5000 * stageN;
-  player.hp = Math.min(player.maxHp, player.hp + 1);
+  score += 3000 * stageN;
   sfx(523, 0.15); sfx(659, 0.15, "square", 0.04); sfx(784, 0.3, "square", 0.04);
   yield 3;
   intro = null;
   if (stageN >= 10) { state = "win"; stateT = 1; saveBest(); return; }
-  startStage(stageN + 1);
+  openMap(stageN + 1, true);
 }
 
 function* bossIntro() {
@@ -848,13 +960,13 @@ function* bossIntro() {
   boss.runner = runner(bossBrain());
 }
 
-function makeBoss(n) {
-  const hp = 300 + n * n * 20 + n * 60;
-  const p = BOSS_PALS[n - 1];
+function makeBoss() {
+  const hp = 2600;
+  const p = BOSS_PALS[0];
   return {
-    name: n === 10 ? "STRIKER OMEGA" : "STRIKER MK-" + n, pal: { steel: p[0], dark: p[1], acc: p[2] },
-    x: W / 2, y: -80, tx: W / 2, ty: 70, hp, maxHp: hp, flash: 0, phase: 1, lv: Math.min(3, 1 + Math.floor((n - 1) / 4)),
-    maxPhase: n <= 3 ? 1 : n <= 6 ? 2 : 3, hidden: true, dead: false, dying: 0, hpShown: null,
+    name: "STRIKER OMEGA", pal: { steel: p[0], dark: p[1], acc: p[2] },
+    x: W / 2, y: -80, tx: W / 2, ty: 70, hp, maxHp: hp, flash: 0, phase: 1, lv: 2,
+    maxPhase: 3, hidden: true, dead: false, dying: 0, hpShown: null,
     inv: 0, lock: true, t: 0, rattle: 0, runner: null, hitSfx: 0,
     ang: DOWN, tAng: DOWN, turn: 3, face: "idle", burn: 1, tBurn: 1,
     aim: 0, aimT: 0, spool: 0, gunFlash: [0, 0], ammo: [1, 1, 1, 1], reload: 0, bay: 0
@@ -862,20 +974,21 @@ function makeBoss(n) {
 }
 function startStage(n) {
   stageN = n;
-  boss = makeBoss(n);
-  bullets = []; pbullets = []; parts = []; warns = []; shocks = []; enemies = []; items = []; texts = [];
-  player.x = W / 2; player.y = H - 40; player.inv = 1;
+  boss = makeBoss();
+  bullets = []; pbullets = []; parts = []; warns = []; shocks = []; enemies = []; items = []; texts = []; booms = [];
+  player.x = W / 2; player.y = H - 40; player.inv = 1; player.dead = false;
   banner = { text: "", t: 0 };
   stage = { runner: runner(stageScript()), done: 0, total: 1 };
   state = "play";
 }
 function newPlayer(pow = 1) {
-  return { x: W / 2, y: H - 40, hp: 5, maxHp: 5, inv: 0, dashT: 0, dashCd: 0, dx: 0, dy: -1, shootT: 0, dead: false, pow };
+  return { x: W / 2, y: H - 40, hp: 5, maxHp: 5, inv: 0, dashT: 0, dashCd: 0, dashMax: 0.85, dx: 0, dy: -1, shootT: 0, mslT: 0, dead: false, pow, msl: 0, shield: 0 };
 }
 function saveBest() {
   if (score > best) { best = score; newBest = true; try { localStorage.setItem("striker-hiscore", String(best)); } catch (e) {} }
 }
 
+/* --- items --- */
 function dropItem(x, y) {
   const kind = player.hp < player.maxHp && (player.pow >= 5 || Math.random() < 0.35) ? "R" : "P";
   items.push({ x, y, kind, t: 0 });
@@ -884,26 +997,21 @@ function popText(s, x, y, c) { texts.push({ s, x, y, t: 0.8, c }); }
 
 function damageEnemy(e, d) {
   e.hp -= d; e.flash = 0.05;
-  if (e.hp > 0) return;
+  if (e.hp > 0 || e.dead) return;
   e.dead = true;
   score += e.d.score;
   popText(String(e.d.score), e.x, e.y - 6, "#ece6f6");
-  burst(e.x, e.y, "#ffd166", e.type === "heavy" ? 30 : 12, e.type === "heavy" ? 110 : 70);
-  burst(e.x, e.y, "#ff8a3d", 8, 50);
-  shock(e.x, e.y, e.type === "heavy" ? 28 : 12);
-  noise(e.type === "heavy" ? 0.4 : 0.15, 0.08);
-  if (e.type === "heavy") shake = 6;
-  if (e.drop || Math.random() < 0.06) dropItem(e.x, e.y);
+  explode(e.x, e.y, e.d.boom);
+  if (e.drop || Math.random() < 0.07) dropItem(e.x, e.y);
 }
 
 function updateEnemies() {
   for (const e of enemies) {
     e.t += DT; e.flash -= DT; e.muzzle -= DT;
     stepRunner(e.runner);
-    if (e.runner.done) e.gone = true;
     if (!player.dead && Math.hypot(player.x - e.x, player.y - e.y) < e.d.r + 2) { hurtPlayer(); damageEnemy(e, 5); }
   }
-  enemies = enemies.filter(e => !e.dead && !e.gone);
+  enemies = enemies.filter(e => !e.dead);
   for (const it of items) {
     it.t += DT;
     const d = Math.hypot(player.x - it.x, player.y - it.y);
@@ -927,36 +1035,133 @@ function updateEnemies() {
 
 function drawEnemies() {
   for (const e of enemies) {
-    const s = e.d.spr, x = Math.round(e.x) - (s[0].length >> 1), y = Math.round(e.y) - (s.length >> 1);
-    sprite(s, { o: "#12141a", a: e.d.a, w: "#c9d1de", c: e.warn > 0 && Math.floor(e.warn * 20) % 2 ? "#ffffff" : "#ff3d5a", r: "#ff8a3d" }, x, y, e.flash > 0 ? "#ffffff" : null);
-    if (e.type === "heavy") {
-      const bx = Math.round(e.x + Math.cos(e.tur || DOWN) * (e.muzzle > 0 ? 6 : 8)), by = Math.round(e.y + Math.sin(e.tur || DOWN) * (e.muzzle > 0 ? 6 : 8));
-      r(Math.round(e.x) - 3, Math.round(e.y) - 3, 6, 6, "#12141a");
-      const n = 8;
-      for (let i = 0; i <= n; i++) r(Math.round(e.x + (bx - e.x) * i / n) - 1, Math.round(e.y + (by - e.y) * i / n) - 1, 2, 2, "#3a404d");
-      r(Math.round(e.x) - 2, Math.round(e.y) - 2, 4, 4, "#c9d1de");
-      if (e.muzzle > 0) { r(bx - 2, by - 2, 5, 5, "#ffd166"); r(bx - 1, by - 1, 3, 3, "#ffffff"); }
-    } else if (e.muzzle > 0) {
-      const mx = Math.round(e.x), my = Math.round(e.y + e.d.r);
-      r(mx - 2, my - 1, 5, 3, "#ffd166"); r(mx - 1, my, 3, 2, "#ffffff");
+    const s = e.d.spr, ex = Math.round(e.x), ey = Math.round(e.y);
+    // telegraphs first, under the sprite
+    if (e.type === "beamer" && e.charge > 0 && Math.floor(e.charge * 16) % 2 === 0) r(ex, ey + 6, 1, H, "rgba(124,255,178,0.7)");
+    if (e.beam > 0) {
+      const w = e.beam < 0.1 ? 2 : 5;
+      r(ex - (w >> 1) - 1, ey + 5, w + 2, H, "#2ec27e"); r(ex - (w >> 1), ey + 5, w, H, "#c8ffe0");
     }
-    if (e.warn > 0) {
-      ctx.save(); ctx.translate(Math.round(e.x), Math.round(e.y + e.d.r)); ctx.rotate(angTo(e.x, e.y));
-      ctx.fillStyle = "rgba(255,61,90,0.7)";
-      for (let d = 4; d < 60; d += 6) ctx.fillRect(d, 0, 3, 1);
+    if (e.warn > 0 && Math.floor(e.warn * 20) % 2 === 0) {
+      ctx.save(); ctx.translate(ex, ey); ctx.rotate(e.type === "drone" ? angTo(e.x, e.y) : e.ang);
+      ctx.fillStyle = "rgba(255,61,90,0.8)";
+      for (let d = 6; d < 120; d += 6) ctx.fillRect(d, 0, 3, 1);
       ctx.restore();
     }
+    ctx.save(); ctx.translate(ex, ey); ctx.rotate(e.ang - DOWN);
+    ctx.drawImage(e.flash > 0 ? s.white : s.img, -(s.w >> 1), -(s.h >> 1));
+    ctx.restore();
+    // weapon details
+    if (e.type === "heavy") {
+      const tur = e.tur || DOWN, len = e.muzzle > 0 ? 6 : 8;
+      const bx = Math.round(e.x + Math.cos(tur) * len), by = Math.round(e.y + Math.sin(tur) * len);
+      r(ex - 3, ey - 3, 6, 6, O);
+      for (let i = 0; i <= 8; i++) r(Math.round(e.x + (bx - e.x) * i / 8) - 1, Math.round(e.y + (by - e.y) * i / 8) - 1, 2, 2, "#3a404d");
+      r(ex - 2, ey - 2, 4, 4, "#c9d1de");
+      if (e.charge > 0) r(bx - 1, by - 1, 3, 3, Math.floor(e.t * 20) % 2 ? "#ffd166" : "#ff3d5a");
+      if (e.muzzle > 0) { r(bx - 3, by - 3, 7, 7, "#ffd166"); r(bx - 1, by - 1, 3, 3, "#ffffff"); }
+    } else if (e.type === "launcher") {
+      if (e.charge > 0 && Math.floor(e.charge * 12) % 2 === 0) { r(ex - 5, ey - 2, 3, 3, "#ffd166"); r(ex + 3, ey - 2, 3, 3, "#ffd166"); }
+      if (e.muzzle > 0) { r(ex - 6, ey + 1, 4, 4, "#ffffff"); r(ex + 3, ey + 1, 4, 4, "#ffffff"); }
+    } else if (e.charge > 0) {
+      const p = nose(e, e.d.nose), k = Math.ceil(e.charge * 3);
+      r(Math.round(p.x) - k, Math.round(p.y) - k, k * 2 + 1, k * 2 + 1, e.type === "beamer" ? "#7cffb2" : "#ff5dc8");
+      r(Math.round(p.x), Math.round(p.y), 1, 1, "#ffffff");
+    }
+    if (e.muzzle > 0 && (e.type === "drone" || e.type === "fighter")) {
+      const p = nose(e, e.d.nose + 2);
+      r(Math.round(p.x) - 2, Math.round(p.y) - 2, 5, 5, "#ffd166"); r(Math.round(p.x) - 1, Math.round(p.y) - 1, 3, 3, "#ffffff");
+    }
     if (e.hp < e.maxHp) {
-      const w = e.type === "heavy" ? 18 : 10;
-      r(Math.round(e.x - w / 2), Math.round(e.y) - (s.length >> 1) - 4, w, 2, "#2c2338");
-      r(Math.round(e.x - w / 2), Math.round(e.y) - (s.length >> 1) - 4, Math.max(1, Math.round(w * e.hp / e.maxHp)), 2, "#ff3d5a");
+      const w = e.type === "heavy" ? 18 : 10, y = ey - (s.h >> 1) - 4;
+      r(ex - (w >> 1), y, w, 2, "#2c2338");
+      r(ex - (w >> 1), y, Math.max(1, Math.round(w * e.hp / e.maxHp)), 2, "#ff3d5a");
     }
   }
   for (const it of items) {
     const x = Math.round(it.x), y = Math.round(it.y), c = it.kind === "P" ? "#ffd166" : "#7cffb2";
-    r(x - 5, y - 4, 11, 9, Math.floor(it.t * 8) % 2 ? "#ffffff" : "#12141a");
+    r(x - 5, y - 4, 11, 9, Math.floor(it.t * 8) % 2 ? "#ffffff" : O);
     r(x - 4, y - 3, 9, 7, c);
-    text(it.kind, x - 1, y - 2, "#12141a");
+    text(it.kind, x - 1, y - 2, O);
+  }
+}
+
+/* --- between stages: pick a reward, then fly the route map to the next stage --- */
+const MAP_PTS = [[40, 232], [110, 216], [190, 198], [150, 176], [70, 156], [40, 134], [120, 114], [200, 94], [140, 72], [120, 50]];
+const REWARDS = [
+  { id: "POWER", name: "POWER UP", desc: "MAIN GUN +1", ok: () => player.pow < 5, apply: () => player.pow++ },
+  { id: "MISSILE", name: "MISSILE POD", desc: "HOMING +1", ok: () => player.msl < 3, apply: () => player.msl++ },
+  { id: "HULL", name: "HULL +1", desc: "MAX HP +1", ok: () => player.maxHp < 8, apply: () => { player.maxHp++; player.hp++; } },
+  { id: "REPAIR", name: "REPAIR", desc: "FULL HP", ok: () => player.hp < player.maxHp, apply: () => { player.hp = player.maxHp; } },
+  { id: "SHIELD", name: "SHIELD", desc: "BLOCK 1 HIT", ok: () => player.shield < 3, apply: () => player.shield++ },
+  { id: "DASH", name: "QUICK DASH", desc: "DASH FASTER", ok: () => player.dashMax > 0.4, apply: () => { player.dashMax -= 0.15; } }
+];
+let map = null;
+function openMap(next, reward) {
+  const cards = REWARDS.filter(c => c.ok()).sort(() => Math.random() - 0.5).slice(0, 3);
+  map = { next, phase: reward && cards.length ? "reward" : "route", cards, sel: 1, t: 0 };
+  state = "map";
+}
+function updateMap(tap) {
+  map.t += DT;
+  if (map.phase === "reward") {
+    const n = map.cards.length;
+    if (pressed.arrowleft || pressed.a) { map.sel = (map.sel + n - 1) % n; sfx(330, 0.05); }
+    if (pressed.arrowright || pressed.d) { map.sel = (map.sel + 1) % n; sfx(330, 0.05); }
+    let pick = (pressed.enter || pressed[" "] || pressed.z) && map.t > 0.4;
+    if (tap !== undefined && map.t > 0.4) { map.sel = clamp(Math.floor(tap * n), 0, n - 1); pick = true; }
+    if (pick) {
+      map.cards[map.sel % n].apply();
+      sfx(660, 0.1, "square", 0.04); sfx(990, 0.2, "square", 0.04);
+      map.phase = "route"; map.t = 0;
+    }
+  } else if (map.t > 1.2 && (pressed.enter || pressed[" "] || pressed.z || tap !== undefined)) {
+    startStage(map.next);
+  }
+}
+function drawMap() {
+  drawStars();
+  if (map.phase === "reward") {
+    shadowText("STAGE " + (map.next - 1) + " CLEAR", W / 2, 40, "#7cffb2", 2, "center");
+    text("CHOOSE AN UPGRADE", W / 2, 66, "#ece6f6", 1, "center");
+    const n = map.cards.length, cw = 70, gap = 6, x0 = (W - (n * cw + (n - 1) * gap)) / 2;
+    map.cards.forEach((c, i) => {
+      const x = Math.round(x0 + i * (cw + gap)), y = 100, on = i === map.sel % n;
+      r(x - 1, y - 1 - (on ? 4 : 0), cw + 2, 92, on ? "#ffd166" : "#2c2338");
+      r(x, y - (on ? 4 : 0), cw, 90, "#18131f");
+      const yy = y - (on ? 4 : 0);
+      r(x + cw / 2 - 12, yy + 10, 24, 24, on ? "#ffd166" : "#3a404d");
+      text(c.id[0], x + cw / 2, yy + 15, O, 3, "center");
+      text(c.name, x + cw / 2, yy + 46, on ? "#ffd166" : "#ece6f6", 1, "center");
+      text(c.desc, x + cw / 2, yy + 60, "#9087a3", 1, "center");
+    });
+    text("< > SELECT   ENTER OR TAP", W / 2, 214, "#5fd3ff", 1, "center");
+    text("PW" + player.pow + "  MS" + player.msl + "  HP" + player.hp + "/" + player.maxHp + "  SH" + player.shield, W / 2, 240, "#9087a3", 1, "center");
+    return;
+  }
+  shadowText("ROUTE MAP", W / 2, 14, "#ece6f6", 2, "center");
+  for (let i = 0; i < 9; i++) {
+    const [x1, y1] = MAP_PTS[i], [x2, y2] = MAP_PTS[i + 1];
+    for (let k = 0; k <= 12; k++) r(Math.round(x1 + (x2 - x1) * k / 12), Math.round(y1 + (y2 - y1) * k / 12), 1, 1, i + 1 < map.next ? "#7cffb2" : "#4a3d5e");
+  }
+  MAP_PTS.forEach(([x, y], i) => {
+    const n = i + 1, done = n < map.next, cur = n === map.next;
+    const c = done ? "#7cffb2" : cur ? (Math.floor(map.t * 4) % 2 ? "#5fd3ff" : "#ffffff") : n === 10 ? "#ff3d5a" : "#4a3d5e";
+    r(x - 4, y - 4, 9, 9, O); r(x - 3, y - 3, 7, 7, c);
+    text(String(n), x, y - 2, O, 1, "center");
+    const left = x > 120;
+    text(STAGE_NAMES[i], left ? x - 8 : x + 8, y - 2, cur ? "#ece6f6" : "#5a5268", 1, left ? "right" : "left");
+  });
+  if (map.next === 10) sprite(ICON, { o: O, a: "#4a3038", c: "#5fd3ff", r: "#ff3d5a" }, MAP_PTS[9][0] - 5, MAP_PTS[9][1] - 18);
+  // ship flies from the previous node to the next
+  const k = Math.min(1, map.t / 1.1), a = MAP_PTS[Math.max(0, map.next - 2)], b = MAP_PTS[map.next - 1];
+  const sx = map.next === 1 ? b[0] : a[0] + (b[0] - a[0]) * k, sy = map.next === 1 ? b[1] + 20 * (1 - k) : a[1] + (b[1] - a[1]) * k;
+  sprite(PLAYER, PCOL, Math.round(sx) - 5, Math.round(sy) + 6);
+  if (map.t > 1.2) {
+    r(0, 252, W, 46, "rgba(0,0,0,0.6)");
+    text("NEXT: STAGE " + map.next, W / 2, 258, "#ffd166", 1, "center");
+    shadowText(STAGE_NAMES[map.next - 1], W / 2, 268, "#ece6f6", 2, "center");
+    if (Math.floor(map.t * 2.2) % 2) text("ENTER OR TAP TO LAUNCH", W / 2, 288, "#5fd3ff", 1, "center");
   }
 }
 
@@ -965,7 +1170,7 @@ function drawIntro() {
     const off = Math.floor(performance.now() / 30) % 12;
     for (const y of [100, 196]) {
       r(0, y, W, 10, "#ffd166");
-      ctx.fillStyle = "#12141a";
+      ctx.fillStyle = O;
       for (let x = -12 + off; x < W + 12; x += 12) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 6, y); ctx.lineTo(x, y + 10); ctx.lineTo(x - 6, y + 10); ctx.fill(); }
     }
     ctx.fillStyle = "rgba(255,31,61,0.12)"; ctx.fillRect(0, 0, W, H);
@@ -976,14 +1181,14 @@ function drawIntro() {
     ctx.save(); ctx.translate(Math.round(slide), 0);
     ctx.fillStyle = "rgba(0,0,0,0.75)"; ctx.fillRect(0, 140, W, 40);
     r(0, 140, W, 1, "#ff3d5a"); r(0, 179, W, 1, "#ff3d5a");
-    text("STAGE " + stageN + " BOSS", W / 2, 146, "#ffd166", 1, "center");
+    text("FINAL BOSS", W / 2, 146, "#ffd166", 1, "center");
     shadowText(boss.name, W / 2, 158, "#ece6f6", 2, "center");
     ctx.restore();
   } else if (intro === "clear") {
     overlay(0.4);
     shadowText("STAGE CLEAR", W / 2, 120, "#7cffb2", 2, "center");
-    text("BONUS " + 5000 * stageN, W / 2, 146, "#ffd166", 1, "center");
-    if (stageN < 10) text("NEXT: STAGE " + (stageN + 1), W / 2, 160, "#ece6f6", 1, "center");
+    text(STAGE_NAMES[stageN - 1], W / 2, 140, "#ece6f6", 1, "center");
+    text("BONUS " + 3000 * stageN, W / 2, 154, "#ffd166", 1, "center");
   }
   for (const t of texts) text(t.s, t.x, t.y, t.c, 1, "center");
 }
@@ -1004,7 +1209,7 @@ for (let i = 0; i < 70; i++) {
 function startGame() {
   score = 0; newBest = false; time = 0;
   player = newPlayer();
-  startStage(1);
+  openMap(1, false);
   sfx(523, 0.1); sfx(784, 0.2, "square", 0.04);
 }
 
@@ -1052,6 +1257,12 @@ function* phaseShift() {
 /* ---------- update ---------- */
 function hurtPlayer() {
   if (player.inv > 0 || player.dashT > 0 || player.dead) return;
+  if (player.shield > 0) {
+    player.shield--; player.inv = 1;
+    shock(player.x, player.y, 18, "#5fd3ff"); sfx(800, 0.2, "triangle", 0.05, 300);
+    bullets = bullets.filter(b => Math.hypot(b.x - player.x, b.y - player.y) > 36);
+    return;
+  }
   player.hp--;
   player.inv = 1.6;
   shake = 7;
@@ -1060,7 +1271,7 @@ function hurtPlayer() {
   bullets = bullets.filter(b => Math.hypot(b.x - player.x, b.y - player.y) > 36);
   if (player.hp <= 0) {
     player.dead = true;
-    burst(player.x, player.y, "#ffffff", 30, 120);
+    explode(player.x, player.y, 16);
     burst(player.x, player.y, "#5fd3ff", 30, 90);
     state = "dying"; stateT = 1.4;
     saveBest();
@@ -1068,7 +1279,7 @@ function hurtPlayer() {
 }
 function tryDash() {
   if (player.dashCd > 0 || player.dashT > 0) return;
-  player.dashT = 0.17; player.dashCd = 0.85;
+  player.dashT = 0.17; player.dashCd = player.dashMax;
   sfx(700, 0.12, "triangle", 0.04, 1400);
 }
 
@@ -1099,6 +1310,13 @@ function updatePlayer() {
     const SHOTS = [[[-3, 0], [3, 0]], [[-4, 0], [0, 0], [4, 0]], [[-4, 0], [0, 0], [4, 0], [-5, -0.15], [5, 0.15]],
       [[-5, 0], [-2, 0], [2, 0], [5, 0], [-6, -0.18], [6, 0.18]], [[-5, 0], [-2, 0], [2, 0], [5, 0], [-6, -0.14], [6, 0.14], [-6, -0.3], [6, 0.3]]];
     for (const [dx, a] of SHOTS[L - 1]) add(dx, a);
+  }
+  if (player.msl > 0 && !player.dead) {
+    player.mslT -= DT;
+    if (player.mslT <= 0) {
+      player.mslT = [0, 1.1, 0.8, 0.55][player.msl];
+      for (const s of [-1, 1]) pbullets.push({ x: player.x + s * 5, y: player.y, vx: s * 70, vy: -30, kind: "pm", dmg: 3 });
+    }
   }
 }
 
@@ -1145,24 +1363,43 @@ function updateBoss() {
 
 function explodeBomb(b) {
   ring(b.x, b.y, b.boomN, 60, rand(0, TAU), { c: "#ff8a3d" });
-  shock(b.x, b.y, 16);
-  burst(b.x, b.y, "#ffd166", 10, 70);
-  noise(0.15, 0.08);
+  explode(b.x, b.y, 10);
   if (!player.dead && Math.hypot(player.x - b.x, player.y - b.y) < 10) hurtPlayer();
 }
 
 function updateBullets() {
   for (const b of pbullets) {
+    if (b.kind === "pm") {
+      b.life = (b.life || 0) + DT;
+      if (b.life > 3) b.dead = true;
+      let tg = null, bd = 1e9;
+      for (const e of enemies) { const d = Math.hypot(e.x - b.x, e.y - b.y); if (d < bd) { bd = d; tg = e; } }
+      if (!boss.hidden && !boss.dead && boss.runner && Math.hypot(boss.x - b.x, boss.y - b.y) < bd) tg = boss;
+      let a = Math.atan2(b.vy, b.vx);
+      const sp = Math.min(260, Math.hypot(b.vx, b.vy) + 400 * DT);
+      if (tg && b.life > 0.15) a = turnToward(a, Math.atan2(tg.y - b.y, tg.x - b.x), 6 * DT);
+      b.vx = Math.cos(a) * sp; b.vy = Math.sin(a) * sp;
+      if (Math.random() < 0.5) parts.push({ x: b.x, y: b.y, vx: 0, vy: 0, life: 0.2, max: 0.2, c: "#7a7488", s: 1 });
+    }
     b.x += b.vx * DT; b.y += b.vy * DT;
     if (b.dead) continue;
     for (const e of enemies) {
-      if (!e.dead && Math.hypot(b.x - e.x, b.y - e.y) < e.d.r + 1) { b.dead = true; damageEnemy(e, 1); break; }
+      if (!e.dead && Math.hypot(b.x - e.x, b.y - e.y) < e.d.r + 1) {
+        b.dead = true; damageEnemy(e, b.dmg || 1);
+        if (b.kind === "pm") explode(b.x, b.y, 5);
+        break;
+      }
+    }
+    if (b.dead) continue;
+    for (const m of bullets) {
+      if (m.kind === "missile" && !m.dead && Math.hypot(m.x - b.x, m.y - b.y) < 5) { m.dead = true; b.dead = true; explode(m.x, m.y, 7); score += 50; break; }
     }
     if (b.dead) continue;
     if (Math.hypot(b.x - boss.x, b.y - boss.y) < 17 && !boss.hidden && !boss.dead && boss.y > -10) {
       b.dead = true;
       if (boss.inv > 0) { burst(b.x, b.y, "#8f86a3", 2, 30); continue; }
-      boss.hp -= 1; boss.flash = 0.05;
+      boss.hp -= b.dmg || 1; boss.flash = 0.05;
+      if (b.kind === "pm") explode(b.x, b.y, 5);
       if (Math.random() < 0.4) burst(b.x, b.y, "#fff3b0", 2, 50);
       if (boss.hitSfx <= 0) { sfx(900, 0.03, "square", 0.015); boss.hitSfx = 0.07; }
       if (boss.hp <= 0) killBoss();
@@ -1183,11 +1420,12 @@ function updateBullets() {
         b.vx = Math.cos(a) * sp; b.vy = Math.sin(a) * sp;
         if (Math.random() < 0.7) smoke(b.x - Math.cos(a) * 4, b.y - Math.sin(a) * 4);
       }
+      if (b.life > 3.2) { b.dead = true; explode(b.x, b.y, 7); continue; }
     }
     b.vy += b.grav * DT;
     b.x += b.vx * DT; b.y += b.vy * DT;
     if (b.kind === "bomb" && b.y >= b.boomY) { b.dead = true; explodeBomb(b); continue; }
-    if (!player.dead && Math.hypot(b.x - player.x, b.y - player.y) < b.r + 1.5) { b.dead = true; hurtPlayer(); }
+    if (!player.dead && Math.hypot(b.x - player.x, b.y - player.y) < b.r + 1.5) { b.dead = true; if (b.kind === "missile") explode(b.x, b.y, 7); hurtPlayer(); }
   }
   bullets = bullets.filter(b => !b.dead && b.x > -20 && b.x < W + 20 && b.y > -40 && b.y < H + 10);
 
@@ -1207,6 +1445,8 @@ function killBoss() {
 }
 
 function updateParts() {
+  for (const b of booms) b.t += DT;
+  booms = booms.filter(b => b.t < b.life);
   for (const p of parts) { p.life -= DT; p.x += p.vx * DT; p.y += p.vy * DT; p.vx *= 0.94; p.vy *= 0.94; }
   parts = parts.filter(p => p.life > 0);
 }
@@ -1225,6 +1465,8 @@ function update() {
 
   if (state === "title") {
     if (start) startGame();
+  } else if (state === "map") {
+    updateMap(pressed.tap);
   } else if (state === "play") {
     if (pressed.p || back) { state = "pause"; }
     else {
@@ -1248,13 +1490,10 @@ function update() {
     if (Math.random() < 0.6) smoke(boss.x + rand(-12, 12), boss.y + rand(-10, 10));
     if (Math.random() < 0.3) {
       const x = boss.x + rand(-20, 20), y = boss.y + rand(-16, 16);
-      burst(x, y, ["#ff3d5a", "#ffd166", "#ffffff", "#ff8a3d"][Math.floor(Math.random() * 4)], 12, 90);
-      shock(x, y, 12);
-      noise(0.12, 0.08); shake = 5;
+      explode(x, y, rand(8, 14));
     }
     if (stateT <= 0) {
-      burst(boss.x, boss.y, "#ffffff", 60, 160); burst(boss.x, boss.y, "#ff8a3d", 50, 120);
-      shock(boss.x, boss.y, 70, "#ffffff");
+      explode(boss.x, boss.y, 40);
       sfx(80, 1.2, "sawtooth", 0.1, 30); noise(0.8, 0.2); shake = 14;
       state = "play"; boss.dead = true; boss.hidden = true;
     }
@@ -1335,7 +1574,7 @@ function drawHUD() {
     const bx = 44, bw = W - 110;
     r(bx, 4, bw, 3, "#2c2338");
     r(bx, 4, Math.round(bw * stage.done / stage.total), 3, "#5fd3ff");
-    sprite(ICON, ipal, bx + bw + 3, 1);
+    if (stageN === 10) sprite(ICON, ipal, bx + bw + 3, 1);
     text(String(score).padStart(7, "0"), W - 5, 3, "#ece6f6", 1, "right");
   }
   // player bar: ship icon + segmented hull bar, same style as the boss bar
@@ -1347,11 +1586,11 @@ function drawHUD() {
     r(17 + i * cw, H - 10, cw - 1, 5, on ? (player.hp <= 1 ? "#ff3d5a" : "#5fd3ff") : "#2c2338");
     if (on) r(17 + i * cw, H - 10, cw - 1, 1, "#c8f3ff");
   }
-  text("PW" + player.pow, 80, H - 10, "#ffd166");
+  text("PW" + player.pow + " MS" + player.msl + (player.shield ? " SH" + player.shield : ""), 22 + player.maxHp * cw, H - 10, "#ffd166");
   const ready = player.dashCd <= 0;
   text("DASH", W - 40, H - 10, ready ? "#5fd3ff" : "#4a3d5e");
   r(W - 23, H - 9, 17, 3, "#2c2338");
-  r(W - 23, H - 9, Math.round(17 * (1 - clamp(player.dashCd / 0.85, 0, 1))), 3, ready ? "#5fd3ff" : "#4a3d5e");
+  r(W - 23, H - 9, Math.round(17 * (1 - clamp(player.dashCd / player.dashMax, 0, 1))), 3, ready ? "#5fd3ff" : "#4a3d5e");
   if (muted) text("MUTE", W - 6, 26, "#4a3d5e", 1, "right");
 }
 
@@ -1414,8 +1653,12 @@ function drawPlay() {
 
   if (!boss.hidden) drawBossAt(boss.x, boss.y, boss.ang, bossOpts());
   drawEnemies();
+  drawBooms();
 
-  for (const b of pbullets) { r(Math.round(b.x), Math.round(b.y), 1, 4, "#9ff0ff"); }
+  for (const b of pbullets) {
+    if (b.kind === "pm") { r(Math.round(b.x) - 1, Math.round(b.y) - 1, 2, 2, "#ffffff"); r(Math.round(b.x - b.vx * 0.012), Math.round(b.y - b.vy * 0.012), 1, 1, "#ff8a3d"); }
+    else r(Math.round(b.x), Math.round(b.y), 1, 4, "#9ff0ff");
+  }
 
   if (!player.dead && !(player.inv > 0 && Math.floor(player.inv * 12) % 2 === 0)) drawPlayer();
 
@@ -1435,6 +1678,7 @@ function drawPlayer() {
   // soft halo so the ship stands out from the bullets
   ctx.beginPath(); ctx.arc(cx, cy, 10, 0, TAU);
   ctx.fillStyle = "rgba(95,211,255,0.14)"; ctx.fill();
+  if (player.shield > 0) { ctx.strokeStyle = Math.floor(performance.now() / 150) % 2 ? "#5fd3ff" : "#c8f3ff"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(cx, cy, 11, 0, TAU); ctx.stroke(); }
   const px = cx - 5, py = cy - 5;
   for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) sprite(PLAYER, PCOL, px + ox, py + oy, "#03101d");
   PCOL.d = Math.random() < 0.5 ? "#ffb347" : "#ff6a3d";
@@ -1472,6 +1716,8 @@ function draw() {
 
   if (state === "title") {
     drawTitle(blinkOn);
+  } else if (state === "map") {
+    drawMap();
   } else {
     drawPlay();
     if (state === "pause") {
