@@ -186,11 +186,7 @@ kbd {
     <p>전투기 로봇의 공격을 피하고 격추하라</p>
     <button id="fs" type="button">전체화면</button>
   </header>
-  <div class="arena">
-    <aside class="panel" id="shop" aria-label="파일럿 상점"></aside>
-    <div class="screen" id="screen"><canvas id="game" width="240" height="320" tabindex="0" aria-label="게임 화면"></canvas></div>
-    <aside class="panel" id="stages" aria-label="스테이지"></aside>
-  </div>
+  <div class="screen" id="screen"><canvas id="game" width="240" height="320" tabindex="0" aria-label="게임 화면"></canvas></div>
   <section class="help">
     <h2>CONTROLS</h2>
     <div class="row"><span>이동</span><span><kbd>←↑↓→</kbd><kbd>WASD</kbd></span></div>
@@ -200,7 +196,7 @@ kbd {
     <div class="row"><span>공격</span><span>자동 발사</span></div>
     <div class="row"><span>기타</span><span><kbd>P</kbd>일시정지 <kbd>M</kbd>소리 <kbd>F</kbd>전체화면</span></div>
     <div class="row"><span>모바일</span><span>드래그로 이동, 두 번 탭하면 대시</span></div>
-    <p class="note">왼쪽 <b>파일럿 상점</b>에서 기체를 사서 장착하고, 오른쪽 <b>스테이지</b> 목록에서 스테이지를 고른 뒤 출격 버튼이나 게임 화면의 Enter로 출격합니다. 1~9스테이지는 잡졸 웨이브를 전멸시켜야 넘어가고, 10스테이지 끝에 보스가 등장합니다. 클리어할 때마다 업그레이드 카드 1장을 고르고 루트 맵에서 다음 스테이지로 출격합니다. 잡졸은 <b>P</b>(무기 강화), <b>R</b>(수리) 아이템을 떨어뜨립니다. <b>STRIKER</b>는 기수를 돌려 조준하는 전투기형 로봇입니다. 날개 밑 개틀링, 날개 미사일, 폭탄창 폭격, 애프터버너 돌진, 급강하로 공격합니다. 빨간 띠, 표적, 그림자가 공격을 예고하고, 체력 66%와 33%에서 페이즈가 바뀝니다.</p>
+    <p class="note">게임 화면을 옆으로 넘기면 왼쪽에 <b>파일럿 상점</b>, 오른쪽에 <b>스테이지</b> 화면이 나옵니다 (드래그, 스와이프, ←/→ 키). 상점에서 크레딧으로 기체를 사서 장착하고, 스테이지 화면에서 골라 출격합니다. 1~9스테이지는 잡졸 웨이브를 전멸시켜야 넘어가고, 10스테이지 끝에 보스가 등장합니다. 클리어할 때마다 업그레이드 카드 1장을 고르고 루트 맵에서 다음 스테이지로 출격합니다. 잡졸은 <b>P</b>(무기 강화), <b>R</b>(수리) 아이템을 떨어뜨립니다. <b>STRIKER</b>는 기수를 돌려 조준하는 전투기형 로봇입니다. 날개 밑 개틀링, 날개 미사일, 폭탄창 폭격, 애프터버너 돌진, 급강하로 공격합니다. 빨간 띠, 표적, 그림자가 공격을 예고하고, 체력 66%와 33%에서 페이즈가 바뀝니다.</p>
   </section>
 </main>
 
@@ -350,12 +346,7 @@ cv.addEventListener("pointerdown", e => {
   cv.focus();
   touch.ids.add(e.pointerId);
   try { cv.setPointerCapture(e.pointerId); } catch (err) {}
-  if (state !== "play") {
-    const rect = cv.getBoundingClientRect();
-    pressed.tap = (e.clientX - rect.left) / rect.width;
-    pressed.tapY = (e.clientY - rect.top) / rect.height;
-    return;
-  }
+  if (state !== "play") { touch.sx = e.clientX; touch.sy = e.clientY; touch.down = true; return; }
   const now = performance.now();
   if (touch.ids.size > 1 || now - touch.lastTap < 260) touch.dash = true;
   if (touch.ids.size >= 3) { touch.dash = false; useBomb(); }
@@ -375,6 +366,12 @@ cv.addEventListener("pointermove", e => {
   }
 });
 function endPointer(e) {
+  if (touch.down && state !== "play" && e.type === "pointerup") {
+    const rect = cv.getBoundingClientRect(), dx = e.clientX - touch.sx, dy = e.clientY - touch.sy;
+    if (Math.abs(dx) > rect.width * 0.12 && Math.abs(dx) > Math.abs(dy)) pressed.swipe = dx > 0 ? 1 : -1;
+    else { pressed.tap = (e.clientX - rect.left) / rect.width; pressed.tapY = (e.clientY - rect.top) / rect.height; }
+  }
+  touch.down = false;
   touch.ids.delete(e.pointerId);
   if (touch.ids.size === 0) touch.active = false;
 }
@@ -1587,7 +1584,7 @@ const lv = () => 0;
 const pilot = () => PILOTS.find(p => p.id === save.pilot) || PILOTS[0];
 const isOpen = p => save.pilots.includes(p.id);
 let runActive = false, stageScore0 = 0, lastEarn = 0;
-const lobby = { t: 0, pilotSel: 0, stageSel: 99, msg: "", msgT: 0, slide: 0 };
+const lobby = { t: 0, page: 0, pageX: 0, shopSel: 0, pilotSel: 0, stageSel: 99, msg: "", msgT: 0, slide: 0 };
 
 function shipRows(t2) {
   const rows = pilot().rows;
@@ -1616,7 +1613,7 @@ function bankCredits(clearedStage) {
   persist(); renderPanels();
 }
 function toLobby() {
-  state = "title"; lobby.t = 0;
+  state = "title"; lobby.t = 0; lobby.page = lobby.pageX = 0;
   lobby.pilotSel = Math.max(0, PILOTS.findIndex(p => p.id === save.pilot));
   lobby.stageSel = Math.min(unlockedMax(), Math.max(1, lobby.stageSel));
   if (!cleared.has(lobby.stageSel)) lobby.stageSel = unlockedMax();
@@ -1624,30 +1621,42 @@ function toLobby() {
 }
 function lobbyMsg(m) { lobby.msg = m; lobby.msgT = 1.6; }
 
+function setPage(n) {
+  n = clamp(n, -1, 1);
+  if (n !== lobby.page) { lobby.page = n; sfx(260, 0.08, "triangle", 0.04, 520); }
+}
 function updateTitleLobby() {
   lobby.t += DT; lobby.msgT -= DT;
-  lobby.slide += (0 - lobby.slide) * Math.min(1, DT * 10);
+  lobby.pageX += (lobby.page - lobby.pageX) * Math.min(1, DT * 12);
   const tap = pressed.tap, tx = tap !== undefined ? tap * W : -1, ty = tap !== undefined ? pressed.tapY * H : -1;
-  const n = PILOTS.length, maxN = unlockedMax();
-  let dp = 0, ds = 0, go = pressed.enter || pressed[" "] || pressed.z;
-  if (pressed.arrowleft || pressed.a) dp = -1;
-  if (pressed.arrowright || pressed.d) dp = 1;
-  if (pressed.arrowup || pressed.w) ds = 1;
-  if (pressed.arrowdown || pressed.s) ds = -1;
-  if (tap !== undefined) go = true;
-  if (dp) {
-    lobby.pilotSel = (lobby.pilotSel + n + dp) % n; lobby.slide = dp;
-    const p = PILOTS[lobby.pilotSel];
-    if (isOpen(p) && save.pilot !== p.id) { save.pilot = p.id; runActive = false; persist(); }
-    renderPanels();
-    sfx(330, 0.05);
+  const ok = pressed.enter || pressed[" "] || pressed.z;
+  const up = pressed.arrowup || pressed.w, down = pressed.arrowdown || pressed.s;
+  if (pressed.arrowleft || pressed.a || pressed.swipe === 1 || (tap !== undefined && tx < 26 && ty > 290)) { setPage(lobby.page - 1); return; }
+  if (pressed.arrowright || pressed.d || pressed.swipe === -1 || (tap !== undefined && tx > W - 26 && ty > 290)) { setPage(lobby.page + 1); return; }
+  if (pressed.escape) { setPage(0); return; }
+  if (lobby.t < 0.2) return;
+  if (lobby.page === 0) {
+    if (ok || tap !== undefined) sortie();
+  } else if (lobby.page === -1) {
+    const n = PILOTS.length;
+    if (up) { lobby.shopSel = (lobby.shopSel + n - 1) % n; sfx(330, 0.05); }
+    if (down) { lobby.shopSel = (lobby.shopSel + 1) % n; sfx(330, 0.05); }
+    let act = ok;
+    if (tap !== undefined) { const i = Math.floor((ty - 42) / 74); if (i >= 0 && i < n && (ty - 42) % 74 < 68) { if (i === lobby.shopSel) act = true; else { lobby.shopSel = i; sfx(330, 0.05); } } }
+    if (act) buyOrEquip(PILOTS[lobby.shopSel].id);
+  } else {
+    const maxN = unlockedMax();
+    if (up) { lobby.stageSel = Math.max(1, lobby.stageSel - 1); sfx(330, 0.05); }
+    if (down) { lobby.stageSel = Math.min(maxN, lobby.stageSel + 1); sfx(330, 0.05); }
+    let go = ok;
+    if (tap !== undefined) {
+      if (ty >= 244 && ty <= 266) go = true;
+      else { const i = Math.floor((ty - 40) / 20) + 1; if (i >= 1 && i <= 10) { if (i > maxN) { lobbyMsg("CLEAR STAGE " + (i - 1) + " FIRST"); } else if (i === lobby.stageSel) go = true; else { lobby.stageSel = i; sfx(330, 0.05); } } }
+    }
+    if (go) sortie();
   }
-  if (ds) { lobby.stageSel = clamp(lobby.stageSel + ds, 1, maxN); sfx(330, 0.05); renderPanels(); }
-  if (go && lobby.t > 0.2) sortie();
 }
 function sortie() {
-  const p = PILOTS[lobby.pilotSel];
-  if (!isOpen(p)) { lobbyMsg("BUY " + p.name + " IN THE PILOT SHOP"); sfx(150, 0.15, "square", 0.04); return; }
   beginRun();
   sfx(523, 0.1); sfx(784, 0.2, "square", 0.04);
   startStage(lobby.stageSel);
@@ -1661,50 +1670,13 @@ function buyOrEquip(id) {
     lobbyMsg(p.name + " UNLOCKED");
   }
   if (save.pilot !== id) { save.pilot = id; runActive = false; }
-  lobby.pilotSel = PILOTS.indexOf(p); lobby.slide = 0;
+  lobby.pilotSel = PILOTS.indexOf(p);
   persist();
   sfx(660, 0.08, "square", 0.04); sfx(990, 0.15, "square", 0.04);
   renderPanels();
 }
 
-/* --- side panels (HTML): pilot shop on the left, stages on the right --- */
-const shopEl = document.getElementById("shop"), stagesEl = document.getElementById("stages");
-function pilotImg(p) { if (!p.img) p.img = shipCanvas(p.rows, p.pal, false).toDataURL(); return p.img; }
-function renderPanels() {
-  const lobbyOn = state === "title";
-  shopEl.innerHTML = '<div class="ph"><h2>PILOT SHOP</h2><span class="cr">CR ' + save.cr + '</span></div>' +
-    PILOTS.map(p => {
-      const own = save.pilots.includes(p.id), eq = save.pilot === p.id;
-      const label = eq ? "장착 중" : own ? "장착하기" : "구매 " + p.cost + " CR";
-      const dis = !lobbyOn || eq || (!own && save.cr < p.cost);
-      return '<div class="pcard' + (eq ? " on" : "") + '"><img src="' + pilotImg(p) + '" alt="' + p.name + ' 기체"><div class="pinfo"><b>' + p.name + '</b><span>' + p.kdesc + '</span>' +
-        '<span class="stats">체력 ' + (5 + p.hp) + ' · 속도 ' + Math.round(p.spd * 100) + '% · 데미지 ' + Math.round(p.dmg * 100) + '%</span>' +
-        '<button type="button" data-pilot="' + p.id + '"' + (dis ? " disabled" : "") + '>' + label + '</button></div></div>';
-    }).join("") +
-    '<p class="pnote">' + (lobbyOn ? "출격하면 점수의 1/10과 클리어 보너스(스테이지 × 200)가 크레딧으로 쌓입니다. 기체를 바꾸면 런이 새로 시작됩니다." : "출격 중에는 상점을 쓸 수 없습니다.") + '</p>';
-  const maxN = unlockedMax();
-  stagesEl.innerHTML = '<div class="ph"><h2>STAGES</h2><span class="cr">' + cleared.size + '/10 CLEAR</span></div><ol class="slist">' +
-    STAGE_NAMES.map((nm, i) => {
-      const n = i + 1, open = n <= maxN, done = cleared.has(n), sel = n === lobby.stageSel;
-      const tag = done ? "클리어" : !open ? "잠김" : n === 10 ? "최종 보스" : "도전 가능";
-      return '<li><button type="button" data-stage="' + n + '" class="' + (sel ? "on " : "") + (done ? "done" : "") + '"' + (!open || !lobbyOn ? " disabled" : "") + '><em>' + n + '</em><span>' + nm + '</span><i>' + tag + '</i></button></li>';
-    }).join("") + '</ol>' +
-    (runActive ? '<p class="runline">진행 중인 런: 티어 ' + player.tier + '-' + player.pow + ' · 체력 ' + player.hp + '/' + player.maxHp + ' · ' + score + '점</p>' : "") +
-    '<button type="button" class="go" data-go="1"' + (lobbyOn ? "" : " disabled") + '>' + (lobbyOn ? "STAGE " + lobby.stageSel + " 출격" : "출격 중") + '</button>';
-}
-shopEl.addEventListener("click", e => {
-  const b = e.target.closest("button[data-pilot]");
-  if (!b || state !== "title") return;
-  initAudio(); buyOrEquip(b.dataset.pilot); cv.focus();
-});
-stagesEl.addEventListener("click", e => {
-  const b = e.target.closest("button");
-  if (!b || state !== "title") return;
-  initAudio();
-  if (b.dataset.stage) { lobby.stageSel = +b.dataset.stage; sfx(330, 0.05); renderPanels(); }
-  else if (b.dataset.go) sortie();
-  cv.focus();
-});
+function renderPanels() {}
 
 function shipCanvas(rows, pal, silhouette) {
   const c = document.createElement("canvas"); c.width = rows[0].length; c.height = rows.length;
@@ -1728,18 +1700,74 @@ function statBar(label, x, y, v, max, c) {
   r(x + 16, y + 1, 36, 3, "#2c2338");
   r(x + 16, y + 1, Math.round(36 * clamp(v / max, 0, 1)), 3, c);
 }
-function drawTitleLobby(blinkOn) {
-  drawBG(1);
+function drawTitlePage(blinkOn) {
   const t = performance.now() / 1000;
   drawBossAt(W / 2, 108 + Math.sin(t * 2) * 4, DOWN + Math.sin(t * 0.9) * 0.35, { t, burn: 1.6, spool: 0, gunFlash: titleGuns, ammo: [1, 1, 1, 1], reload: 0, bay: 0, phase: 1 });
   shadowText("STRIKER", W / 2, 168, "#ff3d5a", 4, "center");
   text("10 STAGES  JET FIGHTER ROBOT", W / 2, 194, "#ece6f6", 1, "center");
   if (best) text("HI SCORE " + best, W / 2, 208, "#7cffb2", 1, "center");
-  if (lobby.msgT > 0) text(lobby.msg, W / 2, 240, "#ff3d5a", 1, "center");
-  else if (blinkOn) text("PRESS ENTER OR TAP TO SORTIE", W / 2, 240, "#5fd3ff", 1, "center");
-  text("MOVE ARROWS/WASD  DASH SPACE", W / 2, 266, "#9087a3", 1, "center");
-  text("FOCUS SHIFT  BOMB C  PAUSE P", W / 2, 276, "#9087a3", 1, "center");
-  text("FULLSCREEN F", W / 2, 286, "#9087a3", 1, "center");
+  if (blinkOn) text("PRESS ENTER OR TAP TO SORTIE", W / 2, 240, "#5fd3ff", 1, "center");
+  text("MOVE ARROWS/WASD  DASH SPACE", W / 2, 258, "#9087a3", 1, "center");
+  text("FOCUS SHIFT  BOMB C  PAUSE P", W / 2, 268, "#9087a3", 1, "center");
+}
+function pilotIcon(p) { if (!p.icon) p.icon = shipCanvas(p.rows, p.pal, false); return p.icon; }
+function drawShopPage() {
+  r(0, 0, W, H, "rgba(10,8,16,0.82)");
+  shadowText("PILOT SHOP", W / 2, 8, "#5fd3ff", 2, "center");
+  text("CR " + save.cr, W / 2, 26, "#ffd166", 1, "center");
+  PILOTS.forEach((p, i) => {
+    const y = 42 + i * 74, on = lobby.shopSel === i, own = save.pilots.includes(p.id), eq = save.pilot === p.id;
+    r(10, y, W - 20, 68, on ? "#ffd166" : "#2c2338");
+    r(11, y + 1, W - 22, 66, on ? "#221c30" : "#15111c");
+    if (eq) r(11, y + 1, 3, 66, "#7cffb2");
+    const img = pilotIcon(p);
+    ctx.beginPath(); ctx.ellipse(37, y + 50, 16, 4, 0, 0, TAU); ctx.fillStyle = "rgba(95,211,255,0.18)"; ctx.fill();
+    ctx.drawImage(img, 37 - (img.width >> 1), y + 36 - (img.height >> 1) + Math.round(Math.sin(lobby.t * 2 + i) * 2));
+    text(p.name, 64, y + 8, on ? "#ffd166" : "#ece6f6");
+    text(p.desc, 64, y + 19, "#9087a3");
+    text("HP " + (5 + p.hp) + "  SPD " + Math.round(p.spd * 100) + "%  DMG " + Math.round(p.dmg * 100) + "%", 64, y + 30, "#9087a3");
+    const label = eq ? "EQUIPPED" : own ? "EQUIP" : p.cost + " CR";
+    const bc = eq ? "#7cffb2" : own ? "#5fd3ff" : save.cr >= p.cost ? "#ffd166" : "#ff3d5a";
+    r(64, y + 44, 80, 15, bc); r(65, y + 45, 78, 13, "#15111c");
+    text(label, 104, y + 49, bc, 1, "center");
+  });
+  text(lobby.msgT > 0 ? lobby.msg : "UP/DOWN SELECT  ENTER BUY/EQUIP", W / 2, 268, lobby.msgT > 0 ? "#ffd166" : "#5fd3ff", 1, "center");
+  text("EARN CR: SCORE/10 + CLEAR BONUS", W / 2, 280, "#5a5268", 1, "center");
+}
+function drawStagePage() {
+  r(0, 0, W, H, "rgba(10,8,16,0.82)");
+  shadowText("STAGES", W / 2, 8, "#5fd3ff", 2, "center");
+  text(cleared.size + "/10 CLEAR", W / 2, 26, "#7cffb2", 1, "center");
+  const maxN = unlockedMax();
+  STAGE_NAMES.forEach((nm, i) => {
+    const n = i + 1, y = 40 + i * 20, open = n <= maxN, done = cleared.has(n), sel = n === lobby.stageSel;
+    r(10, y, W - 20, 17, sel ? "#ffd166" : "#2c2338");
+    r(11, y + 1, W - 22, 15, sel ? "#2a2238" : open ? "#18131f" : "#100d16");
+    text(String(n), 18, y + 6, open ? "#5fd3ff" : "#3a3448");
+    text(nm, 34, y + 6, sel ? "#ffd166" : open ? "#ece6f6" : "#4a4258");
+    const tag = done ? "CLEAR" : !open ? "LOCKED" : n === 10 ? "BOSS" : "OPEN";
+    text(tag, W - 16, y + 6, done ? "#7cffb2" : !open ? "#4a4258" : n === 10 ? "#ff3d5a" : "#5fd3ff", 1, "right");
+  });
+  r(40, 244, W - 80, 22, "#b5651d"); r(40, 244, W - 80, 20, "#ffd166");
+  text("SORTIE  STAGE " + lobby.stageSel, W / 2, 251, "#12141a", 1, "center");
+  if (lobby.msgT > 0) text(lobby.msg, W / 2, 272, "#ff3d5a", 1, "center");
+  else if (runActive) text("RUN T" + player.tier + "-" + player.pow + "  HP " + player.hp + "/" + player.maxHp + "  " + score, W / 2, 272, "#7cffb2", 1, "center");
+  text("PILOT " + pilot().name, W / 2, 282, "#9087a3", 1, "center");
+}
+function drawTitleLobby(blinkOn) {
+  drawBG(1);
+  const pages = [[-1, drawShopPage], [0, () => drawTitlePage(blinkOn)], [1, drawStagePage]];
+  for (const [i, fn] of pages) {
+    const off = (i - lobby.pageX) * W;
+    if (Math.abs(off) >= W) continue;
+    ctx.save(); ctx.translate(Math.round(off), 0); fn(); ctx.restore();
+  }
+  // page dots and edge hints stay put
+  for (let i = -1; i <= 1; i++) r(W / 2 - 2 + i * 10, 308, 5, 5, i === lobby.page ? "#ffd166" : "#3a3448");
+  const hintL = ["", "< PILOTS", "< TITLE"][lobby.page + 1], hintR = ["TITLE >", "STAGES >", ""][lobby.page + 1];
+  const pulse = Math.floor(lobby.t * 2.5) % 2 ? "#5fd3ff" : "#9087a3";
+  if (hintL) text(hintL, 5, 300, pulse);
+  if (hintR) text(hintR, W - 5, 300, pulse, 1, "right");
 }
 
 /* ---------- state ---------- */
