@@ -196,7 +196,7 @@ kbd {
     <div class="row"><span>공격</span><span>자동 발사</span></div>
     <div class="row"><span>기타</span><span><kbd>P</kbd>일시정지 <kbd>M</kbd>소리 <kbd>F</kbd>전체화면</span></div>
     <div class="row"><span>모바일</span><span>드래그로 이동, 두 번 탭하면 대시</span></div>
-    <p class="note">게임 화면을 옆으로 넘기면 왼쪽에 <b>파일럿 상점</b>, 오른쪽에 <b>스테이지</b> 화면이 나옵니다 (드래그, 스와이프, ←/→ 키). 상점에서 크레딧으로 기체를 사서 장착하고, 스테이지 화면에서 골라 출격합니다. 1~9스테이지는 잡졸 웨이브를 전멸시켜야 넘어가고, 10스테이지 끝에 보스가 등장합니다. 클리어할 때마다 업그레이드 카드 1장을 고르고 루트 맵에서 다음 스테이지로 출격합니다. 잡졸은 <b>P</b>(무기 강화), <b>R</b>(수리) 아이템을 떨어뜨립니다. <b>STRIKER</b>는 기수를 돌려 조준하는 전투기형 로봇입니다. 날개 밑 개틀링, 날개 미사일, 폭탄창 폭격, 애프터버너 돌진, 급강하로 공격합니다. 빨간 띠, 표적, 그림자가 공격을 예고하고, 체력 66%와 33%에서 페이즈가 바뀝니다.</p>
+    <p class="note">게임 화면을 옆으로 넘기면 왼쪽에 <b>파일럿 상점</b>, 오른쪽에 <b>보스</b> 화면이 나옵니다 (드래그, 스와이프, ←/→ 키). 출격하면 바로 최종 보스 <b>STRIKER OMEGA</b>와 싸웁니다. 보스에게 피해를 줄 때마다 P(무기 강화)와 R(수리) 아이템이 떨어지니, 모아서 티어를 올리세요.</p>
   </section>
 </main>
 
@@ -1011,9 +1011,9 @@ function* runWave(list) {
 }
 
 function* stageScript() {
-  banner = { text: "STAGE " + stageN, t: 2.2 };
+  banner = { text: stageN === 10 ? "READY" : "STAGE " + stageN, t: 2.2 };
   yield 2.2;
-  const waves = stageN === 10 ? 2 : 3 + Math.floor(stageN / 2);
+  const waves = stageN === 10 ? 0 : 3 + Math.floor(stageN / 2);
   stage.total = waves;
   for (let i = 0; i < waves; i++) {
     stage.done = i;
@@ -1032,7 +1032,11 @@ function* stageScript() {
   intro = null;
   cleared.add(stageN);
   bankCredits(true);
-  if (stageN >= 10) { state = "win"; stateT = 1; saveBest(); runActive = false; return; }
+  if (stageN >= 10) {
+    if (!save.bestTime || time < save.bestTime) save.bestTime = time;
+    save.wins = (save.wins || 0) + 1; persist();
+    state = "win"; stateT = 1; saveBest(); runActive = false; return;
+  }
   openMap(true);
 }
 
@@ -1062,7 +1066,7 @@ function makeBoss() {
   // scale to the player's firepower so a maxed ship still needs about a minute
   const T = player.tier, shots = [1, 2, 3, 6, 8][player.pow - 1];
   const dps = [0, 1, 2, 3, 4, 6][T] * shots / [0, 0.09, 0.08, 0.08, 0.075, 0.07][T] * player.dmgMul;
-  const hp = Math.max(5000, Math.round(dps * 70));
+  const hp = 2500;
   const p = BOSS_PALS[0];
   return {
     name: "STRIKER OMEGA", pal: { steel: p[0], dark: p[1], acc: p[2] },
@@ -1644,22 +1648,15 @@ function updateTitleLobby() {
     let act = ok;
     if (tap !== undefined) { const i = Math.floor((ty - 42) / 74); if (i >= 0 && i < n && (ty - 42) % 74 < 68) { if (i === lobby.shopSel) act = true; else { lobby.shopSel = i; sfx(330, 0.05); } } }
     if (act) buyOrEquip(PILOTS[lobby.shopSel].id);
-  } else {
-    const maxN = unlockedMax();
-    if (up) { lobby.stageSel = Math.max(1, lobby.stageSel - 1); sfx(330, 0.05); }
-    if (down) { lobby.stageSel = Math.min(maxN, lobby.stageSel + 1); sfx(330, 0.05); }
-    let go = ok;
-    if (tap !== undefined) {
-      if (ty >= 244 && ty <= 266) go = true;
-      else { const i = Math.floor((ty - 40) / 20) + 1; if (i >= 1 && i <= 10) { if (i > maxN) { lobbyMsg("CLEAR STAGE " + (i - 1) + " FIRST"); } else if (i === lobby.stageSel) go = true; else { lobby.stageSel = i; sfx(330, 0.05); } } }
-    }
-    if (go) sortie();
+  } else if (ok || (tap !== undefined && ty > 200 && ty < 290)) {
+    sortie();
   }
 }
 function sortie() {
   beginRun();
   sfx(523, 0.1); sfx(784, 0.2, "square", 0.04);
-  startStage(lobby.stageSel);
+  time = 0;
+  startStage(10);
   renderPanels();
 }
 function buyOrEquip(id) {
@@ -1704,7 +1701,7 @@ function drawTitlePage(blinkOn) {
   const t = performance.now() / 1000;
   drawBossAt(W / 2, 108 + Math.sin(t * 2) * 4, DOWN + Math.sin(t * 0.9) * 0.35, { t, burn: 1.6, spool: 0, gunFlash: titleGuns, ammo: [1, 1, 1, 1], reload: 0, bay: 0, phase: 1 });
   shadowText("STRIKER", W / 2, 168, "#ff3d5a", 4, "center");
-  text("10 STAGES  JET FIGHTER ROBOT", W / 2, 194, "#ece6f6", 1, "center");
+  text("BOSS BATTLE  JET FIGHTER ROBOT", W / 2, 194, "#ece6f6", 1, "center");
   if (best) text("HI SCORE " + best, W / 2, 208, "#7cffb2", 1, "center");
   if (blinkOn) text("PRESS ENTER OR TAP TO SORTIE", W / 2, 240, "#5fd3ff", 1, "center");
   text("MOVE ARROWS/WASD  DASH SPACE", W / 2, 258, "#9087a3", 1, "center");
@@ -1734,29 +1731,24 @@ function drawShopPage() {
   text(lobby.msgT > 0 ? lobby.msg : "UP/DOWN SELECT  ENTER BUY/EQUIP", W / 2, 268, lobby.msgT > 0 ? "#ffd166" : "#5fd3ff", 1, "center");
   text("EARN CR: SCORE/10 + CLEAR BONUS", W / 2, 280, "#5a5268", 1, "center");
 }
-function drawStagePage() {
-  r(0, 0, W, H, "rgba(10,8,16,0.82)");
-  shadowText("STAGES", W / 2, 8, "#5fd3ff", 2, "center");
-  text(cleared.size + "/10 CLEAR", W / 2, 26, "#7cffb2", 1, "center");
-  const maxN = unlockedMax();
-  STAGE_NAMES.forEach((nm, i) => {
-    const n = i + 1, y = 40 + i * 20, open = n <= maxN, done = cleared.has(n), sel = n === lobby.stageSel;
-    r(10, y, W - 20, 17, sel ? "#ffd166" : "#2c2338");
-    r(11, y + 1, W - 22, 15, sel ? "#2a2238" : open ? "#18131f" : "#100d16");
-    text(String(n), 18, y + 6, open ? "#5fd3ff" : "#3a3448");
-    text(nm, 34, y + 6, sel ? "#ffd166" : open ? "#ece6f6" : "#4a4258");
-    const tag = done ? "CLEAR" : !open ? "LOCKED" : n === 10 ? "BOSS" : "OPEN";
-    text(tag, W - 16, y + 6, done ? "#7cffb2" : !open ? "#4a4258" : n === 10 ? "#ff3d5a" : "#5fd3ff", 1, "right");
-  });
-  r(40, 244, W - 80, 22, "#b5651d"); r(40, 244, W - 80, 20, "#ffd166");
-  text("SORTIE  STAGE " + lobby.stageSel, W / 2, 251, "#12141a", 1, "center");
-  if (lobby.msgT > 0) text(lobby.msg, W / 2, 272, "#ff3d5a", 1, "center");
-  else if (runActive) text("RUN T" + player.tier + "-" + player.pow + "  HP " + player.hp + "/" + player.maxHp + "  " + score, W / 2, 272, "#7cffb2", 1, "center");
-  text("PILOT " + pilot().name, W / 2, 282, "#9087a3", 1, "center");
+function drawBossPage() {
+  r(0, 0, W, H, "rgba(10,8,16,0.7)");
+  shadowText("TARGET", W / 2, 8, "#ff3d5a", 2, "center");
+  const t = performance.now() / 1000;
+  ctx.globalAlpha = 0.25; r(0, 30, W, 1, "#ff3d5a"); r(0, 168, W, 1, "#ff3d5a"); ctx.globalAlpha = 1;
+  drawBossAt(W / 2, 100 + Math.sin(t * 2) * 3, DOWN, { t, burn: 1.8, spool: 0, gunFlash: titleGuns, ammo: [1, 1, 1, 1], reload: 0, bay: 0, phase: 1, pal: { steel: "#4a3038", dark: "#1a1014", acc: "#ff3d5a" } });
+  shadowText("STRIKER OMEGA", W / 2, 174, "#ece6f6", 2, "center");
+  text("JET FIGHTER ROBOT  HP 2500  3 PHASES", W / 2, 192, "#9087a3", 1, "center");
+  text("GATLING  MISSILES  RAM  BOMBS  DIVE", W / 2, 203, "#9087a3", 1, "center");
+  text("CLEARS " + (save.wins || 0) + "   BEST TIME " + (save.bestTime ? fmt(save.bestTime) : "--:--.-"), W / 2, 216, "#7cffb2", 1, "center");
+  r(40, 234, W - 80, 24, "#b5651d"); r(40, 234, W - 80, 22, Math.floor(t * 3) % 2 ? "#ffd166" : "#ffe08a");
+  text("SORTIE", W / 2, 242, "#12141a", 1, "center");
+  text("PILOT " + pilot().name, W / 2, 268, "#9087a3", 1, "center");
+  text("BEAT IT TO DROP P AND R ITEMS", W / 2, 280, "#5a5268", 1, "center");
 }
 function drawTitleLobby(blinkOn) {
   drawBG(1);
-  const pages = [[-1, drawShopPage], [0, () => drawTitlePage(blinkOn)], [1, drawStagePage]];
+  const pages = [[-1, drawShopPage], [0, () => drawTitlePage(blinkOn)], [1, drawBossPage]];
   for (const [i, fn] of pages) {
     const off = (i - lobby.pageX) * W;
     if (Math.abs(off) >= W) continue;
@@ -1764,7 +1756,7 @@ function drawTitleLobby(blinkOn) {
   }
   // page dots and edge hints stay put
   for (let i = -1; i <= 1; i++) r(W / 2 - 2 + i * 10, 308, 5, 5, i === lobby.page ? "#ffd166" : "#3a3448");
-  const hintL = ["", "< PILOTS", "< TITLE"][lobby.page + 1], hintR = ["TITLE >", "STAGES >", ""][lobby.page + 1];
+  const hintL = ["", "< PILOTS", "< TITLE"][lobby.page + 1], hintR = ["TITLE >", "BOSS >", ""][lobby.page + 1];
   const pulse = Math.floor(lobby.t * 2.5) % 2 ? "#5fd3ff" : "#9087a3";
   if (hintL) text(hintL, 5, 300, pulse);
   if (hintR) text(hintR, W - 5, 300, pulse, 1, "right");
@@ -1990,6 +1982,9 @@ function updateBullets() {
       b.dead = true;
       if (boss.inv > 0) { burst(b.x, b.y, "#8f86a3", 2, 30); continue; }
       boss.hp -= b.dmg || 1; boss.flash = 0.05;
+      // the boss sheds power-ups as it takes damage, so the ship grows during the fight
+      boss.dropAcc = (boss.dropAcc || 0) + (b.dmg || 1);
+      if (boss.dropAcc >= 250) { boss.dropAcc -= 250; dropItem(boss.x + rand(-20, 20), boss.y + 30); }
       if (b.kind === "pm") explode(b.x, b.y, 5);
       if (Math.random() < 0.4) burst(b.x, b.y, "#fff3b0", 2, 50);
       if (boss.hitSfx <= 0) { sfx(900, 0.03, "square", 0.015); boss.hitSfx = 0.07; }
@@ -2158,10 +2153,10 @@ function drawHUD() {
     for (const f of ticks) r(18 + Math.round(bw * f), 9, 1, 6, "#ece6f6");
     text(String(score).padStart(7, "0"), W - 5, 18, "#9087a3", 1, "right");
   } else {
-    shadowText("STAGE " + stageN, 4, 3, "#ece6f6", 1);
+    shadowText(stageN === 10 ? "BOSS BATTLE" : "STAGE " + stageN, 4, 3, "#ece6f6", 1);
     const bx = 44, bw = W - 110;
     r(bx, 4, bw, 3, "#2c2338");
-    r(bx, 4, Math.round(bw * stage.done / stage.total), 3, "#5fd3ff");
+    r(bx, 4, Math.round(bw * (stage.total ? stage.done / stage.total : 0)), 3, "#5fd3ff");
     if (stageN === 10) sprite(ICON, ipal, bx + bw + 3, 1);
     text(String(score).padStart(7, "0"), W - 5, 3, "#ece6f6", 1, "right");
   }
@@ -2368,7 +2363,7 @@ function draw() {
     } else if (state === "win") {
       overlay(0.55);
       shadowText("VICTORY!", W / 2, 110, "#ffd166", 3, "center");
-      text("ALL 10 STAGES CLEAR", W / 2, 140, "#ece6f6", 1, "center");
+      text("STRIKER OMEGA DESTROYED  " + fmt(time), W / 2, 140, "#ece6f6", 1, "center");
       text("SCORE " + score, W / 2, 156, "#ece6f6", 2, "center");
       text(newBest ? "NEW HI SCORE!" : "HI SCORE " + best, W / 2, 176, newBest ? "#7cffb2" : "#9087a3", 1, "center");
       if (stateT <= 0) {
