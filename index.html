@@ -70,8 +70,8 @@ button {
 button:hover { border-color: var(--glow); }
 button:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
 .screen {
-  width: min(100%, calc((100vh - 76px) * 0.75));
-  width: min(100%, calc((100dvh - 76px) * 0.75));
+  width: min(calc(100vw - 40px), calc((100vh - 76px) * 0.75));
+  width: min(calc(100vw - 40px), calc((100dvh - 76px) * 0.75));
   min-width: min(100%, 240px);
   border: 4px solid var(--line);
   box-shadow: 0 0 0 4px var(--void), 0 0 0 6px var(--line);
@@ -93,6 +93,55 @@ canvas {
   image-rendering: crisp-edges;
   touch-action: none;
   outline: none;
+}
+.arena {
+  width: 100%;
+  max-width: 1320px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.panel {
+  width: min(100%, 290px);
+  box-sizing: border-box;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  max-height: calc(100dvh - 70px);
+  overflow-y: auto;
+}
+#shop { justify-self: end; }
+#stages { justify-self: start; }
+.ph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ph h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 14px; letter-spacing: 0.1em; color: var(--glow); }
+.cr { font-family: var(--font-display); font-size: 12px; color: #ffd166; }
+.pcard { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px; border: 2px solid var(--line); background: var(--void); }
+.pcard.on { border-color: #7cffb2; }
+.pcard img { width: 64px; height: auto; image-rendering: pixelated; }
+.pinfo { display: grid; gap: 2px; min-width: 0; }
+.pinfo b { font-family: var(--font-display); font-weight: 400; font-size: 13px; color: var(--ink); }
+.pinfo span { font-size: 14px; color: var(--muted); }
+.pinfo .stats { font-size: 13px; }
+.pinfo button { justify-self: start; margin-top: 4px; font-family: var(--font-body); font-size: 15px; }
+.panel button:disabled { opacity: 0.45; cursor: default; border-color: var(--line); }
+.pnote { margin: 0; font-size: 14px; color: var(--muted); }
+.slist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.slist button { width: 100%; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; text-align: left; font-family: var(--font-display); font-size: 11px; padding: 6px 8px; }
+.slist em { font-style: normal; color: var(--glow); }
+.slist i { font-style: normal; font-family: var(--font-body); font-size: 14px; color: var(--muted); }
+.slist button.done i { color: #7cffb2; }
+.slist button.on { border-color: #ffd166; background: #2a2238; }
+.slist button.on span { color: #ffd166; }
+.go { width: 100%; padding: 10px; font-size: 13px; color: #12141a; background: #ffd166; border-color: #b5651d; }
+.go:hover { border-color: #ffffff; }
+.runline { margin: 0; font-size: 14px; color: #7cffb2; }
+@media (max-width: 980px) {
+  .arena { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .arena .screen { order: -1; }
+  #shop, #stages { justify-self: center; width: 100%; max-width: 520px; max-height: none; }
 }
 .help {
   width: 100%;
@@ -137,7 +186,11 @@ kbd {
     <p>전투기 로봇의 공격을 피하고 격추하라</p>
     <button id="fs" type="button">전체화면</button>
   </header>
-  <div class="screen" id="screen"><canvas id="game" width="240" height="320" tabindex="0" aria-label="게임 화면"></canvas></div>
+  <div class="arena">
+    <aside class="panel" id="shop" aria-label="파일럿 상점"></aside>
+    <div class="screen" id="screen"><canvas id="game" width="240" height="320" tabindex="0" aria-label="게임 화면"></canvas></div>
+    <aside class="panel" id="stages" aria-label="스테이지"></aside>
+  </div>
   <section class="help">
     <h2>CONTROLS</h2>
     <div class="row"><span>이동</span><span><kbd>←↑↓→</kbd><kbd>WASD</kbd></span></div>
@@ -147,7 +200,7 @@ kbd {
     <div class="row"><span>공격</span><span>자동 발사</span></div>
     <div class="row"><span>기타</span><span><kbd>P</kbd>일시정지 <kbd>M</kbd>소리 <kbd>F</kbd>전체화면</span></div>
     <div class="row"><span>모바일</span><span>드래그로 이동, 두 번 탭하면 대시</span></div>
-    <p class="note">첫 화면이 로비입니다. ←/→로 파일럿(기체 3종, 스테이지 클리어로 해금)을, ↑/↓로 스테이지를 고르고 Enter로 출격합니다. 1~9스테이지는 잡졸 웨이브를 전멸시켜야 넘어가고, 10스테이지 끝에 보스가 등장합니다. 클리어할 때마다 업그레이드 카드 1장을 고르고 루트 맵에서 다음 스테이지로 출격합니다. 잡졸은 <b>P</b>(무기 강화), <b>R</b>(수리) 아이템을 떨어뜨립니다. <b>STRIKER</b>는 기수를 돌려 조준하는 전투기형 로봇입니다. 날개 밑 개틀링, 날개 미사일, 폭탄창 폭격, 애프터버너 돌진, 급강하로 공격합니다. 빨간 띠, 표적, 그림자가 공격을 예고하고, 체력 66%와 33%에서 페이즈가 바뀝니다.</p>
+    <p class="note">첫 화면이 로비입니다. 왼쪽 <b>파일럿 상점</b>에서 크레딧으로 기체를 사서 장착하고, 오른쪽 <b>스테이지</b> 목록에서 스테이지를 골라 출격합니다 (게임 화면에서 ←/→, ↑/↓, Enter로도 됩니다). 1~9스테이지는 잡졸 웨이브를 전멸시켜야 넘어가고, 10스테이지 끝에 보스가 등장합니다. 클리어할 때마다 업그레이드 카드 1장을 고르고 루트 맵에서 다음 스테이지로 출격합니다. 잡졸은 <b>P</b>(무기 강화), <b>R</b>(수리) 아이템을 떨어뜨립니다. <b>STRIKER</b>는 기수를 돌려 조준하는 전투기형 로봇입니다. 날개 밑 개틀링, 날개 미사일, 폭탄창 폭격, 애프터버너 돌진, 급강하로 공격합니다. 빨간 띠, 표적, 그림자가 공격을 예고하고, 체력 66%와 33%에서 페이즈가 바뀝니다.</p>
   </section>
 </main>
 
@@ -1519,11 +1572,11 @@ const SHIP_TITAN = [
   "....dd...dd...."
 ];
 const PILOTS = [
-  { id: "vanguard", name: "VANGUARD", unlock: 0, hp: 0, spd: 1, dmg: 1, dash: 0.85, desc: "BALANCED ARROW FIGHTER", rows: PLAYER, pal: { a: "#5fd3ff", b: "#2b6cb0", s: "#1d4f8a", c: "#e8fbff" } },
-  { id: "phantom", name: "PHANTOM", unlock: 3, hp: -1, spd: 1.25, dmg: 1, dash: 0.55, desc: "STEALTH WING, QUICK DASH", rows: SHIP_PHANTOM, pal: { a: "#8a6bbf", b: "#3a2a5c", s: "#c77dff", c: "#ff5dc8" } },
-  { id: "titan", name: "TITAN", unlock: 6, hp: 2, spd: 0.85, dmg: 1.25, dash: 1.0, desc: "HEAVY TWIN-CANNON GUNSHIP", rows: SHIP_TITAN, pal: { a: "#ff8a3d", b: "#8a3a10", s: "#5c2408", c: "#ffd166" } }
+  { id: "vanguard", name: "VANGUARD", cost: 0, kdesc: "균형 잡힌 화살형 전투기", hp: 0, spd: 1, dmg: 1, dash: 0.85, desc: "BALANCED ARROW FIGHTER", rows: PLAYER, pal: { a: "#5fd3ff", b: "#2b6cb0", s: "#1d4f8a", c: "#e8fbff" } },
+  { id: "phantom", name: "PHANTOM", cost: 2500, kdesc: "빠른 스텔스 전익기, 대시가 짧음", hp: -1, spd: 1.25, dmg: 1, dash: 0.55, desc: "STEALTH WING, QUICK DASH", rows: SHIP_PHANTOM, pal: { a: "#8a6bbf", b: "#3a2a5c", s: "#c77dff", c: "#ff5dc8" } },
+  { id: "titan", name: "TITAN", cost: 5000, kdesc: "튼튼한 쌍포 중장갑기", hp: 2, spd: 0.85, dmg: 1.25, dash: 1.0, desc: "HEAVY TWIN-CANNON GUNSHIP", rows: SHIP_TITAN, pal: { a: "#ff8a3d", b: "#8a3a10", s: "#5c2408", c: "#ffd166" } }
 ];
-let save = { pilot: "vanguard", cleared: [] };
+let save = { pilot: "vanguard", cleared: [], cr: 0, pilots: ["vanguard"] };
 try { Object.assign(save, JSON.parse(localStorage.getItem("striker-save") || "{}")); } catch (e) {}
 cleared = new Set(save.cleared || []);
 function persist() {
@@ -1532,7 +1585,7 @@ function persist() {
 }
 const lv = () => 0;
 const pilot = () => PILOTS.find(p => p.id === save.pilot) || PILOTS[0];
-const isOpen = p => p.unlock === 0 || cleared.has(p.unlock);
+const isOpen = p => save.pilots.includes(p.id);
 let runActive = false, stageScore0 = 0, lastEarn = 0;
 const lobby = { t: 0, pilotSel: 0, stageSel: 99, msg: "", msgT: 0, slide: 0 };
 
@@ -1556,12 +1609,18 @@ function beginRun() {
   player = freshPlayer();
   score = 0; runActive = true;
 }
-function bankCredits(clearedStage) { if (clearedStage) lobby.stageSel = unlockedMax(); persist(); }
+function bankCredits(clearedStage) {
+  lastEarn = Math.floor((score - stageScore0) / 10) + (clearedStage ? 200 * stageN : 0);
+  save.cr += lastEarn;
+  if (clearedStage) lobby.stageSel = unlockedMax();
+  persist(); renderPanels();
+}
 function toLobby() {
   state = "title"; lobby.t = 0;
   lobby.pilotSel = Math.max(0, PILOTS.findIndex(p => p.id === save.pilot));
   lobby.stageSel = Math.min(unlockedMax(), Math.max(1, lobby.stageSel));
   if (!cleared.has(lobby.stageSel)) lobby.stageSel = unlockedMax();
+  renderPanels();
 }
 function lobbyMsg(m) { lobby.msg = m; lobby.msgT = 1.6; }
 
@@ -1585,17 +1644,72 @@ function updateTitleLobby() {
     lobby.pilotSel = (lobby.pilotSel + n + dp) % n; lobby.slide = dp;
     const p = PILOTS[lobby.pilotSel];
     if (isOpen(p) && save.pilot !== p.id) { save.pilot = p.id; runActive = false; persist(); }
+    renderPanels();
     sfx(330, 0.05);
   }
-  if (ds) { lobby.stageSel = clamp(lobby.stageSel + ds, 1, maxN); sfx(330, 0.05); }
-  if (go && lobby.t > 0.2) {
-    const p = PILOTS[lobby.pilotSel];
-    if (!isOpen(p)) { lobbyMsg("CLEAR STAGE " + p.unlock + " TO UNLOCK " + p.name); sfx(150, 0.15, "square", 0.04); return; }
-    beginRun();
-    sfx(523, 0.1); sfx(784, 0.2, "square", 0.04);
-    startStage(lobby.stageSel);
-  }
+  if (ds) { lobby.stageSel = clamp(lobby.stageSel + ds, 1, maxN); sfx(330, 0.05); renderPanels(); }
+  if (go && lobby.t > 0.2) sortie();
 }
+function sortie() {
+  const p = PILOTS[lobby.pilotSel];
+  if (!isOpen(p)) { lobbyMsg(p.name + ": BUY IN PILOT SHOP"); sfx(150, 0.15, "square", 0.04); return; }
+  beginRun();
+  sfx(523, 0.1); sfx(784, 0.2, "square", 0.04);
+  startStage(lobby.stageSel);
+  renderPanels();
+}
+function buyOrEquip(id) {
+  const p = PILOTS.find(q => q.id === id);
+  if (!save.pilots.includes(id)) {
+    if (save.cr < p.cost) { lobbyMsg("NOT ENOUGH CREDITS"); sfx(150, 0.15, "square", 0.04); return; }
+    save.cr -= p.cost; save.pilots.push(id);
+    lobbyMsg(p.name + " UNLOCKED");
+  }
+  if (save.pilot !== id) { save.pilot = id; runActive = false; }
+  lobby.pilotSel = PILOTS.indexOf(p); lobby.slide = 0;
+  persist();
+  sfx(660, 0.08, "square", 0.04); sfx(990, 0.15, "square", 0.04);
+  renderPanels();
+}
+
+/* --- side panels (HTML): pilot shop on the left, stages on the right --- */
+const shopEl = document.getElementById("shop"), stagesEl = document.getElementById("stages");
+function pilotImg(p) { if (!p.img) p.img = shipCanvas(p.rows, p.pal, false).toDataURL(); return p.img; }
+function renderPanels() {
+  const lobbyOn = state === "title";
+  shopEl.innerHTML = '<div class="ph"><h2>PILOT SHOP</h2><span class="cr">CR ' + save.cr + '</span></div>' +
+    PILOTS.map(p => {
+      const own = save.pilots.includes(p.id), eq = save.pilot === p.id;
+      const label = eq ? "장착 중" : own ? "장착하기" : "구매 " + p.cost + " CR";
+      const dis = !lobbyOn || eq || (!own && save.cr < p.cost);
+      return '<div class="pcard' + (eq ? " on" : "") + '"><img src="' + pilotImg(p) + '" alt="' + p.name + ' 기체"><div class="pinfo"><b>' + p.name + '</b><span>' + p.kdesc + '</span>' +
+        '<span class="stats">체력 ' + (5 + p.hp) + ' · 속도 ' + Math.round(p.spd * 100) + '% · 데미지 ' + Math.round(p.dmg * 100) + '%</span>' +
+        '<button type="button" data-pilot="' + p.id + '"' + (dis ? " disabled" : "") + '>' + label + '</button></div></div>';
+    }).join("") +
+    '<p class="pnote">' + (lobbyOn ? "출격하면 점수의 1/10과 클리어 보너스(스테이지 × 200)가 크레딧으로 쌓입니다. 기체를 바꾸면 런이 새로 시작됩니다." : "출격 중에는 상점을 쓸 수 없습니다.") + '</p>';
+  const maxN = unlockedMax();
+  stagesEl.innerHTML = '<div class="ph"><h2>STAGES</h2><span class="cr">' + cleared.size + '/10 CLEAR</span></div><ol class="slist">' +
+    STAGE_NAMES.map((nm, i) => {
+      const n = i + 1, open = n <= maxN, done = cleared.has(n), sel = n === lobby.stageSel;
+      const tag = done ? "클리어" : !open ? "잠김" : n === 10 ? "최종 보스" : "도전 가능";
+      return '<li><button type="button" data-stage="' + n + '" class="' + (sel ? "on " : "") + (done ? "done" : "") + '"' + (!open || !lobbyOn ? " disabled" : "") + '><em>' + n + '</em><span>' + nm + '</span><i>' + tag + '</i></button></li>';
+    }).join("") + '</ol>' +
+    (runActive ? '<p class="runline">진행 중인 런: 티어 ' + player.tier + '-' + player.pow + ' · 체력 ' + player.hp + '/' + player.maxHp + ' · ' + score + '점</p>' : "") +
+    '<button type="button" class="go" data-go="1"' + (lobbyOn ? "" : " disabled") + '>' + (lobbyOn ? "STAGE " + lobby.stageSel + " 출격" : "출격 중") + '</button>';
+}
+shopEl.addEventListener("click", e => {
+  const b = e.target.closest("button[data-pilot]");
+  if (!b || state !== "title") return;
+  initAudio(); buyOrEquip(b.dataset.pilot); cv.focus();
+});
+stagesEl.addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b || state !== "title") return;
+  initAudio();
+  if (b.dataset.stage) { lobby.stageSel = +b.dataset.stage; sfx(330, 0.05); renderPanels(); }
+  else if (b.dataset.go) sortie();
+  cv.focus();
+});
 
 function shipCanvas(rows, pal, silhouette) {
   const c = document.createElement("canvas"); c.width = rows[0].length; c.height = rows.length;
@@ -1626,7 +1740,7 @@ function drawTitleLobby(blinkOn) {
   drawBossAt(W / 2, 46 + Math.sin(t * 2) * 3, DOWN + Math.sin(t * 0.9) * 0.3, { t, burn: 1.6, spool: 0, gunFlash: titleGuns, ammo: [1, 1, 1, 1], reload: 0, bay: 0, phase: 1 });
   ctx.globalAlpha = 1;
   shadowText("STRIKER", W / 2, 88, "#ff3d5a", 4, "center");
-  text(cleared.size + "/10 CLEARED", 5, 4, "#9087a3");
+  text("CR " + save.cr, 5, 4, "#ffd166");
   if (best) text("HI " + best, W - 5, 4, "#7cffb2", 1, "right");
 
   // pilot carousel
@@ -1640,7 +1754,7 @@ function drawTitleLobby(blinkOn) {
   text(">", W - 15, 146, blinkOn ? "#5fd3ff" : "#4a3d5e", 2);
   const p = PILOTS[i];
   shadowText(p.name, W / 2, 184, isOpen(p) ? "#ece6f6" : "#5a5268", 2, "center");
-  text(isOpen(p) ? p.desc : "CLEAR STAGE " + p.unlock + " TO UNLOCK", W / 2, 199, isOpen(p) ? "#9087a3" : "#ff3d5a", 1, "center");
+  text(isOpen(p) ? p.desc : p.cost + " CR IN PILOT SHOP", W / 2, 199, isOpen(p) ? "#9087a3" : "#ffd166", 1, "center");
   statBar("HP", 14, 209, 5 + p.hp, 7, "#7cffb2");
   statBar("SPD", 92, 209, p.spd, 1.3, "#5fd3ff");
   statBar("DMG", 170, 209, p.dmg, 1.3, "#ff3d5a");
@@ -2255,7 +2369,7 @@ function draw() {
       overlay(0.75);
       shadowText("GAME OVER", W / 2, 120, "#ff3d5a", 3, "center");
       text("STAGE " + stageN + "  SCORE " + score, W / 2, 150, "#ece6f6", 1, "center");
-      text("BACK TO LOBBY. THE RUN RESETS", W / 2, 162, "#9087a3", 1, "center");
+      text("+" + lastEarn + " CR EARNED", W / 2, 162, "#ffd166", 1, "center");
       if (stateT <= 0) {
         if (blinkOn) text("ENTER: RETURN TO LOBBY", W / 2, 200, "#5fd3ff", 1, "center");
       }
