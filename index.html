@@ -1762,6 +1762,13 @@ function drawTitleLobby(blinkOn) {
   if (hintR) text(hintR, W - 5, 300, pulse, 1, "right");
 }
 
+let bossIcons = null;
+function makeIconCanvas(pal) {
+  const c = document.createElement("canvas"); c.width = ICON[0].length; c.height = ICON.length;
+  const x = c.getContext("2d");
+  ICON.forEach((row, yy) => { for (let xx = 0; xx < row.length; xx++) if (row[xx] !== ".") { x.fillStyle = pal[row[xx]]; x.fillRect(xx, yy, 1, 1); } });
+  return c;
+}
 /* ---------- state ---------- */
 let state = "title", stateT = 0;
 let player, boss, bullets = [], pbullets = [], parts = [], warns = [], shocks = [], banner;
@@ -2141,17 +2148,35 @@ function fmt(t) {
 function drawHUD() {
   const ipal = { o: "#12141a", a: boss.pal.steel, c: "#5fd3ff", r: "#ff3d5a" };
   if (!boss.hidden || intro === "card") {
-    sprite(ICON, ipal, 4, 3);
-    shadowText(boss.name, 18, 2, "#ece6f6", 1);
-    if (boss.maxPhase > 1) text("PHASE " + boss.phase + "/" + boss.maxPhase, W - 5, 2, boss.phase === 3 ? "#ff3d5a" : "#9087a3", 1, "right");
-    const bw = W - 23, hp = boss.hpShown != null ? boss.hpShown : boss.hp;
-    r(17, 9, bw + 2, 6, "#1a0f26"); r(18, 10, bw, 4, "#2c2338");
-    const w = Math.max(0, Math.round(bw * hp / boss.maxHp));
-    r(18, 10, w, 4, boss.inv > 0 && boss.runner ? "#8f86a3" : boss.phase === 3 ? "#ff1f3d" : "#ff3d5a");
-    r(18, 10, w, 1, "#ff9aa9");
+    const hp = Math.max(0, boss.hpShown != null ? boss.hpShown : boss.hp), ratio = hp / boss.maxHp;
+    if (boss.hpLag == null || boss.hpLag < hp) boss.hpLag = hp;
+    boss.hpLag = Math.max(hp, boss.hpLag - boss.maxHp * 0.3 * DT);
+    // frame
+    r(0, 0, W, 29, "rgba(8,6,14,0.82)"); r(0, 29, W, 1, boss.phase === 3 ? "#ff3d5a" : "#3a2a40");
+    // boss-shaped gauge: the icon fills with red from the bottom as HP remains
+    if (!bossIcons) bossIcons = {
+      empty: upscale(makeIconCanvas({ o: "#12141a", a: "#2c2338", c: "#2c2338", r: "#2c2338" })),
+      full: upscale(makeIconCanvas({ o: "#12141a", a: "#ff3d5a", c: "#ffd166", r: "#ffffff" }))
+    };
+    const iw = bossIcons.full.width, ih = bossIcons.full.height, ix = 4, iy = 5;
+    ctx.drawImage(bossIcons.empty, ix, iy);
+    const fillH = Math.round(ih * ratio);
+    if (fillH > 0) ctx.drawImage(bossIcons.full, 0, ih - fillH, iw, fillH, ix, iy + ih - fillH, iw, fillH);
+    if (boss.flash > 0) { ctx.globalAlpha = 0.6; ctx.drawImage(bossIcons.full, ix, iy); ctx.globalAlpha = 1; }
+    // name, phase pips, numbers
+    const bx = ix + iw + 5, bw = W - bx - 5;
+    shadowText(boss.name, bx, 3, "#ece6f6", 1);
+    for (let i = 0; i < boss.maxPhase; i++) r(W - 8 - (boss.maxPhase - 1 - i) * 7, 3, 5, 5, i < boss.phase ? "#ff3d5a" : "#3a3448");
+    text(Math.ceil(hp) + "/" + boss.maxHp, W - 8 - boss.maxPhase * 7, 3, "#9087a3", 1, "right");
+    // thick bar with a lagging damage trail
+    r(bx - 1, 11, bw + 2, 11, "#ece6f6"); r(bx, 12, bw, 9, "#1a0f26");
+    const lagW = Math.round(bw * boss.hpLag / boss.maxHp), w = Math.round(bw * ratio);
+    r(bx, 12, lagW, 9, "#ffd166");
+    const col = boss.inv > 0 && boss.runner ? "#8f86a3" : boss.phase === 3 ? "#ff1f3d" : "#ff3d5a";
+    r(bx, 12, w, 9, col); r(bx, 12, w, 2, "#ff9aa9"); r(bx, 19, w, 2, "#a8102a");
     const ticks = boss.maxPhase === 2 ? [0.5] : boss.maxPhase === 3 ? [0.66, 0.33] : [];
-    for (const f of ticks) r(18 + Math.round(bw * f), 9, 1, 6, "#ece6f6");
-    text(String(score).padStart(7, "0"), W - 5, 18, "#9087a3", 1, "right");
+    for (const f of ticks) { const x = bx + Math.round(bw * f); r(x, 10, 1, 13, "#ece6f6"); r(x - 1, 23, 3, 2, "#ece6f6"); }
+    text(String(score).padStart(7, "0"), W - 5, 33, "#9087a3", 1, "right");
   } else {
     shadowText(stageN === 10 ? "BOSS BATTLE" : "STAGE " + stageN, 4, 3, "#ece6f6", 1);
     const bx = 44, bw = W - 110;
