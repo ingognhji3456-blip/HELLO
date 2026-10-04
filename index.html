@@ -147,7 +147,7 @@ kbd {
     <div class="row"><span>공격</span><span>자동 발사</span></div>
     <div class="row"><span>기타</span><span><kbd>P</kbd>일시정지 <kbd>M</kbd>소리 <kbd>F</kbd>전체화면</span></div>
     <div class="row"><span>모바일</span><span>드래그로 이동, 두 번 탭하면 대시</span></div>
-    <p class="note">1~9스테이지는 잡졸 웨이브를 전멸시켜야 넘어가고, 10스테이지 끝에 보스가 등장합니다. 클리어할 때마다 업그레이드 카드 1장을 고르고 루트 맵에서 다음 스테이지로 출격합니다. 잡졸은 <b>P</b>(무기 강화), <b>R</b>(수리) 아이템을 떨어뜨립니다. <b>STRIKER</b>는 기수를 돌려 조준하는 전투기형 로봇입니다. 날개 밑 개틀링, 날개 미사일, 폭탄창 폭격, 애프터버너 돌진, 급강하로 공격합니다. 빨간 띠, 표적, 그림자가 공격을 예고하고, 체력 66%와 33%에서 페이즈가 바뀝니다.</p>
+    <p class="note">타이틀에서 들어가면 격납고(HANGAR)가 나옵니다. 출격, 상점(영구 강화), 파일럿(기체 3종) 메뉴가 있고, 출격에서 번 크레딧과 클리어 기록은 브라우저에 저장됩니다. 1~9스테이지는 잡졸 웨이브를 전멸시켜야 넘어가고, 10스테이지 끝에 보스가 등장합니다. 클리어할 때마다 업그레이드 카드 1장을 고르고 루트 맵에서 다음 스테이지로 출격합니다. 잡졸은 <b>P</b>(무기 강화), <b>R</b>(수리) 아이템을 떨어뜨립니다. <b>STRIKER</b>는 기수를 돌려 조준하는 전투기형 로봇입니다. 날개 밑 개틀링, 날개 미사일, 폭탄창 폭격, 애프터버너 돌진, 급강하로 공격합니다. 빨간 띠, 표적, 그림자가 공격을 예고하고, 체력 66%와 33%에서 페이즈가 바뀝니다.</p>
   </section>
 </main>
 
@@ -980,8 +980,9 @@ function* stageScript() {
   sfx(523, 0.15); sfx(659, 0.15, "square", 0.04); sfx(784, 0.3, "square", 0.04);
   yield 3;
   intro = null;
-  if (stageN >= 10) { state = "win"; stateT = 1; saveBest(); return; }
   cleared.add(stageN);
+  bankCredits(true);
+  if (stageN >= 10) { state = "win"; stateT = 1; saveBest(); runActive = false; return; }
   openMap(true);
 }
 
@@ -1010,7 +1011,7 @@ function* bossIntro() {
 function makeBoss() {
   // scale to the player's firepower so a maxed ship still needs about a minute
   const T = player.tier, shots = [1, 2, 3, 6, 8][player.pow - 1];
-  const dps = [0, 1, 2, 3, 4, 6][T] * shots / [0, 0.09, 0.08, 0.08, 0.075, 0.07][T];
+  const dps = [0, 1, 2, 3, 4, 6][T] * shots / [0, 0.09, 0.08, 0.08, 0.075, 0.07][T] * player.dmgMul;
   const hp = Math.max(5000, Math.round(dps * 70));
   const p = BOSS_PALS[0];
   return {
@@ -1026,13 +1027,15 @@ function startStage(n) {
   stageN = n;
   boss = makeBoss();
   bullets = []; pbullets = []; parts = []; warns = []; shocks = []; enemies = []; items = []; texts = []; booms = [];
-  player.x = W / 2; player.y = H - 40; player.inv = 1; player.dead = false; player.bombs = 3;
+  player.x = W / 2; player.y = H - 40; player.inv = 1; player.dead = false; player.bombs = 3 + lv("bomb");
+  player.shield = Math.max(player.shield, lv("shield"));
+  stageScore0 = score;
   banner = { text: "", t: 0 };
   stage = { runner: runner(stageScript()), done: 0, total: 1 };
   state = "play";
 }
 function newPlayer(pow = 1) {
-  return { x: W / 2, y: H - 40, hp: 5, maxHp: 5, inv: 0, dashT: 0, dashCd: 0, dashMax: 0.85, dx: 0, dy: -1, shootT: 0, mslT: 0, dead: false, pow, msl: 0, shield: 0, tier: 1, gunFlash: 0, volley: 0, bombs: 3 };
+  return { x: W / 2, y: H - 40, hp: 5, maxHp: 5, inv: 0, dashT: 0, dashCd: 0, dashMax: 0.85, dx: 0, dy: -1, shootT: 0, mslT: 0, dead: false, pow, msl: 0, shield: 0, tier: 1, gunFlash: 0, volley: 0, bombs: 3, spd: 1, dmgMul: 1, magnet: 30 };
 }
 function powerUp() {
   if (player.pow < 5) { player.pow++; return "up"; }
@@ -1083,7 +1086,7 @@ function updateEnemies() {
   for (const it of items) {
     it.t += DT;
     const d = Math.hypot(player.x - it.x, player.y - it.y);
-    if (d < 30) { it.x += (player.x - it.x) * DT * 6; it.y += (player.y - it.y) * DT * 6; }
+    if (d < player.magnet) { it.x += (player.x - it.x) * DT * 6; it.y += (player.y - it.y) * DT * 6; }
     else { it.y += 28 * DT; it.x += Math.sin(it.t * 3) * 20 * DT; }
     if (d < 9 && !player.dead) {
       it.taken = true;
@@ -1170,7 +1173,8 @@ function unlockedMax() { let n = 1; while (cleared.has(n) && n < 10) n++; return
 function openMap(reward) {
   const cards = REWARDS.filter(c => c.ok()).sort(() => Math.random() - 0.5).slice(0, 3);
   const sel = unlockedMax();
-  map = { last: stageN, phase: reward && cards.length ? "reward" : "route", cards, sel: 1, stageSel: sel, shipX: MAP_PTS[sel - 1][0], shipY: MAP_PTS[sel - 1][1], t: 0 };
+  if (reward && !cards.length) { toLobby(); return; }
+  map = { last: stageN, phase: reward ? "reward" : "route", cards, sel: 1, stageSel: sel, shipX: MAP_PTS[sel - 1][0], shipY: MAP_PTS[sel - 1][1], t: 0 };
   state = "map";
 }
 function updateMap(tap) {
@@ -1184,10 +1188,11 @@ function updateMap(tap) {
     if (pick) {
       map.cards[map.sel % n].apply();
       sfx(660, 0.1, "square", 0.04); sfx(990, 0.2, "square", 0.04);
-      map.phase = "route"; map.t = 0;
+      toLobby();
     }
   } else {
     // stage select: any cleared stage or the next locked-in one
+    if (pressed.escape) { toLobby(); return; }
     const maxN = unlockedMax();
     if (pressed.arrowright || pressed.arrowup || pressed.d || pressed.w) { map.stageSel = Math.min(maxN, map.stageSel + 1); sfx(330, 0.05); }
     if (pressed.arrowleft || pressed.arrowdown || pressed.a || pressed.s) { map.stageSel = Math.max(1, map.stageSel - 1); sfx(330, 0.05); }
@@ -1244,7 +1249,7 @@ function drawMap() {
   r(0, 250, W, 50, "rgba(0,0,0,0.6)");
   text("STAGE " + n + (cleared.has(n) ? "  CLEARED" : n === 10 ? "  FINAL BOSS" : "  NEW"), W / 2, 256, cleared.has(n) ? "#7cffb2" : "#ffd166", 1, "center");
   shadowText(STAGE_NAMES[n - 1], W / 2, 266, "#ece6f6", 2, "center");
-  text("< > CHOOSE   ENTER OR TAP TO LAUNCH", W / 2, 288, Math.floor(map.t * 2.2) % 2 ? "#5fd3ff" : "#9087a3", 1, "center");
+  text("< > CHOOSE  ENTER LAUNCH  ESC HANGAR", W / 2, 288, Math.floor(map.t * 2.2) % 2 ? "#5fd3ff" : "#9087a3", 1, "center");
 }
 
 function drawIntro() {
@@ -1271,6 +1276,7 @@ function drawIntro() {
     shadowText("STAGE CLEAR", W / 2, 120, "#7cffb2", 2, "center");
     text(STAGE_NAMES[stageN - 1], W / 2, 140, "#ece6f6", 1, "center");
     text("BONUS " + 3000 * stageN, W / 2, 154, "#ffd166", 1, "center");
+    text("+" + (Math.floor((score - stageScore0) / 10) + 200 * stageN) + " CR", W / 2, 166, "#7cffb2", 1, "center");
   }
   for (const t of texts) text(t.s, t.x, t.y, t.c, 1, "center");
 }
@@ -1481,6 +1487,232 @@ function musicTick() {
   while (music.next < actx.currentTime + 0.2) { playStep(song, music.step, music.next, len); music.next += len; music.step++; }
 }
 
+/* =========================================================
+   HANGAR: lobby, shop and pilots. Credits and unlocks are saved.
+   ========================================================= */
+const PILOTS = [
+  { id: "vanguard", name: "VANGUARD", cost: 0, hp: 0, spd: 1, dmg: 1, dash: 0.85, desc: "BALANCED", pal: { a: "#5fd3ff", b: "#2b6cb0", s: "#1d4f8a" } },
+  { id: "phantom", name: "PHANTOM", cost: 2500, hp: -1, spd: 1.25, dmg: 1, dash: 0.55, desc: "FAST, QUICK DASH", pal: { a: "#c77dff", b: "#5a2a8a", s: "#3a1a5c" } },
+  { id: "titan", name: "TITAN", cost: 5000, hp: 2, spd: 0.85, dmg: 1.25, dash: 1.0, desc: "TOUGH, HEAVY GUN", pal: { a: "#ff8a3d", b: "#8a3a10", s: "#5c2408" } }
+];
+const SHOP = [
+  { id: "hull", name: "HULL PLATING", desc: "MAX HP +1", costs: [300, 800, 1800] },
+  { id: "gun", name: "GUN TUNING", desc: "START POWER +1", costs: [400, 1000, 2200, 4000] },
+  { id: "dmg", name: "AMMO CORE", desc: "DAMAGE +10%", costs: [600, 1500, 3000] },
+  { id: "bomb", name: "BOMB RACK", desc: "BOMBS +1 PER STAGE", costs: [500, 1400] },
+  { id: "msl", name: "MISSILE POD", desc: "START MISSILES +1", costs: [900, 2400] },
+  { id: "shield", name: "BARRIER", desc: "SHIELD EVERY STAGE", costs: [1500] },
+  { id: "magnet", name: "MAGNET", desc: "ITEM PICKUP RANGE", costs: [300, 900] }
+];
+let save = { cr: 0, shop: {}, pilots: ["vanguard"], pilot: "vanguard", cleared: [] };
+try { Object.assign(save, JSON.parse(localStorage.getItem("striker-save") || "{}")); } catch (e) {}
+cleared = new Set(save.cleared || []);
+function persist() {
+  save.cleared = [...cleared];
+  try { localStorage.setItem("striker-save", JSON.stringify(save)); } catch (e) {}
+}
+const lv = id => save.shop[id] || 0;
+const pilot = () => PILOTS.find(p => p.id === save.pilot) || PILOTS[0];
+let runActive = false, stageScore0 = 0, lastEarn = 0;
+const lobby = { t: 0, sel: 0, shopSel: 0, pilotSel: 0, msg: "", msgT: 0 };
+
+function applyStats(p) {
+  const pl = pilot();
+  Object.assign(PCOL, pl.pal);
+  p.spd = pl.spd;
+  p.dmgMul = pl.dmg * (1 + 0.1 * lv("dmg"));
+  p.magnet = 30 + 25 * lv("magnet");
+  p.dashMax = pl.dash;
+}
+function freshPlayer() {
+  const p = newPlayer(1 + lv("gun"));
+  p.maxHp = p.hp = 5 + lv("hull") + pilot().hp;
+  p.msl = lv("msl");
+  applyStats(p);
+  return p;
+}
+function beginRun() {
+  if (runActive) return;
+  player = freshPlayer();
+  score = 0; runActive = true;
+}
+// bank credits from the score earned this stage
+function bankCredits(clearedStage) {
+  lastEarn = Math.floor((score - stageScore0) / 10) + (clearedStage ? 200 * stageN : 0);
+  save.cr += lastEarn;
+  persist();
+}
+function toLobby() { state = "lobby"; lobby.t = 0; }
+function flash(msg) { lobby.msg = msg; lobby.msgT = 1.6; }
+
+function buyShop(item) {
+  const l = lv(item.id);
+  if (l >= item.costs.length) { flash("MAXED"); return; }
+  if (save.cr < item.costs[l]) { flash("NOT ENOUGH CREDITS"); sfx(150, 0.15, "square", 0.04); return; }
+  save.cr -= item.costs[l];
+  save.shop[item.id] = l + 1;
+  if (runActive) {
+    if (item.id === "hull") { player.maxHp++; player.hp++; }
+    if (item.id === "gun") powerUp();
+    if (item.id === "msl") player.msl = Math.min(3, player.msl + 1);
+    applyStats(player);
+  }
+  persist();
+  flash(item.name + " LV" + (l + 1));
+  sfx(660, 0.08, "square", 0.04); sfx(990, 0.15, "square", 0.04);
+}
+function pickPilot(p) {
+  if (!save.pilots.includes(p.id)) {
+    if (save.cr < p.cost) { flash("NOT ENOUGH CREDITS"); sfx(150, 0.15, "square", 0.04); return; }
+    save.cr -= p.cost; save.pilots.push(p.id);
+    flash(p.name + " UNLOCKED");
+  }
+  if (save.pilot !== p.id) { save.pilot = p.id; runActive = false; flash(p.name + " READY"); }
+  persist();
+  sfx(660, 0.08, "square", 0.04); sfx(990, 0.15, "square", 0.04);
+}
+
+function updateLobby() {
+  lobby.t += DT; lobby.msgT -= DT;
+  const tap = pressed.tap, tx = tap !== undefined ? tap * W : -1, ty = tap !== undefined ? pressed.tapY * H : -1;
+  const ok = pressed.enter || pressed[" "] || pressed.z;
+  const up = pressed.arrowup || pressed.w, down = pressed.arrowdown || pressed.s;
+  const left = pressed.arrowleft || pressed.a, right = pressed.arrowright || pressed.d;
+  const back = pressed.escape || (tap !== undefined && ty < 22 && tx < 60);
+  if (state === "lobby") {
+    if (up) { lobby.sel = (lobby.sel + 2) % 3; sfx(330, 0.05); }
+    if (down) { lobby.sel = (lobby.sel + 1) % 3; sfx(330, 0.05); }
+    let go = ok;
+    if (tap !== undefined) { const i = Math.floor((ty - 218) / 28); if (i >= 0 && i < 3) { lobby.sel = i; go = true; } }
+    if (back) { state = "title"; return; }
+    if (go && lobby.t > 0.2) {
+      sfx(523, 0.08, "square", 0.04);
+      if (lobby.sel === 0) { beginRun(); openMap(false); }
+      else if (lobby.sel === 1) { state = "shop"; lobby.t = 0; }
+      else { state = "pilots"; lobby.t = 0; lobby.pilotSel = PILOTS.findIndex(p => p.id === save.pilot); }
+    }
+  } else if (state === "shop") {
+    if (up) { lobby.shopSel = (lobby.shopSel + SHOP.length - 1) % SHOP.length; sfx(330, 0.05); }
+    if (down) { lobby.shopSel = (lobby.shopSel + 1) % SHOP.length; sfx(330, 0.05); }
+    let go = ok;
+    if (tap !== undefined && ty > 40 && ty < 40 + SHOP.length * 32) { const i = Math.floor((ty - 40) / 32); if (i === lobby.shopSel) go = true; else lobby.shopSel = i; }
+    if (back) { toLobby(); return; }
+    if (go && lobby.t > 0.2) buyShop(SHOP[lobby.shopSel]);
+  } else if (state === "pilots") {
+    if (left) { lobby.pilotSel = (lobby.pilotSel + 2) % 3; sfx(330, 0.05); }
+    if (right) { lobby.pilotSel = (lobby.pilotSel + 1) % 3; sfx(330, 0.05); }
+    let go = ok;
+    if (tap !== undefined && ty > 50 && ty < 250) { const i = clamp(Math.floor(tap * 3), 0, 2); if (i === lobby.pilotSel) go = true; else lobby.pilotSel = i; }
+    if (back) { toLobby(); return; }
+    if (go && lobby.t > 0.2) pickPilot(PILOTS[lobby.pilotSel]);
+  }
+}
+
+/* --- drawing --- */
+function shipCanvas(pal) {
+  const c = document.createElement("canvas"); c.width = 15; c.height = 14;
+  const x = c.getContext("2d"), full = Object.assign({}, PCOL, pal, { d: Math.random() < 0.5 ? "#ffb347" : "#ff6a3d" });
+  PLAYER.forEach((row, yy) => { for (let xx = 0; xx < row.length; xx++) if (row[xx] !== ".") { x.fillStyle = full[row[xx]]; x.fillRect(xx, yy, 1, 1); } });
+  return upscale(c);
+}
+function drawHangarBG() {
+  const gr = ctx.createLinearGradient(0, 0, 0, H);
+  gr.addColorStop(0, "#07060f"); gr.addColorStop(0.55, "#141024"); gr.addColorStop(1, "#05040a");
+  ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
+  // hangar floor grid in perspective
+  ctx.strokeStyle = "rgba(95,211,255,0.16)"; ctx.lineWidth = 1;
+  const hz = 150;
+  for (let i = -8; i <= 8; i++) { ctx.beginPath(); ctx.moveTo(W / 2 + i * 6, hz); ctx.lineTo(W / 2 + i * 40, H); ctx.stroke(); }
+  const off = (lobby.t * 20) % 20;
+  for (let k = 0; k < 9; k++) { const y = hz + Math.pow((k * 20 + off) / 180, 2) * (H - hz); ctx.beginPath(); ctx.moveTo(0, Math.round(y) + 0.5); ctx.lineTo(W, Math.round(y) + 0.5); ctx.stroke(); }
+  // overhead light cone
+  ctx.fillStyle = "rgba(95,211,255,0.06)";
+  ctx.beginPath(); ctx.moveTo(W / 2 - 14, 20); ctx.lineTo(W / 2 + 14, 20); ctx.lineTo(W / 2 + 60, 150); ctx.lineTo(W / 2 - 60, 150); ctx.fill();
+  r(W / 2 - 16, 18, 32, 3, "#3a4050"); r(W / 2 - 12, 21, 24, 1, "#c8f3ff");
+}
+function drawShipShowcase(pal, cx, cy, scale) {
+  const img = shipCanvas(pal), bob = Math.round(Math.sin(lobby.t * 2) * 3);
+  ctx.beginPath(); ctx.ellipse(cx, cy + 34 * scale / 2, 30 * scale / 2, 7 * scale / 2, 0, 0, TAU);
+  ctx.fillStyle = "rgba(95,211,255," + (0.18 + 0.08 * Math.sin(lobby.t * 3)) + ")"; ctx.fill();
+  ctx.strokeStyle = "#5fd3ff"; ctx.globalAlpha = 0.6; ctx.stroke(); ctx.globalAlpha = 1;
+  const w = img.width * scale, h = img.height * scale;
+  ctx.drawImage(img, Math.round(cx - w / 2), Math.round(cy - h / 2 + bob), w, h);
+  if (Math.random() < 0.6) parts.push({ x: cx + rand(-6, 6) * scale / 2, y: cy + h / 2 + bob, vx: 0, vy: 60, life: 0.25, max: 0.25, c: Math.random() < 0.5 ? "#ffb347" : "#ff6a3d", s: 2 });
+}
+function statBar(label, x, y, v, max, c) {
+  text(label, x, y, "#9087a3");
+  r(x + 24, y + 1, 40, 3, "#2c2338");
+  r(x + 24, y + 1, Math.round(40 * clamp(v / max, 0, 1)), 3, c);
+}
+function topBar(title) {
+  r(0, 0, W, 20, "rgba(0,0,0,0.55)"); r(0, 20, W, 1, "#2c2338");
+  if (state !== "lobby") text("< BACK", 5, 7, "#9087a3");
+  shadowText(title, W / 2, 6, "#ece6f6", 1, "center");
+  text("CR " + save.cr, W - 5, 7, "#ffd166", 1, "right");
+}
+function button(x, y, w, h, label, on, sub) {
+  r(x - 1, y - 1, w + 2, h + 2, on ? "#ffd166" : "#2c2338");
+  r(x, y, w, h, on ? "#2a2238" : "#18131f");
+  if (on) { r(x, y, 3, h, "#ffd166"); r(x + w - 3, y, 3, h, "#ffd166"); }
+  text(label, x + w / 2, y + (sub ? 4 : (h - 5) / 2), on ? "#ffd166" : "#ece6f6", 1, "center");
+  if (sub) text(sub, x + w / 2, y + 13, "#9087a3", 1, "center");
+}
+function drawLobby() {
+  drawHangarBG();
+  topBar("HANGAR");
+  const pl = pilot();
+  drawShipShowcase(pl.pal, W / 2, 92, 2);
+  for (const p of parts) r(Math.round(p.x), Math.round(p.y), p.s, p.s, p.c);
+  shadowText(pl.name, W / 2, 142, "#ece6f6", 2, "center");
+  text(pl.desc, W / 2, 158, "#9087a3", 1, "center");
+  const hp = 5 + lv("hull") + pl.hp;
+  statBar("HP", 30, 172, hp, 10, "#7cffb2");
+  statBar("SPD", 30, 180, pl.spd, 1.3, "#5fd3ff");
+  statBar("DMG", 132, 172, pl.dmg * (1 + 0.1 * lv("dmg")), 1.8, "#ff3d5a");
+  statBar("PWR", 132, 180, 1 + lv("gun"), 5, "#ffd166");
+  text(runActive ? "RUN  T" + player.tier + "-" + player.pow + "  HP " + player.hp + "/" + player.maxHp + "  " + score : "NEW RUN  " + cleared.size + "/10 CLEARED", W / 2, 196, runActive ? "#7cffb2" : "#9087a3", 1, "center");
+  ["SORTIE", "SHOP", "PILOTS"].forEach((b, i) => button(50, 220 + i * 28, 140, 20, b, lobby.sel === i,
+    [runActive ? "CONTINUE RUN" : "SELECT STAGE", "UPGRADE YOUR SHIP", "CHOOSE YOUR FIGHTER"][i]));
+  if (lobby.msgT > 0) text(lobby.msg, W / 2, 207, "#ffd166", 1, "center");
+  if (best) text("HI " + best, 5, 25, "#5a5268");
+}
+function drawShop() {
+  drawHangarBG(); overlay(0.5);
+  topBar("SHOP");
+  SHOP.forEach((it, i) => {
+    const y = 40 + i * 32, on = i === lobby.shopSel, l = lv(it.id), max = l >= it.costs.length;
+    r(8, y, W - 16, 28, on ? "#2a2238" : "rgba(24,19,31,0.85)");
+    if (on) { r(8, y, 2, 28, "#ffd166"); r(W - 10, y, 2, 28, "#ffd166"); }
+    text(it.name, 16, y + 5, on ? "#ffd166" : "#ece6f6");
+    text(it.desc, 16, y + 17, "#9087a3");
+    for (let k = 0; k < it.costs.length; k++) r(W - 70 + k * 7, y + 5, 5, 5, k < l ? "#7cffb2" : "#3a3448");
+    const cost = max ? "MAX" : String(it.costs[l]);
+    text(cost, W - 16, y + 17, max ? "#7cffb2" : save.cr >= it.costs[l] ? "#ffd166" : "#ff3d5a", 1, "right");
+  });
+  text(lobby.msgT > 0 ? lobby.msg : "ENTER BUY   ESC BACK", W / 2, 272, lobby.msgT > 0 ? "#ffd166" : "#5fd3ff", 1, "center");
+  text("UPGRADES ARE PERMANENT", W / 2, 286, "#9087a3", 1, "center");
+}
+function drawPilots() {
+  drawHangarBG(); overlay(0.4);
+  topBar("PILOTS");
+  PILOTS.forEach((p, i) => {
+    const x = 8 + i * 76, y = 50, on = i === lobby.pilotSel, own = save.pilots.includes(p.id), eq = save.pilot === p.id;
+    r(x - 1, y - 1 - (on ? 3 : 0), 74, 182, on ? "#ffd166" : "#2c2338");
+    r(x, y - (on ? 3 : 0), 72, 180, "#18131f");
+    const yy = y - (on ? 3 : 0);
+    const img = shipCanvas(p.pal);
+    ctx.drawImage(img, x + 36 - img.width / 2, yy + 14);
+    text(p.name, x + 36, yy + 52, on ? "#ffd166" : "#ece6f6", 1, "center");
+    const lines = [["HP", (p.hp >= 0 ? "+" : "") + p.hp], ["SPD", Math.round(p.spd * 100) + "%"], ["DMG", Math.round(p.dmg * 100) + "%"], ["DASH", p.dash + "S"]];
+    lines.forEach(([k, v], j) => { text(k, x + 6, yy + 70 + j * 12, "#9087a3"); text(v, x + 66, yy + 70 + j * 12, "#ece6f6", 1, "right"); });
+    const status = eq ? "EQUIPPED" : own ? "OWNED" : p.cost + " CR";
+    text(status, x + 36, yy + 130, eq ? "#7cffb2" : own ? "#5fd3ff" : save.cr >= p.cost ? "#ffd166" : "#ff3d5a", 1, "center");
+    if (!own) text("LOCKED", x + 36, yy + 145, "#5a5268", 1, "center");
+  });
+  text(lobby.msgT > 0 ? lobby.msg : "< > SELECT   ENTER BUY/EQUIP", W / 2, 246, lobby.msgT > 0 ? "#ffd166" : "#5fd3ff", 1, "center");
+  text("CHANGING PILOT STARTS A NEW RUN", W / 2, 260, "#9087a3", 1, "center");
+}
+
 /* ---------- state ---------- */
 let state = "title", stateT = 0;
 let player, boss, bullets = [], pbullets = [], parts = [], warns = [], shocks = [], banner;
@@ -1495,10 +1727,8 @@ for (let i = 0; i < 70; i++) {
 }
 
 function startGame() {
-  score = 0; newBest = false; time = 0;
-  player = newPlayer();
-  cleared = new Set();
-  openMap(false);
+  newBest = false; time = 0;
+  toLobby();
   sfx(523, 0.1); sfx(784, 0.2, "square", 0.04);
 }
 
@@ -1587,7 +1817,7 @@ function updatePlayer() {
     player.x += player.dx * 270 * DT; player.y += player.dy * 270 * DT;
     parts.push({ x: player.x, y: player.y, vx: 0, vy: 0, life: 0.2, max: 0.2, c: "#2b6cb0", s: 4 });
   } else {
-    const sp = keys.shift ? 45 : 95;
+    const sp = (keys.shift ? 45 : 95) * player.spd;
     player.x += mx * sp * DT; player.y += my * sp * DT;
   }
   player.x = clamp(player.x, 6, W - 6);
@@ -1598,14 +1828,14 @@ function updatePlayer() {
   if (player.shootT <= 0 && !player.dead) {
     const T = player.tier, L = player.pow, y = player.y - 5;
     player.shootT = [0, 0.09, 0.08, 0.08, 0.075, 0.07][T];
-    const sp = [0, 330, 380, 400, 420, 450][T], dmg = [0, 1, 2, 3, 4, 6][T];
+    const sp = [0, 330, 380, 400, 420, 450][T], dmg = [0, 1, 2, 3, 4, 6][T] * player.dmgMul;
     const SHOTS = [[[0, 0]], [[-3, 0], [3, 0]], [[-4, 0], [0, 0], [4, 0]],
       [[-5, 0], [-2, 0], [2, 0], [5, 0], [-6, -0.15], [6, 0.15]],
       [[-6, 0], [-2, 0], [2, 0], [6, 0], [-8, -0.12], [8, 0.12], [-8, -0.26], [8, 0.26]]];
     for (const [dx, a] of SHOTS[L - 1]) pbullets.push({ x: player.x + dx, y, vx: Math.sin(a) * sp, vy: -Math.cos(a) * sp, kind: "shot", tier: T, dmg });
     if (T >= 2) player.gunFlash = 0.04;
     if (T >= 3 && ++player.volley % (T === 5 ? 2 : 3) === 0) {
-      for (const s of [-1, 1]) pbullets.push({ x: player.x + s * 6, y: player.y - 2, vx: 0, vy: -520, kind: "lance", dmg: T, hits: [] });
+      for (const s of [-1, 1]) pbullets.push({ x: player.x + s * 6, y: player.y - 2, vx: 0, vy: -520, kind: "lance", dmg: T * player.dmgMul, hits: [] });
       sfx(1200, 0.05, "square", 0.012, 2400);
     }
   }
@@ -1613,7 +1843,7 @@ function updatePlayer() {
     player.mslT -= DT;
     if (player.mslT <= 0) {
       player.mslT = [0, 1.1, 0.8, 0.55][player.msl];
-      for (const s of [-1, 1]) pbullets.push({ x: player.x + s * 5, y: player.y, vx: s * 70, vy: -30, kind: "pm", dmg: 3 });
+      for (const s of [-1, 1]) pbullets.push({ x: player.x + s * 5, y: player.y, vx: s * 70, vy: -30, kind: "pm", dmg: 3 * player.dmgMul });
     }
   }
 }
@@ -1770,6 +2000,8 @@ function update() {
 
   if (state === "title") {
     if (start) startGame();
+  } else if (state === "lobby" || state === "shop" || state === "pilots") {
+    updateLobby(); updateParts();
   } else if (state === "map") {
     updateMap(pressed.tap);
   } else if (state === "play") {
@@ -1784,7 +2016,7 @@ function update() {
     if (pressed.p || back || pressed.enter || tap) state = "play";
   } else if (state === "dying") {
     updateBoss(); updateEnemies(); updateBullets(); updateParts();
-    if (stateT <= 0) { state = "over"; stateT = 0.6; }
+    if (stateT <= 0) { state = "over"; stateT = 0.6; bankCredits(false); runActive = false; }
   } else if (state === "bossdying") {
     updateParts();
     for (const s of shocks) s.life -= DT;
@@ -1807,11 +2039,7 @@ function update() {
     for (const s of shocks) s.life -= DT;
     shocks = shocks.filter(s => s.life > 0);
     if (stateT <= 0) {
-      if (back) state = "title";
-      else if (start) {
-        if (state === "over") { const tr = player.tier; score = 0; player = newPlayer(Math.max(1, player.pow - 1)); player.tier = tr; startStage(stageN); }
-        else startGame();
-      }
+      if (back || start) toLobby();
     }
   }
   for (const k in pressed) delete pressed[k];
@@ -2066,6 +2294,12 @@ function draw() {
 
   if (state === "title") {
     drawTitle(blinkOn);
+  } else if (state === "lobby") {
+    drawLobby();
+  } else if (state === "shop") {
+    drawShop();
+  } else if (state === "pilots") {
+    drawPilots();
   } else if (state === "map") {
     drawMap();
   } else {
@@ -2078,10 +2312,10 @@ function draw() {
       overlay(0.75);
       shadowText("GAME OVER", W / 2, 120, "#ff3d5a", 3, "center");
       text("STAGE " + stageN + "  SCORE " + score, W / 2, 150, "#ece6f6", 1, "center");
-      text("CONTINUE: POWER -1, SCORE RESET", W / 2, 162, "#9087a3", 1, "center");
+      text("+" + lastEarn + " CR EARNED", W / 2, 162, "#ffd166", 1, "center");
       if (stateT <= 0) {
-        if (blinkOn) text("ENTER OR TAP TO CONTINUE", W / 2, 200, "#5fd3ff", 1, "center");
-        text("ESC: TITLE", W / 2, 214, "#9087a3", 1, "center");
+        if (blinkOn) text("ENTER: RETURN TO HANGAR", W / 2, 200, "#5fd3ff", 1, "center");
+        text("CREDITS " + save.cr, W / 2, 214, "#9087a3", 1, "center");
       }
     } else if (state === "win") {
       overlay(0.55);
@@ -2090,8 +2324,8 @@ function draw() {
       text("SCORE " + score, W / 2, 156, "#ece6f6", 2, "center");
       text(newBest ? "NEW HI SCORE!" : "HI SCORE " + best, W / 2, 176, newBest ? "#7cffb2" : "#9087a3", 1, "center");
       if (stateT <= 0) {
-        if (blinkOn) text("ENTER OR TAP TO PLAY AGAIN", W / 2, 210, "#5fd3ff", 1, "center");
-        text("ESC: TITLE", W / 2, 224, "#9087a3", 1, "center");
+        if (blinkOn) text("ENTER: RETURN TO HANGAR", W / 2, 210, "#5fd3ff", 1, "center");
+        text("+" + lastEarn + " CR   CREDITS " + save.cr, W / 2, 224, "#ffd166", 1, "center");
       }
     }
   }
