@@ -4,201 +4,49 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Striker</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Do+Hyeon&display=swap">
 <style>
-/* Layout: arcade cabinet. The game screen takes the full viewport height; controls sit below it. Single dark look by choice. */
+/* Layout: the game owns the whole window. The 3:4 playfield is as tall as the viewport,
+   centered, and the space around it is part of the same space scene. Single dark look by choice. */
 :root {
-  --void: #0d0b14;
-  --panel: #18131f;
+  --void: #05040a;
+  --deep: #120c22;
   --line: #2c2338;
-  --ink: #ece6f6;
-  --muted: #9087a3;
-  --eye: #ff3d5a;
   --glow: #5fd3ff;
-  --font-display: "Silkscreen", ui-monospace, "Courier New", monospace;
-  --font-body: "Do Hyeon", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   color-scheme: dark;
 }
 html, body { height: 100%; }
 body {
   margin: 0;
-  background: var(--void);
-  color: var(--ink);
-  font-family: var(--font-body);
-  font-size: 17px;
-  line-height: 1.5;
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(0deg, rgba(0,0,0,0.18) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 50% 45%, var(--deep) 0%, #08060f 55%, var(--void) 100%);
+  background-color: var(--void);
+  display: grid;
+  place-items: center;
 }
-.wrap {
-  padding-inline: 16px;
-  padding-block: 10px 32px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-header {
-  width: 100%;
-  max-width: 720px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-h1 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 24px;
-  letter-spacing: 0.06em;
-  color: var(--ink);
-  text-shadow: 3px 3px 0 var(--eye);
-}
-header p { margin: 0; color: var(--muted); flex: 1; min-width: 0; }
-button {
-  font-family: var(--font-display);
-  font-size: 12px;
-  color: var(--ink);
-  background: var(--panel);
-  border: 2px solid var(--line);
-  border-bottom-width: 4px;
-  padding: 4px 10px;
-  cursor: pointer;
-}
-button:hover { border-color: var(--glow); }
-button:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
 .screen {
-  width: min(calc(100vw - 40px), calc((100vh - 76px) * 0.75));
-  width: min(calc(100vw - 40px), calc((100dvh - 76px) * 0.75));
-  min-width: min(100%, 240px);
-  border: 4px solid var(--line);
-  box-shadow: 0 0 0 4px var(--void), 0 0 0 6px var(--line);
-  background: #000;
-}
-.screen:fullscreen {
   width: min(100vw, 75vh);
-  border: 0;
-  box-shadow: none;
-  margin: auto;
+  width: min(100vw, 75dvh);
+  aspect-ratio: 3 / 4;
+  max-width: 100%;
+  background: #000;
+  box-shadow: 0 0 0 2px var(--line), 0 0 80px rgba(95, 211, 255, 0.12);
 }
-.screen:fullscreen::backdrop { background: #000; }
 canvas {
   display: block;
   width: 100%;
-  max-width: 100%;
-  aspect-ratio: 3 / 4;
+  height: 100%;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   touch-action: none;
   outline: none;
 }
-.arena {
-  width: 100%;
-  max-width: 1320px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 18px;
-  align-items: start;
-}
-.panel {
-  width: min(100%, 290px);
-  box-sizing: border-box;
-  background: var(--panel);
-  border: 2px solid var(--line);
-  padding: 12px;
-  display: grid;
-  gap: 10px;
-  max-height: calc(100dvh - 70px);
-  overflow-y: auto;
-}
-#shop { justify-self: end; }
-#stages { justify-self: start; }
-.ph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.ph h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 14px; letter-spacing: 0.1em; color: var(--glow); }
-.cr { font-family: var(--font-display); font-size: 12px; color: #ffd166; }
-.pcard { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px; border: 2px solid var(--line); background: var(--void); }
-.pcard.on { border-color: #7cffb2; }
-.pcard img { width: 64px; height: auto; image-rendering: pixelated; }
-.pinfo { display: grid; gap: 2px; min-width: 0; }
-.pinfo b { font-family: var(--font-display); font-weight: 400; font-size: 13px; color: var(--ink); }
-.pinfo span { font-size: 14px; color: var(--muted); }
-.pinfo .stats { font-size: 13px; }
-.pinfo button { justify-self: start; margin-top: 4px; font-family: var(--font-body); font-size: 15px; }
-.panel button:disabled { opacity: 0.45; cursor: default; border-color: var(--line); }
-.pnote { margin: 0; font-size: 14px; color: var(--muted); }
-.slist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.slist button { width: 100%; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; text-align: left; font-family: var(--font-display); font-size: 11px; padding: 6px 8px; }
-.slist em { font-style: normal; color: var(--glow); }
-.slist i { font-style: normal; font-family: var(--font-body); font-size: 14px; color: var(--muted); }
-.slist button.done i { color: #7cffb2; }
-.slist button.on { border-color: #ffd166; background: #2a2238; }
-.slist button.on span { color: #ffd166; }
-.go { width: 100%; padding: 10px; font-size: 13px; color: #12141a; background: #ffd166; border-color: #b5651d; }
-.go:hover { border-color: #ffffff; }
-.runline { margin: 0; font-size: 14px; color: #7cffb2; }
-@media (max-width: 980px) {
-  .arena { grid-template-columns: minmax(0, 1fr); justify-items: center; }
-  .arena .screen { order: -1; }
-  #shop, #stages { justify-self: center; width: 100%; max-width: 520px; max-height: none; }
-}
-.help {
-  width: 100%;
-  max-width: 520px;
-  box-sizing: border-box;
-  margin-top: 8px;
-  background: var(--panel);
-  border: 2px solid var(--line);
-  padding: 14px 16px;
-  display: grid;
-  gap: 8px;
-}
-.help h2 {
-  margin: 0 0 4px;
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 13px;
-  letter-spacing: 0.12em;
-  color: var(--glow);
-}
-.row { display: grid; grid-template-columns: 7.5em 1fr; gap: 10px; align-items: center; }
-.row > span:first-child { color: var(--muted); }
-kbd {
-  font-family: var(--font-display);
-  font-size: 12px;
-  color: var(--ink);
-  background: var(--void);
-  border: 2px solid var(--line);
-  border-bottom-width: 4px;
-  padding: 1px 6px;
-  margin-right: 4px;
-  white-space: nowrap;
-}
-.note { margin: 6px 0 0; color: var(--muted); font-size: 15px; }
-.note b { color: var(--eye); font-weight: 400; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
 </style>
 </head>
 <body>
-<main class="wrap">
-  <header>
-    <h1>STRIKER</h1>
-    <p>전투기 로봇의 공격을 피하고 격추하라</p>
-    <button id="fs" type="button">전체화면</button>
-  </header>
-  <div class="screen" id="screen"><canvas id="game" width="240" height="320" tabindex="0" aria-label="게임 화면"></canvas></div>
-  <section class="help">
-    <h2>CONTROLS</h2>
-    <div class="row"><span>이동</span><span><kbd>←↑↓→</kbd><kbd>WASD</kbd></span></div>
-    <div class="row"><span>정밀 이동</span><span><kbd>SHIFT</kbd> 느려지고 판정점이 보임</span></div>
-    <div class="row"><span>폭탄 (스테이지당 3)</span><span><kbd>C</kbd><kbd>B</kbd> 모바일은 세 손가락 탭</span></div>
-    <div class="row"><span>대시 (무적)</span><span><kbd>SPACE</kbd><kbd>X</kbd></span></div>
-    <div class="row"><span>공격</span><span>자동 발사</span></div>
-    <div class="row"><span>기타</span><span><kbd>P</kbd>일시정지 <kbd>M</kbd>소리 <kbd>F</kbd>전체화면</span></div>
-    <div class="row"><span>모바일</span><span>드래그로 이동, 두 번 탭하면 대시</span></div>
-    <p class="note">게임 화면을 옆으로 넘기면 왼쪽에 <b>파일럿 상점</b>, 오른쪽에 <b>보스</b> 화면이 나옵니다 (드래그, 스와이프, ←/→ 키). 오른쪽 페이지에서 ↑/↓로 보스(<b>STRIKER OMEGA</b> 또는 <b>AEGIS CORE</b>)를 고르고 출격합니다. 보스에게 피해를 줄 때마다 P(무기 강화)와 R(수리) 아이템이 떨어지니, 모아서 티어를 올리세요.</p>
-  </section>
-</main>
+<div class="screen" id="screen"><canvas id="game" width="240" height="320" tabindex="0" aria-label="STRIKER 게임 화면"></canvas></div>
 
 <script>
 (() => {
@@ -319,11 +167,10 @@ const screenEl = document.getElementById("screen");
 function toggleFullscreen() {
   try {
     if (document.fullscreenElement) document.exitFullscreen();
-    else screenEl.requestFullscreen?.().catch(() => {});
+    else document.documentElement.requestFullscreen?.().catch(() => {});
   } catch (e) {}
   cv.focus();
 }
-document.getElementById("fs").addEventListener("click", toggleFullscreen);
 
 /* ---------- input ---------- */
 const keys = {}, pressed = {};
