@@ -1658,9 +1658,12 @@ function updateTitleLobby() {
     let act = ok;
     if (tap !== undefined) { const i = Math.floor((ty - 42) / 74); if (i >= 0 && i < n && (ty - 42) % 74 < 68) { if (i === lobby.shopSel) act = true; else { lobby.shopSel = i; sfx(330, 0.05); } } }
     if (act) buyOrEquip(PILOTS[lobby.shopSel].id);
-  } else if (up || down || (tap !== undefined && ty > 30 && ty < 170)) {
+  } else if (up || down) {
     lobby.boss = (lobby.boss + (up ? BOSS_LIST.length - 1 : 1)) % BOSS_LIST.length; sfx(330, 0.05);
-  } else if (ok || (tap !== undefined && ty > 200 && ty < 290)) {
+  } else if (tap !== undefined && ty > 26 && ty < 158) {
+    const i = tx < W / 2 ? 0 : 1;
+    if (i === lobby.boss) sortie(); else { lobby.boss = i; sfx(330, 0.05); }
+  } else if (ok || (tap !== undefined && ty > 214 && ty < 250)) {
     sortie();
   }
 }
@@ -1744,23 +1747,36 @@ function drawShopPage() {
   text("EARN CR: SCORE/10 + CLEAR BONUS", W / 2, 280, "#5a5268", 1, "center");
 }
 function drawBossPage() {
-  r(0, 0, W, H, "rgba(10,8,16,0.7)");
-  shadowText("TARGET", W / 2, 8, "#ff3d5a", 2, "center");
-  const t = performance.now() / 1000, bd = BOSS_LIST[lobby.boss], rec = save.records[bd.kind] || {};
-  ctx.globalAlpha = 0.25; r(0, 30, W, 1, "#ff3d5a"); r(0, 168, W, 1, "#ff3d5a"); ctx.globalAlpha = 1;
-  drawBossPreview(bd.kind, W / 2, 100 + Math.sin(t * 2) * 3, t);
-  const pulse = Math.floor(t * 2.5) % 2 ? "#5fd3ff" : "#9087a3";
-  text("^", W / 2, 34, pulse, 1, "center");
-  text("UP/DOWN OR TAP: CHANGE BOSS", W / 2, 158, "#5a5268", 1, "center");
-  shadowText(bd.name, W / 2, 172, "#ece6f6", 2, "center");
-  text((lobby.boss + 1) + "/" + BOSS_LIST.length, W - 8, 8, "#9087a3", 1, "right");
-  text(bd.line1, W / 2, 190, "#9087a3", 1, "center");
-  text(bd.line2, W / 2, 201, "#9087a3", 1, "center");
-  text("CLEARS " + (rec.wins || 0) + "   BEST TIME " + (rec.best ? fmt(rec.best) : "--:--.-"), W / 2, 216, "#7cffb2", 1, "center");
-  r(40, 234, W - 80, 24, "#b5651d"); r(40, 234, W - 80, 22, Math.floor(t * 3) % 2 ? "#ffd166" : "#ffe08a");
-  text("SORTIE", W / 2, 242, "#12141a", 1, "center");
-  text("PILOT " + pilot().name, W / 2, 268, "#9087a3", 1, "center");
-  text("BEAT IT TO DROP P AND R ITEMS", W / 2, 280, "#5a5268", 1, "center");
+  r(0, 0, W, H, "rgba(10,8,16,0.75)");
+  shadowText("SELECT BOSS", W / 2, 8, "#ff3d5a", 2, "center");
+  const t = performance.now() / 1000, blink = Math.floor(t * 3) % 2;
+  // one card per boss
+  BOSS_LIST.forEach((bd, i) => {
+    const on = i === lobby.boss, x = 10 + i * 114, y = 30 - (on ? 3 : 0), w = 106, h = 124;
+    const rec = save.records[bd.kind] || {};
+    r(x - 1, y - 1, w + 2, h + 2, on ? (blink ? "#ffd166" : "#ffe08a") : "#2c2338");
+    r(x, y, w, h, on ? "#211a2e" : "#120f19");
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, w, h - 30); ctx.clip();
+    ctx.translate(x + w / 2, y + 50); ctx.scale(0.5, 0.5);
+    if (!on) ctx.globalAlpha = 0.45;
+    drawBossPreview(bd.kind, 0, Math.sin(t * 2 + i) * 4, t);
+    ctx.restore();
+    r(x, y + h - 30, w, 1, on ? "#ffd166" : "#2c2338");
+    text(bd.name, x + w / 2, y + h - 24, on ? "#ffd166" : "#9087a3", 1, "center");
+    text(rec.wins ? "CLEAR x" + rec.wins : "NEW", x + w / 2, y + h - 12, rec.wins ? "#7cffb2" : "#5fd3ff", 1, "center");
+    if (on) text("V", x + w / 2, y - 9 + (blink ? 1 : 0), "#ffd166", 1, "center");
+  });
+  // details of the selected boss
+  const bd = BOSS_LIST[lobby.boss], rec = save.records[bd.kind] || {};
+  shadowText(bd.name, W / 2, 162, "#ece6f6", 2, "center");
+  text(bd.line1, W / 2, 180, "#9087a3", 1, "center");
+  text(bd.line2, W / 2, 191, "#9087a3", 1, "center");
+  text("CLEARS " + (rec.wins || 0) + "   BEST TIME " + (rec.best ? fmt(rec.best) : "--:--.-"), W / 2, 204, "#7cffb2", 1, "center");
+  r(40, 222, W - 80, 24, "#b5651d"); r(40, 222, W - 80, 22, blink ? "#ffd166" : "#ffe08a");
+  text("SORTIE", W / 2, 230, "#12141a", 1, "center");
+  text("PILOT " + pilot().name, W / 2, 256, "#9087a3", 1, "center");
+  text("UP/DOWN OR TAP CARD: SELECT", W / 2, 268, "#5a5268", 1, "center");
 }
 function drawTitleLobby(blinkOn) {
   drawBG(1);
@@ -1772,7 +1788,7 @@ function drawTitleLobby(blinkOn) {
   }
   // page dots and edge hints stay put
   for (let i = -1; i <= 1; i++) r(W / 2 - 2 + i * 10, 308, 5, 5, i === lobby.page ? "#ffd166" : "#3a3448");
-  const hintL = ["", "< PILOTS", "< TITLE"][lobby.page + 1], hintR = ["TITLE >", "BOSS >", ""][lobby.page + 1];
+  const hintL = ["", "< PILOTS", "< TITLE"][lobby.page + 1], hintR = ["TITLE >", "SELECT BOSS >", ""][lobby.page + 1];
   const pulse = Math.floor(lobby.t * 2.5) % 2 ? "#5fd3ff" : "#9087a3";
   if (hintL) text(hintL, 5, 300, pulse);
   if (hintR) text(hintR, W - 5, 300, pulse, 1, "right");
