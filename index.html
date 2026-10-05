@@ -347,6 +347,10 @@ cv.addEventListener("pointerdown", e => {
   touch.ids.add(e.pointerId);
   try { cv.setPointerCapture(e.pointerId); } catch (err) {}
   if (state !== "play") { touch.sx = e.clientX; touch.sy = e.clientY; touch.down = true; return; }
+  {
+    const rect = cv.getBoundingClientRect(), gx = (e.clientX - rect.left) / rect.width * W, gy = (e.clientY - rect.top) / rect.height * H;
+    if (gx < 22 && gy > 30 && gy < 50) { state = "pause"; pauseSel = 0; touch.ids.delete(e.pointerId); return; }
+  }
   const now = performance.now();
   if (touch.ids.size > 1 || now - touch.lastTap < 260) touch.dash = true;
   if (touch.ids.size >= 3) { touch.dash = false; useBomb(); }
@@ -2066,7 +2070,7 @@ function drawBossPreview(kind, x, y, t) {
 /* ---------- state ---------- */
 let state = "title", stateT = 0;
 let player, boss, bullets = [], pbullets = [], parts = [], warns = [], shocks = [], banner;
-let shake = 0, time = 0, newBest = false;
+let shake = 0, time = 0, newBest = false, pauseSel = 0;
 let best = 0;
 try { best = parseInt(localStorage.getItem("striker-hiscore"), 10) || 0; } catch (e) { best = 0; }
 
@@ -2368,7 +2372,7 @@ function update() {
   } else if (state === "map") {
     updateMap(pressed.tap);
   } else if (state === "play") {
-    if (pressed.p || back) { state = "pause"; }
+    if (pressed.p || back) { state = "pause"; pauseSel = 0; }
     else {
       time += DT;
       if (banner.t > 0) banner.t -= DT;
@@ -2376,7 +2380,18 @@ function update() {
       updatePlayer(); updateBoss(); updateEnemies(); updateBullets(); updateParts();
     }
   } else if (state === "pause") {
-    if (pressed.p || back || pressed.enter || tap) state = "play";
+    if (pressed.arrowup || pressed.arrowdown || pressed.w || pressed.s) { pauseSel ^= 1; sfx(330, 0.05); }
+    let pick = pressed.enter || pressed[" "] || pressed.z ? pauseSel : -1;
+    if (tap) { const ty = pressed.tapY * H; if (ty > 132 && ty < 154) pick = 0; else if (ty > 160 && ty < 182) pick = 1; }
+    if (pressed.p || back) pick = 0;
+    if (pressed.q) pick = 1;
+    if (pick === 0) state = "play";
+    else if (pick === 1) {
+      // leave the fight: keep credits earned so far, end the run
+      bankCredits(false); saveBest(); runActive = false;
+      bullets = []; pbullets = []; warns = []; intro = null;
+      toLobby();
+    }
   } else if (state === "dying") {
     updateBoss(); updateEnemies(); updateBullets(); updateParts();
     if (stateT <= 0) { state = "over"; stateT = 0.6; bankCredits(false); runActive = false; }
@@ -2491,6 +2506,9 @@ function drawHUD() {
     if (stageN === 10) sprite(ICON, ipal, bx + bw + 3, 1);
     text(String(score).padStart(7, "0"), W - 5, 3, "#ece6f6", 1, "right");
   }
+  // pause button (tap to open the pause menu)
+  r(3, 33, 14, 14, "rgba(8,6,14,0.7)"); r(3, 33, 14, 1, "#3a3448"); r(3, 46, 14, 1, "#3a3448");
+  r(7, 36, 2, 8, "#9087a3"); r(11, 36, 2, 8, "#9087a3");
   // player bar: ship icon + segmented hull bar, same style as the boss bar
   sprite(shipRows(false), PCOL, 1, H - 15);
   const cw = 11;
@@ -2687,9 +2705,15 @@ function draw() {
   } else {
     drawPlay();
     if (state === "pause") {
-      overlay(0.7);
-      shadowText("PAUSED", W / 2, H / 2 - 12, "#ece6f6", 3, "center");
-      text("P TO RESUME", W / 2, H / 2 + 12, "#9087a3", 1, "center");
+      overlay(0.9);
+      shadowText("PAUSED", W / 2, 100, "#ece6f6", 3, "center");
+      ["RESUME", "QUIT TO LOBBY"].forEach((label, i) => {
+        const y = 134 + i * 28, on = pauseSel === i;
+        r(60, y, W - 120, 20, on ? "#ffd166" : "#2c2338"); r(61, y + 1, W - 122, 18, on ? "#2a2238" : "#15111c");
+        text(label, W / 2, y + 7, on ? "#ffd166" : "#ece6f6", 1, "center");
+      });
+      text("UP/DOWN + ENTER   P RESUME   Q QUIT", W / 2, 196, "#9087a3", 1, "center");
+      text("QUITTING ENDS THE RUN (CREDITS KEPT)", W / 2, 208, "#5a5268", 1, "center");
     } else if (state === "over") {
       overlay(0.75);
       shadowText("GAME OVER", W / 2, 120, "#ff3d5a", 3, "center");
