@@ -700,9 +700,98 @@ function* sSweep() {
   boss.spool = 0; boss.face = "idle";
   yield 0.6;
 }
+/* --- carpet bombing: bombs fan out from the bay across the screen, one gap --- */
+function* sCarpet() {
+  boss.tx = W / 2;
+  yield 0.5;
+  boss.bay = 1; sfx(400, 0.1, "square", 0.03, 200);
+  const n = 7 + boss.lv, skip = 1 + Math.floor(Math.random() * (n - 2)), gr = 150;
+  for (let i = 0; i < n; i++) {
+    if (i === skip) continue;
+    const x = 16 + i * (W - 32) / (n - 1), boomY = clamp(player.y + rand(-20, 10), boss.y + 70, H - 14);
+    const tf = Math.sqrt(2 * (boomY - boss.y) / gr), vx = (x - boss.x) / tf;
+    warns.push({ type: "mark", x, y: boomY, t: tf, max: tf });
+    fire(boss.x, boss.y, Math.atan2(1, vx), Math.hypot(vx, 1), { kind: "bomb", r: 3, grav: gr, boomY, boomN: 6, c: "#3a404d" });
+    sfx(220, 0.06, "square", 0.02, 110);
+    yield 0.08;
+  }
+  boss.bay = 0;
+  yield 1.2;
+}
+/* --- micro-missile swarm: a fan of short-homing missiles from the pylons --- */
+function* sSwarm() {
+  const n = 8 + boss.lv * 2;
+  for (let i = 0; i < n; i++) {
+    const side = i % 2 ? 1 : -1, pl = PYLONS[side < 0 ? (i % 4 < 2 ? 0 : 1) : (i % 4 < 2 ? 2 : 3)], q = hull(pl.sx + 1, pl.sy + 3);
+    fire(q.x, q.y, boss.ang + side * (0.4 + rand(0, 0.9)), 70, { kind: "missile", c: "#ffd166", home: 2.5, homeT: 0.7, accel: 120, max: 110, ignite: 0.15 });
+    smoke(q.x, q.y, 2); sfx(300, 0.05, "square", 0.02, 500);
+    yield 0.07;
+  }
+  yield 1.0;
+}
+/* --- barrel roll: a full spin while the nose gun fires, drawing a spiral --- */
+function* sRoll() {
+  boss.face = "manual"; boss.lock = true;
+  sfx(300, 1.6, "sawtooth", 0.03, 900);
+  const dir = Math.random() < 0.5 ? 1 : -1, start = boss.ang;
+  let f = 0;
+  for (let t = 0; t < 1.6; t += DT) {
+    boss.ang = boss.tAng = start + dir * TAU * (t / 1.6);
+    f += DT;
+    if (f >= 0.06) {
+      f = 0;
+      const m = hull(24, 40);
+      fire(m.x, m.y, boss.ang, 80, { kind: "tracer" });
+      if (boss.lv >= 3) { const tail = hull(24, 0); fire(tail.x, tail.y, boss.ang + Math.PI, 70, { kind: "tracer" }); }
+      boss.gunFlash[0] = boss.gunFlash[1] = 0.04;
+    }
+    yield 0;
+  }
+  boss.ang = boss.tAng = DOWN; boss.lock = false; boss.face = "idle";
+  yield 0.5;
+}
+/* --- afterburner curtain: nose up, the engines spray fire downward --- */
+function* sExhaust() {
+  boss.face = "manual"; boss.turn = 4; boss.tAng = -DOWN;
+  sfx(200, 0.6, "sawtooth", 0.04, 90);
+  yield 0.6;
+  boss.tBurn = 4; noise(1.2, 0.08);
+  let f = 0;
+  for (let t = 0; t < 1.8; t += DT) {
+    boss.tx = W / 2 + Math.sin(t * 2) * 60;
+    f += DT;
+    if (f >= 0.05) { f = 0; const e = hull(rand(20, 28), -4); fire(e.x, e.y, DOWN + rand(-0.35, 0.35), rand(50, 85), { c: Math.random() < 0.5 ? "#ff8a3d" : "#ffd166" }); }
+    yield 0;
+  }
+  boss.tBurn = 1; boss.face = "idle";
+  yield 0.6;
+}
+/* --- zigzag assault: hard turns across the top, a 3-shot burst at each corner --- */
+function* sZigzag() {
+  boss.lock = true; boss.face = "manual"; boss.turn = 6;
+  for (let k = 0; k < 3 + boss.lv; k++) {
+    const tx = k % 2 ? 40 : W - 40, ty = rand(60, 110);
+    boss.tAng = Math.atan2(ty - boss.y, tx - boss.x);
+    while (Math.hypot(tx - boss.x, ty - boss.y) > 6) {
+      const a = Math.atan2(ty - boss.y, tx - boss.x);
+      boss.x += Math.cos(a) * 260 * DT; boss.y += Math.sin(a) * 260 * DT;
+      engineTrail(1);
+      yield 0;
+    }
+    boss.tAng = angTo(boss.x, boss.y);
+    yield 0.25;
+    const m = hull(24, 40), a = angTo(m.x, m.y);
+    for (let i = -1; i <= 1; i++) fire(m.x, m.y, a + i * 0.18, 110, { kind: "tracer" });
+    boss.gunFlash[0] = boss.gunFlash[1] = 0.06; sfx(260, 0.06, "square", 0.03);
+    yield 0.2;
+  }
+  boss.lock = false; boss.face = "idle";
+  yield 0.5;
+}
 function poolFor() {
   if (boss.kind === "aegis") return aegisPool();
-  const p = [sGatling, sMissiles, sFlak, sSweep];
+  const p = [sGatling, sMissiles, sFlak, sSweep, sCarpet, sSwarm, sRoll];
+  if (boss.phase >= 2) p.push(sExhaust, sZigzag);
   if (stageN >= 2) p.push(sRam);
   if (stageN >= 4) p.push(sBomb);
   if (stageN >= 6) p.push(sDive);
@@ -1124,7 +1213,7 @@ function makeBoss(kind) {
     aim: 0, aimT: 0, spool: 0, gunFlash: [0, 0], ammo: [1, 1, 1, 1], reload: 0, bay: 0
   };
   if (ae) {
-    b.face = "manual"; b.spin = 0.6; b.charge = 0; b.beams = [];
+    b.orad = 44; b.face = "manual"; b.spin = 0.6; b.charge = 0; b.beams = [];
     b.pods = [0, 1, 2, 3].map(i => ({ a: i * TAU / 4, x: W / 2, y: -80, aim: DOWN, mode: "orbit", track: true, flash: 0, warnT: 0 }));
   }
   return b;
@@ -1851,8 +1940,8 @@ function makeIconCanvas(pal) {
    spinning ring and four turret pods that orbit it.
    ========================================================= */
 const BOSS_LIST = [
-  { kind: "striker", name: "STRIKER OMEGA", line1: "JET FIGHTER ROBOT  HP 1600  3 PHASES", line2: "GATLING MISSILES FLAK SWEEP RAM DIVE" },
-  { kind: "aegis", name: "AEGIS CORE", line1: "ORBITAL FORTRESS  HP 1900  3 PHASES", line2: "VOLLEY SPIRAL RINGS WALL SEEKER LASER" }
+  { kind: "striker", name: "STRIKER OMEGA", line1: "JET FIGHTER ROBOT  HP 1600  3 PHASES", line2: "12 ATTACKS: GATLING FLAK SWARM ROLL..." },
+  { kind: "aegis", name: "AEGIS CORE", line1: "ORBITAL FORTRESS  HP 1900  3 PHASES", line2: "12 ATTACKS: FLOWER BEAM WALL IMPLODE..." }
 ];
 const AEGIS_ICON = ["....ooo....", "o..oaaao..o", "ao.oacao.oa", "o.oaacaao.o", "..oacccao..", "o.oaacaao.o", "ao.oacao.oa", "o..oaaao..o", "....ooo...."];
 const POD = ["...ooo...", "..oaaao..", ".oahhhao.", "oahhchhao", "oahcccaho", "oahhchhao", ".oaaaaao.", "..oarao..", "...oro..."];
@@ -1920,14 +2009,14 @@ function drawAegisExtras() {
 }
 
 function aegisReset() {
-  boss.beams = []; boss.spin = 0.6; boss.charge = 0;
+  boss.beams = []; boss.spin = 0.6; boss.charge = 0; boss.orad = 44;
   for (const p of boss.pods) { p.mode = "orbit"; p.track = true; p.warnT = 0; }
 }
 function aegisUpdate() {
   for (const p of boss.pods) {
     if (p.mode === "orbit") {
       p.a += boss.spin * DT;
-      const tx = boss.x + Math.cos(p.a) * 44, ty = boss.y + Math.sin(p.a) * 34;
+      const tx = boss.x + Math.cos(p.a) * boss.orad, ty = boss.y + Math.sin(p.a) * boss.orad * 0.77;
       p.x += (tx - p.x) * Math.min(1, DT * 10); p.y += (ty - p.y) * Math.min(1, DT * 10);
     }
     if (p.track) p.aim = turnToward(p.aim, angTo(p.x, p.y), 5 * DT);
@@ -1936,7 +2025,7 @@ function aegisUpdate() {
   }
   for (const b of boss.beams) {
     const p = b.pod;
-    b.a = Math.atan2(p.y - boss.y, p.x - boss.x);
+    b.a = b.fixed != null ? b.fixed : Math.atan2(p.y - boss.y, p.x - boss.x);
     if (b.warn > 0) { b.warn -= DT; if (b.warn <= 0) { noise(0.4, 0.06); shake = Math.max(shake, 4); } continue; }
     b.on -= DT;
     const ca = Math.cos(b.a), sa = Math.sin(b.a), px = player.x - p.x, py = player.y - p.y;
@@ -2051,9 +2140,78 @@ function* aSeekers() {
   boss.charge = 0;
   yield 1.4;
 }
+/* --- flower: curving petals of bullets --- */
+function* aFlower() {
+  boss.charge = 1;
+  yield 0.4;
+  const arms = 6 + boss.lv;
+  for (let t = 0; t < 2; t += 0.12) {
+    for (let i = 0; i < arms; i++) fire(boss.x, boss.y, i * TAU / arms + t * 0.3, 60, { c: "#ff5dc8", curve: (i % 2 ? 1 : -1) * 0.9 });
+    sfx(600, 0.03, "triangle", 0.015);
+    yield 0.12;
+  }
+  boss.charge = 0;
+  yield 0.6;
+}
+/* --- corners: pods fly to the four corners and take turns firing --- */
+function* aCorners() {
+  const spots = [[24, 40], [W - 24, 40], [24, 170], [W - 24, 170]];
+  boss.pods.forEach((p, i) => { p.mode = "free"; p.track = true; p.tx = spots[i][0]; p.ty = spots[i][1]; });
+  for (let t = 0; t < 0.8; t += DT) { for (const p of boss.pods) { p.x += (p.tx - p.x) * Math.min(1, DT * 6); p.y += (p.ty - p.y) * Math.min(1, DT * 6); } yield 0; }
+  for (let k = 0; k < 4 + boss.lv; k++) {
+    const p = boss.pods[k % 4], a = angTo(p.x, p.y);
+    p.aim = a;
+    for (let i = -1; i <= 1; i++) podFire(p, a + i * 0.15, 95, { c: "#ffd166" });
+    sfx(500, 0.05, "square", 0.025);
+    yield 0.45;
+  }
+  aegisReset();
+  yield 0.5;
+}
+/* --- lens beam: the eye tracks you with a guide line, locks, then fires --- */
+function* aLensBeam() {
+  boss.charge = 1;
+  const b = { pod: boss, warn: 1.1, on: 0.6, w: 12, fixed: angTo(boss.x, boss.y), a: 0 };
+  boss.beams.push(b);
+  sfx(140, 1.1, "sawtooth", 0.04, 600);
+  for (let t = 0; t < 0.8; t += DT) { b.fixed = turnToward(b.fixed, angTo(boss.x, boss.y), 2.5 * DT); yield 0; }
+  yield 1.0;
+  boss.charge = 0;
+  yield 0.5;
+}
+/* --- expand: the pod orbit swells across the arena while they fire --- */
+function* aExpand() {
+  boss.spin = 1.0;
+  for (let t = 0; t < 0.8; t += DT) { boss.orad = 44 + 66 * (t / 0.8); yield 0; }
+  let f = 0;
+  for (let t = 0; t < 2.4; t += DT) {
+    f += DT;
+    if (f >= 0.5) { f = 0; for (const p of boss.pods) { const a = angTo(p.x, p.y); p.aim = a; podFire(p, a, 80, { c: "#7fd8d0" }); } sfx(500, 0.04, "square", 0.02); }
+    yield 0;
+  }
+  for (let t = 0; t < 0.6; t += DT) { boss.orad = 110 - 66 * (t / 0.6); yield 0; }
+  aegisReset();
+  yield 0.4;
+}
+/* --- implode: a gapped ring closes in from the edges toward the core --- */
+function* aImplode() {
+  boss.charge = 1; sfx(100, 1, "sawtooth", 0.05, 500);
+  for (let k = 0; k < 1 + Math.floor(boss.lv / 2); k++) {
+    const n = 28, gap = Math.floor(rand(0, n));
+    for (let i = 0; i < n; i++) {
+      if ((i - gap + n) % n < 4) continue;
+      const a = i * TAU / n, sx = boss.x + Math.cos(a) * 115, sy = boss.y + Math.sin(a) * 170;
+      fire(sx, sy, Math.atan2(boss.y - sy, boss.x - sx), 55, { c: "#b48cff" });
+    }
+    shock(boss.x, boss.y, 60, "#b48cff");
+    yield 1.2;
+  }
+  boss.charge = 0;
+  yield 0.8;
+}
 function aegisPool() {
-  const p = [aVolley, aSpiral, aRing, aWall, aSeekers];
-  if (boss.phase >= 2) p.push(aLaser, aRam);
+  const p = [aVolley, aSpiral, aRing, aWall, aSeekers, aFlower, aCorners, aLensBeam];
+  if (boss.phase >= 2) p.push(aLaser, aRam, aExpand, aImplode);
   if (boss.phase === 3) p.push(() => parallel(aVolley(), aRing()), () => parallel(aRam(), aRing()));
   return p;
 }
@@ -2324,6 +2482,7 @@ function updateBullets() {
       }
       if (b.life > 3.2) { b.dead = true; explode(b.x, b.y, 7); continue; }
     }
+    if (b.curve) { const c = Math.cos(b.curve * DT), s = Math.sin(b.curve * DT), vx = b.vx * c - b.vy * s; b.vy = b.vx * s + b.vy * c; b.vx = vx; }
     b.vy += b.grav * DT;
     b.x += b.vx * DT; b.y += b.vy * DT;
     if (b.kind === "bomb" && (b.y >= b.boomY || (b.fuse && b.life >= b.fuse))) { b.dead = true; explodeBomb(b); continue; }
