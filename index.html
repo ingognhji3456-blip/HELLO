@@ -196,7 +196,7 @@ kbd {
     <div class="row"><span>공격</span><span>자동 발사</span></div>
     <div class="row"><span>기타</span><span><kbd>P</kbd>일시정지 <kbd>M</kbd>소리 <kbd>F</kbd>전체화면</span></div>
     <div class="row"><span>모바일</span><span>드래그로 이동, 두 번 탭하면 대시</span></div>
-    <p class="note">게임 화면을 옆으로 넘기면 왼쪽에 <b>파일럿 상점</b>, 오른쪽에 <b>보스</b> 화면이 나옵니다 (드래그, 스와이프, ←/→ 키). 출격하면 바로 최종 보스 <b>STRIKER OMEGA</b>와 싸웁니다. 보스에게 피해를 줄 때마다 P(무기 강화)와 R(수리) 아이템이 떨어지니, 모아서 티어를 올리세요.</p>
+    <p class="note">게임 화면을 옆으로 넘기면 왼쪽에 <b>파일럿 상점</b>, 오른쪽에 <b>보스</b> 화면이 나옵니다 (드래그, 스와이프, ←/→ 키). 오른쪽 페이지에서 ↑/↓로 보스(<b>STRIKER OMEGA</b> 또는 <b>AEGIS CORE</b>)를 고르고 출격합니다. 보스에게 피해를 줄 때마다 P(무기 강화)와 R(수리) 아이템이 떨어지니, 모아서 티어를 올리세요.</p>
   </section>
 </main>
 
@@ -440,6 +440,7 @@ function hull(sx, sy) {
   return { x: boss.x + lx * c - ly * s, y: boss.y + lx * s + ly * c };
 }
 function engineTrail(n = 1, c1 = "#ff8a3d", c2 = "#ffd166") {
+  if (boss.kind === "aegis") return;
   for (const ex of [21.5, 26.5]) {
     for (let i = 0; i < n; i++) {
       const p = hull(ex, -2 - boss.burn * 2);
@@ -656,6 +657,7 @@ function* sDive() {
 }
 
 function poolFor() {
+  if (boss.kind === "aegis") return aegisPool();
   const p = [sGatling, sMissiles];
   if (stageN >= 2) p.push(sRam);
   if (stageN >= 4) p.push(sBomb);
@@ -759,7 +761,7 @@ function paintStriker(o) {
 function drawBossAt(x, y, ang, o) {
   bctx.clearRect(0, 0, 80, 80);
   g = bctx;
-  paintStriker(o);
+  if (o.kind === "aegis") paintAegis(o); else paintStriker(o);
   g = ctx;
   ctx.save();
   let jx = 0, jy = 0;
@@ -1033,8 +1035,9 @@ function* stageScript() {
   cleared.add(stageN);
   bankCredits(true);
   if (stageN >= 10) {
-    if (!save.bestTime || time < save.bestTime) save.bestTime = time;
-    save.wins = (save.wins || 0) + 1; persist();
+    const rec = save.records[boss.kind] || (save.records[boss.kind] = { best: 0, wins: 0 });
+    if (!rec.best || time < rec.best) rec.best = time;
+    rec.wins++; persist();
     state = "win"; stateT = 1; saveBest(); runActive = false; return;
   }
   openMap(true);
@@ -1062,24 +1065,29 @@ function* bossIntro() {
   boss.runner = runner(bossBrain());
 }
 
-function makeBoss() {
+function makeBoss(kind) {
   // scale to the player's firepower so a maxed ship still needs about a minute
   const T = player.tier, shots = [1, 2, 3, 6, 8][player.pow - 1];
   const dps = [0, 1, 2, 3, 4, 6][T] * shots / [0, 0.09, 0.08, 0.08, 0.075, 0.07][T] * player.dmgMul;
-  const hp = 2500;
+  const ae = kind === "aegis", hp = ae ? 3000 : 2500;
   const p = BOSS_PALS[0];
-  return {
-    name: "STRIKER OMEGA", pal: { steel: p[0], dark: p[1], acc: p[2] },
+  const b = {
+    kind: ae ? "aegis" : "striker", name: ae ? "AEGIS CORE" : "STRIKER OMEGA", pal: { steel: p[0], dark: p[1], acc: p[2] },
     x: W / 2, y: -80, tx: W / 2, ty: 70, hp, maxHp: hp, flash: 0, phase: 1, lv: 2,
     maxPhase: 3, hidden: true, dead: false, dying: 0, hpShown: null,
     inv: 0, lock: true, t: 0, rattle: 0, runner: null, hitSfx: 0,
     ang: DOWN, tAng: DOWN, turn: 3, face: "idle", burn: 1, tBurn: 1,
     aim: 0, aimT: 0, spool: 0, gunFlash: [0, 0], ammo: [1, 1, 1, 1], reload: 0, bay: 0
   };
+  if (ae) {
+    b.face = "manual"; b.spin = 0.6; b.charge = 0; b.beams = [];
+    b.pods = [0, 1, 2, 3].map(i => ({ a: i * TAU / 4, x: W / 2, y: -80, aim: DOWN, mode: "orbit", track: true, flash: 0, warnT: 0 }));
+  }
+  return b;
 }
 function startStage(n) {
   stageN = n;
-  boss = makeBoss();
+  boss = makeBoss(BOSS_LIST[lobby.boss].kind);
   bullets = []; pbullets = []; parts = []; warns = []; shocks = []; enemies = []; items = []; texts = []; booms = [];
   player.x = W / 2; player.y = H - 40; player.inv = 1; player.dead = false; player.bombs = 3 + lv("bomb");
   player.shield = Math.max(player.shield, lv("shield"));
@@ -1580,6 +1588,8 @@ const PILOTS = [
 let save = { pilot: "vanguard", cleared: [], cr: 0, pilots: ["vanguard"] };
 try { Object.assign(save, JSON.parse(localStorage.getItem("striker-save") || "{}")); } catch (e) {}
 cleared = new Set(save.cleared || []);
+if (!save.records) save.records = {};
+if (save.bestTime && !save.records.striker) save.records.striker = { best: save.bestTime, wins: save.wins || 0 };
 function persist() {
   save.cleared = [...cleared];
   try { localStorage.setItem("striker-save", JSON.stringify(save)); } catch (e) {}
@@ -1588,7 +1598,7 @@ const lv = () => 0;
 const pilot = () => PILOTS.find(p => p.id === save.pilot) || PILOTS[0];
 const isOpen = p => save.pilots.includes(p.id);
 let runActive = false, stageScore0 = 0, lastEarn = 0;
-const lobby = { t: 0, page: 0, pageX: 0, shopSel: 0, pilotSel: 0, stageSel: 99, msg: "", msgT: 0, slide: 0 };
+const lobby = { t: 0, boss: 0, page: 0, pageX: 0, shopSel: 0, pilotSel: 0, stageSel: 99, msg: "", msgT: 0, slide: 0 };
 
 function shipRows(t2) {
   const rows = pilot().rows;
@@ -1648,6 +1658,8 @@ function updateTitleLobby() {
     let act = ok;
     if (tap !== undefined) { const i = Math.floor((ty - 42) / 74); if (i >= 0 && i < n && (ty - 42) % 74 < 68) { if (i === lobby.shopSel) act = true; else { lobby.shopSel = i; sfx(330, 0.05); } } }
     if (act) buyOrEquip(PILOTS[lobby.shopSel].id);
+  } else if (up || down || (tap !== undefined && ty > 30 && ty < 170)) {
+    lobby.boss = (lobby.boss + (up ? BOSS_LIST.length - 1 : 1)) % BOSS_LIST.length; sfx(330, 0.05);
   } else if (ok || (tap !== undefined && ty > 200 && ty < 290)) {
     sortie();
   }
@@ -1734,13 +1746,17 @@ function drawShopPage() {
 function drawBossPage() {
   r(0, 0, W, H, "rgba(10,8,16,0.7)");
   shadowText("TARGET", W / 2, 8, "#ff3d5a", 2, "center");
-  const t = performance.now() / 1000;
+  const t = performance.now() / 1000, bd = BOSS_LIST[lobby.boss], rec = save.records[bd.kind] || {};
   ctx.globalAlpha = 0.25; r(0, 30, W, 1, "#ff3d5a"); r(0, 168, W, 1, "#ff3d5a"); ctx.globalAlpha = 1;
-  drawBossAt(W / 2, 100 + Math.sin(t * 2) * 3, DOWN, { t, burn: 1.8, spool: 0, gunFlash: titleGuns, ammo: [1, 1, 1, 1], reload: 0, bay: 0, phase: 1, pal: { steel: "#4a3038", dark: "#1a1014", acc: "#ff3d5a" } });
-  shadowText("STRIKER OMEGA", W / 2, 174, "#ece6f6", 2, "center");
-  text("JET FIGHTER ROBOT  HP 2500  3 PHASES", W / 2, 192, "#9087a3", 1, "center");
-  text("GATLING  MISSILES  RAM  BOMBS  DIVE", W / 2, 203, "#9087a3", 1, "center");
-  text("CLEARS " + (save.wins || 0) + "   BEST TIME " + (save.bestTime ? fmt(save.bestTime) : "--:--.-"), W / 2, 216, "#7cffb2", 1, "center");
+  drawBossPreview(bd.kind, W / 2, 100 + Math.sin(t * 2) * 3, t);
+  const pulse = Math.floor(t * 2.5) % 2 ? "#5fd3ff" : "#9087a3";
+  text("^", W / 2, 34, pulse, 1, "center");
+  text("UP/DOWN OR TAP: CHANGE BOSS", W / 2, 158, "#5a5268", 1, "center");
+  shadowText(bd.name, W / 2, 172, "#ece6f6", 2, "center");
+  text((lobby.boss + 1) + "/" + BOSS_LIST.length, W - 8, 8, "#9087a3", 1, "right");
+  text(bd.line1, W / 2, 190, "#9087a3", 1, "center");
+  text(bd.line2, W / 2, 201, "#9087a3", 1, "center");
+  text("CLEARS " + (rec.wins || 0) + "   BEST TIME " + (rec.best ? fmt(rec.best) : "--:--.-"), W / 2, 216, "#7cffb2", 1, "center");
   r(40, 234, W - 80, 24, "#b5651d"); r(40, 234, W - 80, 22, Math.floor(t * 3) % 2 ? "#ffd166" : "#ffe08a");
   text("SORTIE", W / 2, 242, "#12141a", 1, "center");
   text("PILOT " + pilot().name, W / 2, 268, "#9087a3", 1, "center");
@@ -1764,11 +1780,205 @@ function drawTitleLobby(blinkOn) {
 
 let bossIcons = null;
 function makeIconCanvas(pal) {
-  const c = document.createElement("canvas"); c.width = ICON[0].length; c.height = ICON.length;
+  const rows = boss && boss.kind === "aegis" ? AEGIS_ICON : ICON;
+  const c = document.createElement("canvas"); c.width = rows[0].length; c.height = rows.length;
   const x = c.getContext("2d");
-  ICON.forEach((row, yy) => { for (let xx = 0; xx < row.length; xx++) if (row[xx] !== ".") { x.fillStyle = pal[row[xx]]; x.fillRect(xx, yy, 1, 1); } });
+  rows.forEach((row, yy) => { for (let xx = 0; xx < row.length; xx++) if (row[xx] !== ".") { x.fillStyle = pal[row[xx]]; x.fillRect(xx, yy, 1, 1); } });
   return c;
 }
+/* =========================================================
+   BOSS 2: AEGIS CORE, an orbital fortress. An armored core with a
+   spinning ring and four turret pods that orbit it.
+   ========================================================= */
+const BOSS_LIST = [
+  { kind: "striker", name: "STRIKER OMEGA", line1: "JET FIGHTER ROBOT  HP 2500  3 PHASES", line2: "GATLING  MISSILES  RAM  BOMBS  DIVE" },
+  { kind: "aegis", name: "AEGIS CORE", line1: "ORBITAL FORTRESS  HP 3000  3 PHASES", line2: "POD VOLLEY  SPIRAL  RINGS  LASERS  POD RAM" }
+];
+const AEGIS_ICON = ["....ooo....", "o..oaaao..o", "ao.oacao.oa", "o.oaacaao.o", "..oacccao..", "o.oaacaao.o", "ao.oacao.oa", "o..oaaao..o", "....ooo...."];
+const POD = ["...ooo...", "..oaaao..", ".oahhhao.", "oahhchhao", "oahcccaho", "oahhchhao", ".oaaaaao.", "..oarao..", "...oro..."];
+const POD_SPR = makeSpr(POD, { o: "#0e1418", a: "#2f6f78", h: "#7fd8d0", c: "#ffd166", r: "#ff3d5a" });
+
+function paintAegis(o) {
+  const white = o.flash ? "#ffffff" : null, t = o.t || 0, hot = o.phase === 3;
+  const C = {
+    out: white || "#0e1418", shell: white || (hot ? "#6f3a40" : "#2f6f78"), hi: white || (hot ? "#c87a7a" : "#7fd8d0"),
+    dark: white || (hot ? "#3a1a20" : "#173a40"), gold: white || (hot ? "#ff8a3d" : "#e0b040"), lens: white || (hot ? "#ff1f3d" : "#ff3d5a")
+  };
+  const cx = 40, cy = 40;
+  // spinning ring segments
+  for (let k = 0; k < 10; k++) {
+    const a = t * (o.spin || 0.6) * 1.5 + k * TAU / 10;
+    const sx = Math.round(cx + Math.cos(a) * 20), sy = Math.round(cy + Math.sin(a) * 20);
+    r(sx - 2, sy - 2, 5, 5, C.out); r(sx - 1, sy - 1, 3, 3, C.gold);
+  }
+  // armored sphere
+  for (let dy = -15; dy <= 15; dy++) {
+    const half = Math.round(Math.sqrt(225 - dy * dy));
+    r(cx - half, cy + dy, half * 2, 1, C.out);
+    if (half > 1) r(cx - half + 1, cy + dy, half * 2 - 2, 1, dy < -7 ? C.hi : dy < 6 ? C.shell : C.dark);
+  }
+  r(cx - 14, cy - 1, 28, 1, C.out); r(cx - 1, cy - 14, 1, 7, C.out); r(cx - 1, cy + 8, 1, 7, C.out);
+  r(cx - 11, cy - 10, 3, 2, C.gold); r(cx + 9, cy - 10, 3, 2, C.gold); r(cx - 11, cy + 9, 3, 2, C.gold); r(cx + 9, cy + 9, 3, 2, C.gold);
+  // lens eye, flickers while charging
+  const charging = o.charge > 0 && Math.floor(t * 20) % 2;
+  for (let dy = -7; dy <= 7; dy++) { const half = Math.round(Math.sqrt(49 - dy * dy)); r(cx - half, cy + dy, half * 2, 1, C.out); }
+  for (let dy = -5; dy <= 5; dy++) { const half = Math.round(Math.sqrt(25 - dy * dy)); r(cx - half, cy + dy, half * 2, 1, charging ? "#ffd166" : C.lens); }
+  r(cx - 2, cy - 2, 4, 4, white || (charging ? "#ffffff" : "#3a0a14"));
+  r(cx - 4, cy - 4, 2, 2, white || "#ffffff");
+}
+
+function podsAt(cx, cy, a0, spin) {
+  return [0, 1, 2, 3].map(i => { const a = a0 * spin + i * TAU / 4; return { x: cx + Math.cos(a) * 44, y: cy + Math.sin(a) * 34 }; });
+}
+function drawPod(p, x, y, aim, flash) {
+  ctx.save(); ctx.translate(Math.round(x), Math.round(y)); ctx.rotate(aim - DOWN);
+  ctx.drawImage(flash ? POD_SPR.white : POD_SPR.img, -(POD_SPR.w >> 1), -(POD_SPR.h >> 1));
+  ctx.restore();
+}
+function drawAegisExtras() {
+  for (const b of boss.beams) {
+    const p = b.pod;
+    ctx.save(); ctx.translate(Math.round(p.x), Math.round(p.y)); ctx.rotate(b.a);
+    if (b.warn > 0) { if (Math.floor(b.warn * 16) % 2 === 0) { ctx.fillStyle = "rgba(255,61,90,0.85)"; ctx.fillRect(8, 0, 420, 1); } }
+    else {
+      const w = b.w * (b.on < 0.1 ? b.on / 0.1 : 1);
+      ctx.fillStyle = "#2ec2b0"; ctx.fillRect(8, -w / 2 - 1, 420, w + 2);
+      ctx.fillStyle = "#e8fff8"; ctx.fillRect(8, -w / 4, 420, w / 2);
+    }
+    ctx.restore();
+  }
+  for (const p of boss.pods) {
+    if (p.warnT > 0 && Math.floor(p.warnT * 20) % 2 === 0) {
+      ctx.save(); ctx.translate(Math.round(p.x), Math.round(p.y)); ctx.rotate(p.aim);
+      ctx.fillStyle = "rgba(255,61,90,0.85)";
+      for (let d = 10; d < 300; d += 8) ctx.fillRect(d, 0, 4, 1);
+      ctx.restore();
+    }
+    drawPod(p, p.x, p.y, p.aim, p.flash > 0 || boss.flash > 0);
+    if (p.flash > 0) { const mx = p.x + Math.cos(p.aim) * 10, my = p.y + Math.sin(p.aim) * 10; r(Math.round(mx) - 2, Math.round(my) - 2, 5, 5, "#ffd166"); r(Math.round(mx) - 1, Math.round(my) - 1, 3, 3, "#ffffff"); }
+  }
+}
+
+function aegisReset() {
+  boss.beams = []; boss.spin = 0.6; boss.charge = 0;
+  for (const p of boss.pods) { p.mode = "orbit"; p.track = true; p.warnT = 0; }
+}
+function aegisUpdate() {
+  for (const p of boss.pods) {
+    if (p.mode === "orbit") {
+      p.a += boss.spin * DT;
+      const tx = boss.x + Math.cos(p.a) * 44, ty = boss.y + Math.sin(p.a) * 34;
+      p.x += (tx - p.x) * Math.min(1, DT * 10); p.y += (ty - p.y) * Math.min(1, DT * 10);
+    }
+    if (p.track) p.aim = turnToward(p.aim, angTo(p.x, p.y), 5 * DT);
+    p.flash -= DT;
+    if (boss.runner && !player.dead && Math.hypot(player.x - p.x, player.y - p.y) < 10) hurtPlayer();
+  }
+  for (const b of boss.beams) {
+    const p = b.pod;
+    b.a = Math.atan2(p.y - boss.y, p.x - boss.x);
+    if (b.warn > 0) { b.warn -= DT; if (b.warn <= 0) { noise(0.4, 0.06); shake = Math.max(shake, 4); } continue; }
+    b.on -= DT;
+    const ca = Math.cos(b.a), sa = Math.sin(b.a), px = player.x - p.x, py = player.y - p.y;
+    if (px * ca + py * sa > 8 && Math.abs(-px * sa + py * ca) < b.w / 2 + 1) hurtPlayer();
+  }
+  boss.beams = boss.beams.filter(b => b.warn > 0 || b.on > 0);
+}
+function podFire(p, a, sp, o) {
+  fire(p.x + Math.cos(p.aim) * 10, p.y + Math.sin(p.aim) * 10, a, sp, o);
+  p.flash = 0.06;
+}
+
+/* --- patterns --- */
+function* aVolley() {
+  for (let k = 0; k < 3 + boss.lv; k++) {
+    for (const p of boss.pods) {
+      if (p.mode !== "orbit") continue;
+      const a = angTo(p.x, p.y); p.aim = a;
+      const n = boss.lv >= 2 ? 3 : 1;
+      for (let i = 0; i < n; i++) podFire(p, a + (i - (n - 1) / 2) * 0.2, 95, { c: "#7fd8d0" });
+      sfx(500, 0.04, "square", 0.02);
+      yield 0.08;
+    }
+    yield 0.45;
+  }
+  yield 0.4;
+}
+function* aSpiral() {
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  boss.spin = 2.2 * dir;
+  for (const p of boss.pods) p.track = false;
+  sfx(200, 0.6, "sawtooth", 0.03, 800);
+  for (let t = 0; t < 3; t += 0.09) {
+    for (const p of boss.pods) {
+      const a = Math.atan2(p.y - boss.y, p.x - boss.x); p.aim = a;
+      podFire(p, a, 62 + boss.lv * 6, { c: "#ffd166" });
+    }
+    if (Math.floor(t / 0.09) % 3 === 0) sfx(700, 0.03, "triangle", 0.015);
+    yield 0.09;
+  }
+  aegisReset();
+  yield 0.6;
+}
+function* aRing() {
+  boss.charge = 1; sfx(200, 0.6, "sawtooth", 0.04, 700);
+  yield 0.6;
+  for (let k = 0; k < 2 + boss.lv; k++) {
+    const n = 22, gap = Math.floor(rand(0, n));
+    for (let i = 0; i < n; i++) if ((i - gap + n) % n >= 4) fire(boss.x, boss.y, i * TAU / n + k * 0.12, 68, { c: "#ff3d5a", r: 3 });
+    shock(boss.x, boss.y, 34, "#ff3d5a");
+    sfx(180, 0.15, "square", 0.05);
+    yield 0.7;
+  }
+  boss.charge = 0;
+  yield 0.4;
+}
+function* aLaser() {
+  boss.spin = 0;
+  sfx(160, 0.9, "sawtooth", 0.03, 420);
+  for (const p of boss.pods) if (p.mode === "orbit") { p.track = false; boss.beams.push({ pod: p, warn: 0.9, on: 0.8, w: 8, a: 0 }); }
+  for (let t = 0; t < 0.9; t += DT) { for (const p of boss.pods) p.aim = turnToward(p.aim, Math.atan2(p.y - boss.y, p.x - boss.x), 8 * DT); yield 0; }
+  boss.spin = boss.lv >= 3 ? 0.5 * (Math.random() < 0.5 ? 1 : -1) : 0;
+  for (let t = 0; t < 0.8; t += DT) { for (const p of boss.pods) p.aim = Math.atan2(p.y - boss.y, p.x - boss.x); yield 0; }
+  aegisReset();
+  yield 0.6;
+}
+function* aRam() {
+  const order = boss.lv >= 3 ? [0, 1, 2, 3] : [0, 2];
+  for (const i of order) {
+    const p = boss.pods[i];
+    p.mode = "free"; p.track = true;
+    for (let t = 0; t < 0.6; t += DT) { p.warnT = 0.6 - t; p.x += rand(-0.7, 0.7); yield 0; }
+    p.warnT = 0; p.track = false;
+    const a = p.aim;
+    sfx(140, 0.3, "sawtooth", 0.05, 60);
+    while (p.x > -20 && p.x < W + 20 && p.y > -20 && p.y < H + 20) {
+      p.x += Math.cos(a) * 280 * DT; p.y += Math.sin(a) * 280 * DT;
+      parts.push({ x: p.x, y: p.y, vx: 0, vy: 0, life: 0.2, max: 0.2, c: "#7fd8d0", s: 2 });
+      yield 0;
+    }
+    if (boss.lv >= 2) ring(clamp(p.x, 0, W), clamp(p.y, 0, H), 8, 55, rand(0, TAU), { c: "#7fd8d0" });
+    p.x = boss.x; p.y = boss.y; p.mode = "orbit"; p.track = true;
+    yield 0.25;
+  }
+  yield 0.5;
+}
+function aegisPool() {
+  const p = [aVolley, aSpiral, aRing];
+  if (boss.phase >= 2) p.push(aLaser, aRam);
+  if (boss.phase === 3) p.push(() => parallel(aVolley(), aRing()), () => parallel(aRam(), aRing()));
+  return p;
+}
+
+function drawBossPreview(kind, x, y, t) {
+  if (kind === "aegis") {
+    drawBossAt(x, y, DOWN, { kind, t, spin: 0.6, phase: 1 });
+    for (const q of podsAt(x, y, t, 0.6)) drawPod(null, q.x, q.y, DOWN, false);
+  } else {
+    drawBossAt(x, y, DOWN, { t, burn: 1.8, spool: 0, gunFlash: titleGuns, ammo: [1, 1, 1, 1], reload: 0, bay: 0, phase: 1, pal: { steel: "#4a3038", dark: "#1a1014", acc: "#ff3d5a" } });
+  }
+}
+
 /* ---------- state ---------- */
 let state = "title", stateT = 0;
 let player, boss, bullets = [], pbullets = [], parts = [], warns = [], shocks = [], banner;
@@ -1799,7 +2009,8 @@ function* bossBrain() {
     yield* p();
     boss.lock = false; boss.face = "idle"; boss.turn = 3; boss.tBurn = 1;
     boss.spool = 0; boss.bay = 0; boss.aimT = 0;
-    boss.tx = rand(56, W - 56); boss.ty = 70;
+    if (boss.pods) { aegisReset(); boss.face = "manual"; boss.tAng = DOWN; }
+    boss.tx = rand(56, W - 56); boss.ty = boss.pods ? 80 : 70;
     yield Math.max(0.35, 0.9 - boss.phase * 0.2);
   }
 }
@@ -1810,6 +2021,7 @@ function* phaseShift() {
   boss.aimT = 0; boss.bay = 0; boss.spool = 0; boss.tBurn = 2;
   bullets.forEach(b => burst(b.x, b.y, b.c, 2, 30));
   bullets.length = 0; warns.length = 0;
+  if (boss.pods) aegisReset();
   shake = 8;
   banner = { text: "PHASE " + boss.phase, t: 1.8 };
   sfx(90, 0.9, "sawtooth", 0.08, 40); noise(0.5, 0.1);
@@ -1826,7 +2038,7 @@ function* phaseShift() {
   for (let i = 0; i < 12; i++) smoke(boss.x + rand(-16, 16), boss.y + rand(-10, 10));
   boss.rattle = 0.6;
   yield 0.6;
-  boss.lock = false; boss.face = "idle"; boss.tBurn = 1;
+  boss.lock = false; boss.face = boss.pods ? "manual" : "idle"; boss.tBurn = 1;
   yield* bossBrain();
 }
 
@@ -1931,6 +2143,7 @@ function updateBoss() {
     boss.tAng = DOWN + off + clamp((boss.tx - boss.x) * -0.006, -0.3, 0.3);
   }
   boss.ang = turnToward(boss.ang, boss.tAng, boss.turn * DT);
+  if (boss.pods) aegisUpdate();
   boss.burn += (boss.tBurn - boss.burn) * Math.min(1, DT * 6);
   // battle damage
   if (boss.phase >= 2 && Math.random() < (boss.phase === 3 ? 0.35 : 0.12)) {
@@ -2036,6 +2249,7 @@ function killBoss() {
   bullets.forEach(b => burst(b.x, b.y, b.c, 2, 30));
   bullets = []; warns = [];
   boss.spool = 0; boss.bay = 0; boss.aimT = 0;
+  if (boss.pods) { for (const p of boss.pods) explode(p.x, p.y, 14); boss.pods = []; boss.beams = []; }
 }
 
 function updateParts() {
@@ -2154,7 +2368,7 @@ function drawHUD() {
     // frame
     r(0, 0, W, 29, "rgba(8,6,14,0.82)"); r(0, 29, W, 1, boss.phase === 3 ? "#ff3d5a" : "#3a2a40");
     // boss-shaped gauge: the icon fills with red from the bottom as HP remains
-    if (!bossIcons) bossIcons = {
+    if (!bossIcons || bossIcons.kind !== boss.kind) bossIcons = { kind: boss.kind,
       empty: upscale(makeIconCanvas({ o: "#12141a", a: "#2c2338", c: "#2c2338", r: "#2c2338" })),
       full: upscale(makeIconCanvas({ o: "#12141a", a: "#ff3d5a", c: "#ffd166", r: "#ffffff" }))
     };
@@ -2244,7 +2458,7 @@ function drawShocks() {
 
 function bossOpts() {
   return {
-    pal: boss.pal, phase: boss.phase, t: boss.t, burn: boss.burn, spool: boss.spool, gunFlash: boss.gunFlash,
+    kind: boss.kind, spin: boss.spin, charge: boss.charge, pal: boss.pal, phase: boss.phase, t: boss.t, burn: boss.burn, spool: boss.spool, gunFlash: boss.gunFlash,
     ammo: boss.ammo, reload: boss.reload, bay: boss.bay,
     flash: boss.flash > 0 || (boss.inv > 0 && Math.floor(boss.inv * 10) % 2 === 0),
     rattle: boss.rattle > 0 || state === "bossdying"
@@ -2252,7 +2466,7 @@ function bossOpts() {
 }
 
 function drawPlay() {
-  drawBG(stageN);
+  drawBG(boss.kind === "aegis" ? 3 : stageN);
   if (boss.phase === 3 && !boss.hidden) { ctx.fillStyle = "rgba(255,31,61,0.06)"; ctx.fillRect(0, 0, W, H); }
   drawWarns();
   drawShocks();
@@ -2265,6 +2479,7 @@ function drawPlay() {
   }
 
   if (!boss.hidden) drawBossAt(boss.x, boss.y, boss.ang, bossOpts());
+  if (!boss.hidden && boss.pods) drawAegisExtras();
   drawEnemies();
   drawBooms();
 
@@ -2388,7 +2603,7 @@ function draw() {
     } else if (state === "win") {
       overlay(0.55);
       shadowText("VICTORY!", W / 2, 110, "#ffd166", 3, "center");
-      text("STRIKER OMEGA DESTROYED  " + fmt(time), W / 2, 140, "#ece6f6", 1, "center");
+      text(boss.name + " DESTROYED  " + fmt(time), W / 2, 140, "#ece6f6", 1, "center");
       text("SCORE " + score, W / 2, 156, "#ece6f6", 2, "center");
       text(newBest ? "NEW HI SCORE!" : "HI SCORE " + best, W / 2, 176, newBest ? "#7cffb2" : "#9087a3", 1, "center");
       if (stateT <= 0) {
