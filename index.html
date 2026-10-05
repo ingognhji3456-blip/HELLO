@@ -385,6 +385,7 @@ function angTo(x, y) { return Math.atan2(player.y - y, player.x - x); }
 function angDiff(a, b) { return Math.atan2(Math.sin(b - a), Math.cos(b - a)); }
 function turnToward(a, b, max) { return a + clamp(angDiff(a, b), -max, max); }
 function fire(x, y, a, sp, o = {}) {
+  if (o.kind !== "bomb" || o.fuse) sp *= 0.85;  // enemy shots run a bit slower than authored
   const b = {
     x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: 2, c: "#ffd166", kind: "orb",
     grav: 0, home: 0, homeT: 0, accel: 0, max: 0, ignite: 0, boomY: 0, boomN: 0, life: 0
@@ -656,9 +657,48 @@ function* sDive() {
   yield 0.5;
 }
 
+/* --- flak: slow shells from the nose that burst into rings after a fuse --- */
+function* sFlak() {
+  boss.face = "manual"; boss.turn = 3;
+  for (let k = 0; k < 2 + boss.lv; k++) {
+    boss.tAng = angTo(boss.x, boss.y);
+    yield 0.4;
+    const m = hull(24, 40);
+    fire(m.x, m.y, boss.ang + rand(-0.15, 0.15), 75, { kind: "bomb", r: 4, boomY: 9999, fuse: 1.1, boomN: 8 + boss.lv * 2, c: "#3a404d" });
+    boss.gunFlash[0] = boss.gunFlash[1] = 0.08;
+    sfx(120, 0.2, "square", 0.05, 60);
+    yield 0.5;
+  }
+  boss.face = "idle";
+  yield 0.6;
+}
+/* --- sweep: the nose swings across the screen firing bursts with gaps --- */
+function* sSweep() {
+  boss.face = "manual"; boss.turn = 2;
+  const dir = Math.random() < 0.5 ? 1 : -1, from = DOWN - dir * 0.9;
+  boss.tAng = from;
+  boss.spool = 0.5; sfx(150, 0.6, "sawtooth", 0.04, 700);
+  yield 0.6;
+  boss.spool = 1;
+  const dur = 1.8;
+  let f = 0;
+  for (let t = 0; t < dur; t += DT) {
+    boss.ang = boss.tAng = from + dir * 1.8 * (t / dur);
+    f += DT;
+    if (f >= 0.07 && Math.floor(t / 0.3) % 2 === 0) {
+      f = 0;
+      const gi = Math.random() < 0.5 ? 0 : 1, m = hull(GUNS[gi].sx + 1, 37);
+      fire(m.x, m.y, boss.ang, 115, { kind: "tracer" });
+      boss.gunFlash[gi] = 0.05;
+    }
+    yield 0;
+  }
+  boss.spool = 0; boss.face = "idle";
+  yield 0.6;
+}
 function poolFor() {
   if (boss.kind === "aegis") return aegisPool();
-  const p = [sGatling, sMissiles];
+  const p = [sGatling, sMissiles, sFlak, sSweep];
   if (stageN >= 2) p.push(sRam);
   if (stageN >= 4) p.push(sBomb);
   if (stageN >= 6) p.push(sDive);
@@ -1069,7 +1109,7 @@ function makeBoss(kind) {
   // scale to the player's firepower so a maxed ship still needs about a minute
   const T = player.tier, shots = [1, 2, 3, 6, 8][player.pow - 1];
   const dps = [0, 1, 2, 3, 4, 6][T] * shots / [0, 0.09, 0.08, 0.08, 0.075, 0.07][T] * player.dmgMul;
-  const ae = kind === "aegis", hp = ae ? 3000 : 2500;
+  const ae = kind === "aegis", hp = ae ? 1900 : 1600;
   const p = BOSS_PALS[0];
   const b = {
     kind: ae ? "aegis" : "striker", name: ae ? "AEGIS CORE" : "STRIKER OMEGA", pal: { steel: p[0], dark: p[1], acc: p[2] },
@@ -1807,8 +1847,8 @@ function makeIconCanvas(pal) {
    spinning ring and four turret pods that orbit it.
    ========================================================= */
 const BOSS_LIST = [
-  { kind: "striker", name: "STRIKER OMEGA", line1: "JET FIGHTER ROBOT  HP 2500  3 PHASES", line2: "GATLING  MISSILES  RAM  BOMBS  DIVE" },
-  { kind: "aegis", name: "AEGIS CORE", line1: "ORBITAL FORTRESS  HP 3000  3 PHASES", line2: "POD VOLLEY  SPIRAL  RINGS  LASERS  POD RAM" }
+  { kind: "striker", name: "STRIKER OMEGA", line1: "JET FIGHTER ROBOT  HP 1600  3 PHASES", line2: "GATLING MISSILES FLAK SWEEP RAM DIVE" },
+  { kind: "aegis", name: "AEGIS CORE", line1: "ORBITAL FORTRESS  HP 1900  3 PHASES", line2: "VOLLEY SPIRAL RINGS WALL SEEKER LASER" }
 ];
 const AEGIS_ICON = ["....ooo....", "o..oaaao..o", "ao.oacao.oa", "o.oaacaao.o", "..oacccao..", "o.oaacaao.o", "ao.oacao.oa", "o..oaaao..o", "....ooo...."];
 const POD = ["...ooo...", "..oaaao..", ".oahhhao.", "oahhchhao", "oahcccaho", "oahhchhao", ".oaaaaao.", "..oarao..", "...oro..."];
@@ -1979,8 +2019,36 @@ function* aRam() {
   }
   yield 0.5;
 }
+/* --- wall: pods line up and rain straight down; stand between them --- */
+function* aWall() {
+  boss.pods.forEach((p, i) => { p.mode = "free"; p.track = false; p.tx = 36 + i * 56; });
+  sfx(300, 0.6, "triangle", 0.04, 150);
+  for (let t = 0; t < 0.8; t += DT) {
+    for (const p of boss.pods) { p.x += (p.tx - p.x) * Math.min(1, DT * 6); p.y += (boss.y + 44 - p.y) * Math.min(1, DT * 6); p.aim = turnToward(p.aim, DOWN, 6 * DT); }
+    yield 0;
+  }
+  let f = 0;
+  for (let t = 0; t < 2.2; t += DT) {
+    for (const p of boss.pods) p.x = p.tx + Math.sin(t * 1.5) * (boss.lv >= 3 ? 18 : 8);
+    f += DT;
+    if (f >= 0.13) { f = 0; for (const p of boss.pods) podFire(p, DOWN, 110, { c: "#7fd8d0" }); }
+    yield 0;
+  }
+  aegisReset();
+  yield 0.5;
+}
+/* --- seekers: the core releases slow homing orbs that burst after a while --- */
+function* aSeekers() {
+  boss.charge = 1; sfx(260, 0.5, "sawtooth", 0.04, 900);
+  yield 0.5;
+  const n = 3 + boss.lv;
+  for (let i = 0; i < n; i++) fire(boss.x, boss.y, i * TAU / n, 55, { kind: "missile", c: "#ff5dc8", home: 1.8, homeT: 1.8, accel: 50, max: 80, ignite: 0.4 });
+  shock(boss.x, boss.y, 30, "#ff5dc8");
+  boss.charge = 0;
+  yield 1.4;
+}
 function aegisPool() {
-  const p = [aVolley, aSpiral, aRing];
+  const p = [aVolley, aSpiral, aRing, aWall, aSeekers];
   if (boss.phase >= 2) p.push(aLaser, aRam);
   if (boss.phase === 3) p.push(() => parallel(aVolley(), aRing()), () => parallel(aRam(), aRing()));
   return p;
@@ -2027,12 +2095,19 @@ function* bossBrain() {
     boss.spool = 0; boss.bay = 0; boss.aimT = 0;
     if (boss.pods) { aegisReset(); boss.face = "manual"; boss.tAng = DOWN; }
     boss.tx = rand(56, W - 56); boss.ty = boss.pods ? 80 : 70;
-    yield Math.max(0.35, 0.9 - boss.phase * 0.2);
+    // recovery: the boss stops attacking and its core overheats (double damage)
+    boss.vuln = [0, 1.8, 1.5, 1.2][boss.phase];
+    popText("CHANCE x2", boss.x, boss.y + 48, "#ffd166");
+    sfx(880, 0.15, "square", 0.04, 440);
+    for (let t = boss.vuln; t > 0; t -= DT) { boss.vuln = t; yield 0; }
+    boss.vuln = 0;
+    yield 0.3;
   }
 }
 // phase change: barrel roll back to center, reload, then a harder pattern pool
 function* phaseShift() {
   freeze = 0.15; flashT = 0.4;
+  boss.vuln = 0;
   boss.inv = 2.4; boss.lock = true; boss.face = "manual";
   boss.aimT = 0; boss.bay = 0; boss.spool = 0; boss.tBurn = 2;
   bullets.forEach(b => burst(b.x, b.y, b.c, 2, 30));
@@ -2069,7 +2144,7 @@ function hurtPlayer() {
   }
   player.hp--;
   freeze = 0.08;
-  player.inv = 1.6;
+  player.inv = 2.0;
   shake = 7;
   burst(player.x, player.y, "#5fd3ff", 14, 80);
   sfx(110, 0.3, "square", 0.08, 55); noise(0.2, 0.12);
@@ -2217,10 +2292,11 @@ function updateBullets() {
     if (Math.hypot(b.x - boss.x, b.y - boss.y) < 32 && !boss.hidden && !boss.dead && boss.y > -10) {
       b.dead = true;
       if (boss.inv > 0) { burst(b.x, b.y, "#8f86a3", 2, 30); continue; }
-      boss.hp -= b.dmg || 1; boss.flash = 0.05;
+      const hit = (b.dmg || 1) * (boss.vuln > 0 ? 2 : 1);
+      boss.hp -= hit; boss.flash = 0.05;
       // the boss sheds power-ups as it takes damage, so the ship grows during the fight
-      boss.dropAcc = (boss.dropAcc || 0) + (b.dmg || 1);
-      if (boss.dropAcc >= 250) { boss.dropAcc -= 250; dropItem(boss.x + rand(-20, 20), boss.y + 30); }
+      boss.dropAcc = (boss.dropAcc || 0) + hit;
+      if (boss.dropAcc >= 160) { boss.dropAcc -= 160; dropItem(boss.x + rand(-20, 20), boss.y + 30); }
       if (b.kind === "pm") explode(b.x, b.y, 5);
       if (Math.random() < 0.4) burst(b.x, b.y, "#fff3b0", 2, 50);
       if (boss.hitSfx <= 0) { sfx(900, 0.03, "square", 0.015); boss.hitSfx = 0.07; }
@@ -2246,8 +2322,8 @@ function updateBullets() {
     }
     b.vy += b.grav * DT;
     b.x += b.vx * DT; b.y += b.vy * DT;
-    if (b.kind === "bomb" && b.y >= b.boomY) { b.dead = true; explodeBomb(b); continue; }
-    if (!player.dead && Math.hypot(b.x - player.x, b.y - player.y) < b.r + 1.5) { b.dead = true; if (b.kind === "missile") explode(b.x, b.y, 7); hurtPlayer(); }
+    if (b.kind === "bomb" && (b.y >= b.boomY || (b.fuse && b.life >= b.fuse))) { b.dead = true; explodeBomb(b); continue; }
+    if (!player.dead && Math.hypot(b.x - player.x, b.y - player.y) < b.r + 0.5) { b.dead = true; if (b.kind === "missile") explode(b.x, b.y, 7); hurtPlayer(); }
   }
   bullets = bullets.filter(b => !b.dead && b.x > -20 && b.x < W + 20 && b.y > -40 && b.y < H + 10);
 
@@ -2496,6 +2572,12 @@ function drawPlay() {
 
   if (!boss.hidden) drawBossAt(boss.x, boss.y, boss.ang, bossOpts());
   if (!boss.hidden && boss.pods) drawAegisExtras();
+  if (!boss.hidden && boss.vuln > 0) {
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 70);
+    ctx.strokeStyle = "rgba(255,209,102," + (0.4 + 0.5 * pulse) + ")"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(Math.round(boss.x), Math.round(boss.y), 36 + pulse * 4, 0, TAU); ctx.stroke();
+    if (Math.floor(performance.now() / 180) % 2) text("WEAK x2", boss.x, boss.y - 50, "#ffd166", 1, "center");
+  }
   drawEnemies();
   drawBooms();
 
