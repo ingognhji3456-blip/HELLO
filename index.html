@@ -389,7 +389,11 @@ function angTo(x, y) { return Math.atan2(player.y - y, player.x - x); }
 function angDiff(a, b) { return Math.atan2(Math.sin(b - a), Math.cos(b - a)); }
 function turnToward(a, b, max) { return a + clamp(angDiff(a, b), -max, max); }
 function fire(x, y, a, sp, o = {}) {
-  if (o.kind !== "bomb" || o.fuse) sp *= 0.85;  // enemy shots run a bit slower than authored
+  if (o.kind !== "bomb" || o.fuse) sp *= 0.8;  // enemy shots run a bit slower than authored
+  const orb = !o.kind || o.kind === "orb";
+  if (player && !player.dead && Math.hypot(x - player.x, y - player.y) < 22) return;  // never spawn on top of you
+  if (orb && bullets.length > 170) return;  // keep the screen readable
+  if (orb && Math.random() < 0.5) parts.push({ x, y, vx: 0, vy: 0, life: 0.08, max: 0.08, c: "#ffffff", s: 3 });
   const b = {
     x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: 2, c: "#ffd166", kind: "orb",
     grav: 0, home: 0, homeT: 0, accel: 0, max: 0, ignite: 0, boomY: 0, boomN: 0, life: 0
@@ -1226,6 +1230,7 @@ function startStage(n) {
   player.shield = Math.max(player.shield, lv("shield"));
   stageScore0 = score;
   banner = { text: "", t: 0 };
+  attackName = { text: "", t: 0 };
   stage = { runner: runner(stageScript()), done: 0, total: 1 };
   state = "play";
 }
@@ -2228,7 +2233,14 @@ function drawBossPreview(kind, x, y, t) {
 /* ---------- state ---------- */
 let state = "title", stateT = 0;
 let player, boss, bullets = [], pbullets = [], parts = [], warns = [], shocks = [], banner;
-let shake = 0, time = 0, newBest = false, pauseSel = 0;
+let shake = 0, time = 0, newBest = false, pauseSel = 0, attackName = { text: "", t: 0 };
+const ATTACK_NAMES = {
+  sGatling: "GATLING STORM", sMissiles: "MISSILE BARRAGE", sRam: "AFTERBURNER RAM", sBomb: "BOMBING RUN", sDive: "SKY DIVE",
+  sFlak: "FLAK BURST", sSweep: "NOSE SWEEP", sCarpet: "CARPET BOMB", sSwarm: "MICRO SWARM", sRoll: "BARREL ROLL",
+  sExhaust: "EXHAUST CURTAIN", sZigzag: "ZIGZAG ASSAULT", aVolley: "POD VOLLEY", aSpiral: "SPIRAL STORM", aRing: "SHOCK RINGS",
+  aWall: "BULLET WALL", aSeekers: "SEEKER ORBS", aFlower: "FLOWER STORM", aCorners: "CORNER CROSSFIRE", aLensBeam: "LENS BEAM",
+  aLaser: "CROSS LASER", aRam: "POD RAM", aExpand: "ORBIT EXPAND", aImplode: "IMPLOSION"
+};
 let best = 0;
 try { best = parseInt(localStorage.getItem("striker-hiscore"), 10) || 0; } catch (e) { best = 0; }
 
@@ -2252,6 +2264,10 @@ function* bossBrain() {
     let p;
     do { p = pool[Math.floor(Math.random() * pool.length)]; } while (p === last && pool.length > 1);
     last = p;
+    attackName = { text: ATTACK_NAMES[p.name] || "COMBO ATTACK", t: 1.8 };
+    boss.tell = 0.6;
+    sfx(520, 0.12, "square", 0.03, 1040);
+    yield 0.6;
     yield* p();
     boss.lock = false; boss.face = "idle"; boss.turn = 3; boss.tBurn = 1;
     boss.spool = 0; boss.bay = 0; boss.aimT = 0;
@@ -2372,6 +2388,7 @@ function updatePlayer() {
 function updateBoss() {
   if (boss.hidden || boss.dead) return;
   boss.t += DT;
+  boss.tell = (boss.tell || 0) - DT;
   boss.flash -= DT; boss.inv -= DT; boss.rattle -= DT; boss.hitSfx -= DT; boss.reload -= DT;
   boss.gunFlash[0] -= DT; boss.gunFlash[1] -= DT;
 
@@ -2535,6 +2552,7 @@ function update() {
     else {
       time += DT;
       if (banner.t > 0) banner.t -= DT;
+      if (attackName.t > 0) attackName.t -= DT;
       stepRunner(stage.runner);
       updatePlayer(); updateBoss(); updateEnemies(); updateBullets(); updateParts();
     }
@@ -2586,7 +2604,11 @@ function update() {
 function drawBullet(b) {
   const x = Math.round(b.x), y = Math.round(b.y);
   if (b.kind === "orb") {
-    const s = b.r;
+    const s = b.r, pulse = (Math.floor(b.life * 12) & 1);
+    ctx.globalAlpha = 0.28; ctx.fillStyle = b.c;
+    ctx.beginPath(); ctx.arc(x, y, s + 3 + pulse, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1;
+    r(x - s - 1, y - s, s * 2 + 2, s * 2, "#12141a"); r(x - s, y - s - 1, s * 2, s * 2 + 2, "#12141a");
     r(x - s, y - s + 1, s * 2, s * 2 - 2, b.c);
     r(x - s + 1, y - s, s * 2 - 2, s * 2, b.c);
     r(x - 1, y - 1, 2, 2, "#ffffff");
@@ -2749,6 +2771,10 @@ function drawPlay() {
 
   if (!boss.hidden) drawBossAt(boss.x, boss.y, boss.ang, bossOpts());
   if (!boss.hidden && boss.pods) drawAegisExtras();
+  if (!boss.hidden && boss.tell > 0) {
+    ctx.strokeStyle = "rgba(255,209,102," + (0.3 + boss.tell) + ")"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(Math.round(boss.x), Math.round(boss.y), 34 + boss.tell * 90, 0, TAU); ctx.stroke();
+  }
   if (!boss.hidden && boss.vuln > 0) {
     const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 70);
     ctx.strokeStyle = "rgba(255,209,102," + (0.4 + 0.5 * pulse) + ")"; ctx.lineWidth = 2;
@@ -2777,6 +2803,14 @@ function drawPlay() {
 
   drawHUD();
   drawIntro();
+  if (attackName.t > 0 && state === "play") {
+    const k = Math.min(1, (1.8 - attackName.t) / 0.15), y = 52;
+    ctx.globalAlpha = Math.min(1, attackName.t / 0.3);
+    r(0, y - 3, W, 13, "rgba(0,0,0,0.55)");
+    r(Math.round(W / 2 - 70 * k), y - 3, Math.round(140 * k), 1, "#ff3d5a"); r(Math.round(W / 2 - 70 * k), y + 9, Math.round(140 * k), 1, "#ff3d5a");
+    shadowText(">> " + attackName.text + " <<", W / 2, y, Math.floor(attackName.t * 8) % 2 ? "#ffd166" : "#ffffff", 1, "center");
+    ctx.globalAlpha = 1;
+  }
 
   if (banner.t > 0 && Math.floor(banner.t * 6) % 2 === 0) {
     shadowText(banner.text, W / 2, H / 2 - 20, banner.text.startsWith("PHASE") ? "#ff3d5a" : "#ece6f6", 3, "center");
@@ -2826,10 +2860,8 @@ function drawPlayer() {
       r(Math.round(cx + Math.cos(a) * 13), Math.round(cy + Math.sin(a) * 13), 2, 2, k % 2 ? fx : "#ffffff");
     }
   }
-  if (keys.shift) {
-    r(cx - 1, cy - 1, 3, 3, "#ff3d5a");
-    r(cx, cy, 1, 1, "#ffffff");
-  }
+  r(cx - 1, cy - 1, 3, 3, keys.shift ? "#ff3d5a" : "#12141a");
+  r(cx, cy, 1, 1, "#ffffff");
 }
 
 function overlay(alpha) { ctx.fillStyle = "rgba(13,11,20," + alpha + ")"; ctx.fillRect(0, 0, W, H); }
