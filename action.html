@@ -395,6 +395,7 @@ const S = {
   pause: () => sfx(500, 0.08, "square", 0.03, 250),
   clank: () => { sfx(1800, 0.08, "square", 0.05, 900); noise(0.06, 0.08, 3000); },
   bow: () => { sfx(1500, 0.08, "triangle", 0.04, 400); noise(0.05, 0.05, 2000); },
+  levelup: () => { [523, 659, 784, 1046, 1318].forEach((f, i) => sfx(f, 0.22, "square", 0.045, 0, i * 0.07)); sfx(2093, 0.5, "triangle", 0.04, 0, 0.35); },
   unlock: () => { [660, 880, 1320, 1760].forEach((f, i) => sfx(f, 0.18, "square", 0.04, 0, i * 0.08)); },
   menu: () => sfx(900, 0.05, "square", 0.03)
 };
@@ -593,7 +594,7 @@ cv.addEventListener("pointerdown", e => {
   if (capture) { capture = null; return; }
   const btn = state === "play" ? pointerBtn(pos) : null;
   let start = false;
-  if (state !== "play") start = !menuClick(pos) && state !== "pause" && state !== "controls";
+  if (state !== "play") start = !menuClick(pos) && state !== "pause" && state !== "controls" && state !== "levelup" && state !== "hero";
   if (state === "play" && !btn && pos.x > W / 2 - 68 && pos.x < W / 2 - 46 && pos.y < 16) togglePause();
   pointers.set(e.pointerId, { btn, start });
   recomputeTouch();
@@ -624,6 +625,134 @@ if (save.binds && typeof save.binds === "object") {
   binds = b;
 }
 function persist() { try { localStorage.setItem("bladerush", JSON.stringify(save)); } catch (_) {} }
+
+/* ---------- hero progression ----------
+   XP comes from kills (more in later stages), parries, stage clears and bosses. Each level asks for more:
+   xpNeed(L) grows by about 35% per level plus a flat step, so early levels come fast and later ones take real work.
+   Every level-up offers three skills to choose from. */
+const MAX_LEVEL = 30;
+const xpNeed = L => Math.floor(50 * Math.pow(1.35, L - 1) + 25 * (L - 1));
+const hero = { level: 1, xp: 0, skills: {} };
+if (save.hero && typeof save.hero === "object") {
+  hero.level = clamp(Math.floor(+save.hero.level) || 1, 1, MAX_LEVEL);
+  hero.xp = Math.max(0, Math.floor(+save.hero.xp) || 0);
+  if (save.hero.skills && typeof save.hero.skills === "object") for (const k in save.hero.skills) hero.skills[k] = Math.max(0, Math.floor(+save.hero.skills[k]) || 0);
+}
+function saveHero() { save.hero = { level: hero.level, xp: hero.xp, skills: Object.assign({}, hero.skills) }; persist(); }
+const SKILLS = [
+  { id: "power", name: "POWER STRIKE", max: 3, col: "#ff8a5a", desc: ["+1 DAMAGE ON", "EVERY SWORD HIT"],
+    icon: [".......x", "......x.", ".....x..", "..y.x...", "...x....", "..yxy...", ".y......", "y......."] },
+  { id: "vit", name: "VITALITY", max: 3, col: "#ff4d6d", desc: ["+1 MAX HEART", "AND HEAL 1"],
+    icon: [".xx..xx.", "xxxxxxxx", "xxyxxxxx", "xxxxxxxx", ".xxxxxx.", "..xxxx..", "...xx...", "........"] },
+  { id: "swift", name: "SWIFT FEET", max: 2, col: "#9cff9c", desc: ["MOVE 12% FASTER"],
+    icon: ["......y.", "..xx.yy.", "..xxyy..", "..xx....", "..xxx...", "..xxxxx.", ".xxxxxx.", "........"] },
+  { id: "triple", name: "TRIPLE JUMP", max: 1, col: "#9cc4ff", desc: ["ONE MORE JUMP", "IN THE AIR"],
+    icon: ["...xx...", "..xxxx..", ".x.xx.x.", "...xx...", "..yyyy..", ".y.yy.y.", "...yy...", "...yy..."] },
+  { id: "airdash", name: "SKY DASH", max: 1, col: "#bfe6ff", desc: ["DASH TWICE", "BEFORE LANDING"],
+    icon: ["x...y...", ".x...y..", "..x...y.", "...x...y", "..x...y.", ".x...y..", "x...y...", "........"] },
+  { id: "reach", name: "WIDE ARC", max: 2, col: "#e8eeff", desc: ["LONGER BLADE,", "REACH +25%"],
+    icon: ["..xxxx..", ".x....x.", "x......x", "x......x", "...yy...", "...yy...", "...yy...", "........"] },
+  { id: "qcharge", name: "QUICK SPIN", max: 2, col: "#ffe066", desc: ["SPIN CHARGES", "FASTER AND HITS", "+1 HARDER"],
+    icon: ["....xx..", "...xx...", "..xx....", ".xxxxxx.", "....xx..", "...xx...", "..xx....", ".x......"] },
+  { id: "focus", name: "FOCUS", max: 2, col: "#ffd040", desc: ["LONGER PARRY", "AND PERFECT", "WINDOWS"],
+    icon: ["..xxxx..", ".xyyyyx.", "xyyxxyyx", "xyxxxxyx", "xyyxxyyx", ".xyyyyx.", "..xxxx..", "........"] },
+  { id: "counter", name: "COUNTER MASTER", max: 2, col: "#ffb547", desc: ["COUNTER +3 DMG.", "RANK 2: PERFECT", "PARRY HEALS 1"],
+    icon: ["x......x", ".x....x.", "..x..x..", "...xx...", "...xx...", "..y..y..", ".y....y.", "y......y"] },
+  { id: "blood", name: "BLOODLUST", max: 2, col: "#ff3050", desc: ["KILLS MAY HEAL", "1 HEART.", "20% / 35%"],
+    icon: ["...x....", "...xx...", "..xxx...", ".xxxxx..", ".xxyxx..", ".xxxxx..", "..xxx...", "........"] },
+  { id: "wave", name: "SWORD WAVE", max: 2, col: "#bfe6ff", desc: ["3RD HIT AND SPIN", "LAUNCH A BLADE", "WAVE THAT PIERCES"],
+    icon: ["..xx....", "....x...", ".....x..", ".....xy.", ".....xy.", ".....x..", "....x...", "..xx...."] },
+  { id: "quake", name: "QUAKE DIVE", max: 1, col: "#d8d0c0", desc: ["DIVE LANDINGS", "BLAST NEARBY", "ENEMIES"],
+    icon: ["...xx...", "...xx...", ".x.xx.x.", "..xxxx..", "...xx...", "y.y..y.y", "yyyyyyyy", "........"] },
+  { id: "iron", name: "IRON SKIN", max: 2, col: "#aab2cc", desc: ["+0.5S INVINCIBLE", "TIME AFTER", "TAKING A HIT"],
+    icon: ["xxxxxxxx", "xyyyyyyx", "xyyxxyyx", "xyxxxxyx", ".xyxxyx.", "..xyyx..", "...xx...", "........"] },
+  { id: "dashstrike", name: "DASH STRIKE", max: 1, col: "#9cc4ff", desc: ["DASHING THROUGH", "ENEMIES CUTS", "THEM"],
+    icon: ["........", "..x.....", "xxxx....", "..xxxxxx", "xxxx..y.", "..x.....", "........", "........"] },
+  { id: "second", name: "SECOND WIND", max: 1, col: "#9cff9c", desc: ["ONCE PER STAGE,", "SURVIVE A", "FATAL HIT"],
+    icon: ["...xx...", "...xx...", ".xxxxxx.", ".xxxxxx.", "...xx...", "...xx...", "..y..y..", ".y....y."] }
+];
+const FALLBACK_SKILLS = [
+  { id: "tough", name: "TOUGHNESS", max: 99, col: "#ff4d6d", desc: ["+1 MAX HEART"], icon: SKILLS[1].icon },
+  { id: "restore", name: "RESTORE", max: 999, col: "#9cff9c", desc: ["FULLY HEAL", "ALL HEARTS"], icon: SKILLS[14].icon }
+];
+for (const k of SKILLS.concat(FALLBACK_SKILLS)) chk("icon " + k.id, k.icon, 8);
+const sk = id => hero.skills[id] || 0;
+const stat = {};
+let CHARGE_T = 0.5, PARRY_WIN = 0.24, PARRY_PERFECT = 0.09;
+function recalcStats() {
+  stat.maxHp = 5 + sk("vit") + sk("tough");
+  stat.spd = 120 * (1 + 0.12 * sk("swift"));
+  stat.jumps = 2 + sk("triple");
+  stat.airDashes = 1 + sk("airdash");
+  stat.reach = 1 + 0.25 * sk("reach");
+  stat.dmg = sk("power");
+  stat.spinDmg = sk("qcharge");
+  stat.counterDmg = 3 * sk("counter");
+  stat.lifesteal = [0, 0.2, 0.35][sk("blood")];
+  stat.wave = sk("wave"); stat.quake = sk("quake"); stat.dashStrike = sk("dashstrike");
+  stat.inv = 1.7 + 0.5 * sk("iron");
+  CHARGE_T = 0.5 - 0.1 * sk("qcharge");
+  PARRY_WIN = 0.24 + 0.06 * sk("focus"); PARRY_PERFECT = 0.09 + 0.03 * sk("focus");
+}
+recalcStats();
+const XPV = { slime: 8, bat: 10, turret: 12, archer: 14, knight: 22, guard: 22 };
+let pendingLevels = 0, lvT = 0, stageXP = 0;
+let luChoices = [], luSel = 1, luRet = "play", heroSel = 1, heroConfirmT = 0;
+function gainXP(n, x, y) {
+  n = Math.round(n);
+  if (n <= 0) return;
+  stageXP += n;
+  if (x !== undefined && texts) texts.push({ s: "+" + n + " XP", x, y, t: 0.9, ml: 0.9, c: "#c58cff" });
+  while (hero.level < MAX_LEVEL && n > 0) {
+    hero.xp += n; n = 0;
+    while (hero.level < MAX_LEVEL && hero.xp >= xpNeed(hero.level)) {
+      hero.xp -= xpNeed(hero.level); hero.level++; pendingLevels++; lvT = 0;
+      levelUpFx();
+    }
+  }
+  if (hero.level >= MAX_LEVEL) hero.xp = 0;
+  saveHero();
+}
+function levelUpFx() {
+  S.levelup();
+  if (!player || state !== "play") return;
+  popText("LEVEL UP!", W / 2, 40, "#ffe066", true);
+  fxs.push({ kind: "pillar", x: player.x + 5, y: player.y + 14, t: 0, dur: 1.0 });
+  fxs.push({ kind: "ring", x: player.x + 5, y: player.y + 7, t: 0, dur: 0.5, max: 34, c: "#ffe066" });
+  for (let i = 0; i < 24; i++) parts.push({ x: player.x + 5 + rnd(-10, 10), y: player.y + 14, vx: rnd(-20, 20), vy: rnd(-160, -60), life: rnd(0.5, 1), ml: 1, c: i % 2 ? "#ffe066" : "#fff6c0", sz: i % 3 ? 1 : 2 });
+  if (player.hp < player.maxHp) player.hp++;
+}
+function rollChoices() {
+  const avail = SKILLS.filter(k => sk(k.id) < k.max);
+  for (let i = avail.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [avail[i], avail[j]] = [avail[j], avail[i]]; }
+  const out = avail.slice(0, 3);
+  for (const f of FALLBACK_SKILLS) if (out.length < 3) out.push(f);
+  return out;
+}
+function openLevelUp(ret) {
+  luRet = ret; luChoices = rollChoices(); luSel = 1; state = "levelup"; stateT = 0; lvT = 0;
+}
+function pickSkill(k) {
+  if (k.id === "restore") { if (player) player.hp = player.maxHp; }
+  else hero.skills[k.id] = sk(k.id) + 1;
+  recalcStats();
+  if (player) {
+    const grow = stat.maxHp - player.maxHp;
+    if (grow > 0) { player.maxHp = stat.maxHp; player.hp = Math.min(player.maxHp, player.hp + grow); }
+    player.airDash = Math.max(player.airDash, player.ground ? stat.airDashes : player.airDash);
+    if (k.id === "second") player.secondWind = 1;
+  }
+  pendingLevels = Math.max(0, pendingLevels - 1);
+  saveHero(); S.unlock();
+  if (texts) popText(k.name + "!", W / 2, 56, k.col, true);
+  if (pendingLevels > 0) { luChoices = rollChoices(); luSel = 1; stateT = 0; }
+  else { state = luRet; stateT = luRet === "play" ? 0 : 2.1; }
+}
+function resetHero() {
+  hero.level = 1; hero.xp = 0; hero.skills = {}; pendingLevels = 0;
+  recalcStats(); saveHero();
+}
+
 
 /* ---------- level chunks ---------- */
 /* 14 rows x 16 cols. # solid, = one-way platform, ^ spikes, w slime, b bat, t turret, k knight,
@@ -853,6 +982,86 @@ const CH = {
     "################",
     "################"
   ],
+  climb: [
+    "................",
+    "................",
+    "................",
+    "................",
+    "................",
+    "........g.......",
+    ".......k........",
+    "......####......",
+    "......####......",
+    "....########....",
+    "....########....",
+    "..############..",
+    "################",
+    "################"
+  ],
+  gauntlet: [
+    "................",
+    "................",
+    "................",
+    "................",
+    "................",
+    "................",
+    "................",
+    "................",
+    "................",
+    "..g....g....g...",
+    "................",
+    "..k....s....k...",
+    "################",
+    "################"
+  ],
+  archery: [
+    "................",
+    "................",
+    "................",
+    "................",
+    "..a.........a...",
+    ".====......====.",
+    "................",
+    "................",
+    "......====......",
+    "................",
+    "................",
+    "....^^^..^^^....",
+    "################",
+    "################"
+  ],
+  pit: [
+    "................",
+    "................",
+    "................",
+    "................",
+    "......b.....b...",
+    "................",
+    "................",
+    "....g.....g.....",
+    "...===...===....",
+    "................",
+    "................",
+    "................",
+    "##............##",
+    "##............##"
+  ],
+  tower: [
+    "................",
+    "................",
+    "....#......#....",
+    "....#..gg..#....",
+    "....#......#....",
+    "....#..==..#....",
+    "....#......#....",
+    "....#..a...#....",
+    "....#.====.#....",
+    "................",
+    "................",
+    "..w..........w..",
+    "################",
+    "################"
+  ],
   goal: [
     "..............##",
     "..............##",
@@ -888,14 +1097,19 @@ const CH = {
 };
 for (const k in CH) { const rows = CH[k]; if (rows.length !== 14) throw new Error("chunk " + k); chk("chunk " + k, rows, rows[0].length); }
 const POOL = {
-  easy: ["flat", "gap", "steps", "heart"],
-  mid: ["turret", "spikes", "fly", "nest", "fort", "bridge"],
-  hard: ["knight", "pillars", "duo"]
+  easy: ["flat", "gap", "steps", "heart", "climb"],
+  mid: ["turret", "spikes", "fly", "nest", "fort", "bridge", "pit", "archery"],
+  hard: ["knight", "pillars", "duo", "gauntlet", "tower"]
 };
 const STAGES = [
   { name: "GREEN MEADOW", seed: 11, pick: { easy: 4, mid: 2, hard: 0 }, boss: false, sky: ["#6fc8ff", "#d9f3ff"], far: "#4e8fcf", mid: "#2f7d53", near: "#1f5a3a", ground: "#5a3a22", grass: "#4cbf4a", plat: "#8a5a32" },
   { name: "SUNSET RIDGE", seed: 23, pick: { easy: 2, mid: 3, hard: 2 }, boss: false, sky: ["#ff7a4f", "#ffd27a"], far: "#a04f6b", mid: "#5d2f55", near: "#3b1f3d", ground: "#4a2a3a", grass: "#d8903a", plat: "#7a4a4a" },
-  { name: "IRON KEEP", seed: 37, pick: { easy: 1, mid: 3, hard: 3 }, boss: true, sky: ["#0b0b24", "#2a1f4f"], far: "#1e1b3f", mid: "#2b2750", near: "#1a1735", ground: "#3c3c52", grass: "#7a7aa0", plat: "#5a5a7a", stars: true }
+  { name: "IRON KEEP", seed: 37, pick: { easy: 1, mid: 3, hard: 3 }, boss: "duke", sky: ["#0b0b24", "#2a1f4f"], far: "#1e1b3f", mid: "#2b2750", near: "#1a1735", ground: "#3c3c52", grass: "#7a7aa0", plat: "#5a5a7a", stars: true },
+  { name: "FROST CAVERN", seed: 41, pick: { easy: 1, mid: 4, hard: 3 }, boss: false, slip: true, weather: "snow", sky: ["#1b3050", "#8fc3e8"], far: "#5a7fa8", mid: "#3d6088", near: "#2a4566", ground: "#4f6f8a", grass: "#e8f6ff", plat: "#9ab8d0", cloud: "rgba(230,245,255,0.3)" },
+  { name: "DESERT RUINS", seed: 53, pick: { easy: 1, mid: 4, hard: 4 }, boss: false, weather: "sand", sun: true, sky: ["#f0a050", "#ffe0a0"], far: "#d08a50", mid: "#b06a3a", near: "#8a4a2a", ground: "#b07a42", grass: "#e8c070", plat: "#8a6038", cloud: "rgba(255,240,210,0.3)" },
+  { name: "STORM PEAKS", seed: 67, pick: { easy: 0, mid: 5, hard: 4 }, boss: false, weather: "rain", sky: ["#1a1f2e", "#4a5570"], far: "#3a4258", mid: "#2a3044", near: "#1c2030", ground: "#4a4a52", grass: "#5a7a5a", plat: "#5a5a62", cloud: "rgba(20,24,36,0.55)" },
+  { name: "MAGMA DEPTHS", seed: 79, pick: { easy: 0, mid: 5, hard: 5 }, boss: false, weather: "ember", lava: true, cloud: "none", sky: ["#1a0505", "#5a1a0a"], far: "#4a1010", mid: "#300a0a", near: "#200606", ground: "#3a2420", grass: "#ff6a20", plat: "#5a3020" },
+  { name: "SHADOW CITADEL", seed: 97, pick: { easy: 0, mid: 4, hard: 5 }, boss: "dark", weather: "mist", stars: true, sky: ["#05030f", "#1f0f3a"], far: "#1a1030", mid: "#120a24", near: "#0a0618", ground: "#2a2440", grass: "#8a5aff", plat: "#40345a" }
 ];
 
 let level = null;
@@ -1012,14 +1226,15 @@ const ATK = {
 
 function newPlayer(x, y) {
   return { x, y, w: 10, h: 14, vx: 0, vy: 0, dir: 1, ground: false, coyote: 0, jbuf: 0, jumps: 0,
-    dash: 0, dashCd: 0, dashDir: 1, inv: 0, hp: 5, maxHp: 5, atk: null, comboN: 0, comboT: 0, anim: 0,
+    dash: 0, dashCd: 0, dashDir: 1, inv: 0, hp: stat.maxHp, maxHp: stat.maxHp, secondWind: sk("second"), dashHits: new Set(), atk: null, comboN: 0, comboT: 0, anim: 0,
     hurtT: 0, dropT: 0, safeX: x, safeY: y, trail: [], landT: 0, dead: false, deadT: 0, spinT: 0, look: 24,
-    wallSlide: 0, wallDir: 0, wallCoyote: 0, wjLock: 0, airDash: true, chargeT: 0, chargeArm: false, scarf: null, neck: null,
+    wallSlide: 0, wallDir: 0, wallCoyote: 0, wjLock: 0, airDash: 1, chargeT: 0, chargeArm: false, scarf: null, neck: null,
     parryT: 0, parryAge: 0, parryCd: 0, parryLag: 0, parryOk: 0, parryPerfect: false, riposteT: 0 };
 }
 
 function startStage(si) {
   stageIdx = si;
+  recalcStats();
   buildLevel(si);
   enemies = []; bullets = []; parts = []; pickups = []; texts = []; fxs = []; flag = null; boss = null; arena = null;
   let px = 2 * TS, py = 12 * TS - 14;
@@ -1040,7 +1255,7 @@ function startStage(si) {
   }
   player = newPlayer(px, py);
   cam.x = clamp(player.x - W / 2, 0, level.w * TS - W); cam.y = level.h * TS - H;
-  stageScore = score; combo = 0; comboT = 0; timer = 0; kills = 0; flagOpen = false; lockMsgT = 0; maxCombo = 0;
+  stageScore = score; combo = 0; comboT = 0; timer = 0; kills = 0; flagOpen = false; lockMsgT = 0; maxCombo = 0; stageXP = 0;
   shake = 0; hitstop = 0; flash = 0;
   state = "play"; stateT = 0;
   setSong("stage");
@@ -1059,7 +1274,8 @@ const EDEF = {
 let eid = 0;
 function spawnEnemy(type, x, y) {
   const d = EDEF[type];
-  const e = { id: eid++, type, x, y, w: d.w, h: d.h, vx: 0, vy: 0, hp: d.hp, maxHp: d.hp, dir: -1, t: Math.random() * 3,
+  const hp = Math.ceil(d.hp * (1 + 0.22 * stageIdx));
+  const e = { id: eid++, type, x, y, w: d.w, h: d.h, vx: 0, vy: 0, hp, maxHp: hp, dir: -1, t: Math.random() * 3,
     state: "idle", st: 0, flash: 0, ground: false, baseY: y, lastHit: -1, stun: 0, dead: false, landT: 0, blockT: 0, recoil: 0 };
   enemies.push(e);
   return e;
@@ -1249,6 +1465,8 @@ function hurtEnemy(e, dmg, kb, fromX, heavy, kind) {
     const pts = EDEF[e.type].score * mult;
     score += pts; popText("+" + pts, cx, e.y - 12, mult > 1 ? "#ffe066" : "#fff");
     explode(cx, cy, 12, EDEF[e.type].c);
+    gainXP(XPV[e.type] * (1 + 0.25 * stageIdx), cx, e.y - 18);
+    if (stat.lifesteal && player.hp < player.maxHp && Math.random() < stat.lifesteal) { player.hp++; popText("+HP", player.x + 5, player.y - 10, "#ff4d6d"); S.heart(); }
     for (let i = 0; i < 6; i++) parts.push({ x: cx, y: cy, vx: dir * rnd(60, 220), vy: rnd(-200, -40), life: rnd(0.4, 0.8), ml: 0.8, c: m.c, sz: 3, g: 500 });
     hitstop = Math.max(hitstop, 0.13); shake = Math.max(shake, 4); flash = Math.max(flash, 0.04); flashC = "#ffffff";
     camKick(dir * 4, 1);
@@ -1266,18 +1484,19 @@ function explode(x, y, n, c) {
 function popText(s, x, y, c, big = false) { texts.push({ s, x, y, t: big ? 1.6 : 0.8, ml: big ? 1.6 : 0.8, c, big }); }
 
 /* ---------- boss: IRON DUKE ---------- */
-function spawnBoss(x, y) {
-  boss = { x, y, w: 26, h: 36, vx: 0, vy: 0, hp: 48, maxHp: 48, dir: -1, state: "intro", st: 0, t: 0, phase: 1,
+function spawnBoss(x, y, kind) {
+  const dark = kind === "dark", hp = dark ? 90 : 48;
+  boss = { dark, x, y, w: 26, h: 36, vx: 0, vy: 0, hp, maxHp: hp, dir: -1, state: "intro", st: 0, t: 0, phase: 1,
     flash: 0, swing: 0, swingT: 0, ground: false, stun: 0, pattern: "", lastHit: -1, tele: null, cnt: 0, dead: false };
 }
 const BOSS_W = 26, BOSS_H = 36, SLASH_WIND = 0.55, CHARGE_WIND = 0.75;
-function bossSet(s) { boss.state = s; boss.st = 0; }
+function bossSet(s) { boss.state = s; boss.st = 0; boss.tele = false; }
 function bossFace() { boss.dir = player.x + 5 < boss.x + boss.w / 2 ? -1 : 1; }
 function updateBoss(dt) {
   const b = boss;
   b.t += dt; b.st += dt;
   if (b.flash > 0) b.flash -= dt;
-  const p2 = b.phase === 2, spd = p2 ? 1.25 : 1;
+  const p2 = b.phase === 2, spd = (p2 ? 1.25 : 1) * (b.dark ? 1.15 : 1);
   const gravity = true;
   switch (b.state) {
     case "intro":
@@ -1361,14 +1580,14 @@ function updateBoss(dt) {
       b.vx = 0;
       if (b.st < 0.15) bossFace();
       const n = Math.floor((b.st - 0.35) / 0.18);
-      if (b.st >= 0.35 && n < 3 && n > (b.fired ?? -1)) {
+      if (b.st >= 0.35 && n < (b.dark ? 5 : 3) && n > (b.fired ?? -1)) {
         b.fired = n;
         const sx = b.x + b.w / 2 + b.dir * 10, sy = b.y + 8;
         const dx = player.x + 5 - sx; const tt = 0.9;
         bullets.push({ x: sx, y: sy, vx: dx / tt + rnd(-30, 30), vy: -200 + n * 25, r: 3, life: 3, c: "#ff8a3d", kind: "fire", g: 450 });
         S.shoot();
       }
-      if (b.st > 1.0) { b.fired = -1; b.recPose = ""; bossSet("recover"); b.recT = 0.5; }
+      if (b.st > (b.dark ? 1.4 : 1.0)) { b.fired = -1; b.recPose = ""; bossSet("recover"); b.recT = 0.5; }
       break;
     }
     case "recover":
@@ -1431,6 +1650,7 @@ function hurtBoss(dmg, kb, fromX, heavy) {
 }
 function bossDefeated() {
   score += 5000; popText("+5000", boss.x + 13, boss.y, "#ffe066", true);
+  gainXP(boss.dark ? 600 : 250, boss.x + 13, boss.y - 10);
   const fx = level.arenaX + 27, fy = 11;
   flag = { x: fx * TS + 4, y: fy * TS - 2, w: 8, h: 18 };
   fxs.push({ kind: "ring", x: flag.x + 4, y: flag.y + 8, t: 0, dur: 0.6, max: 30, c: "#ffb547" });
@@ -1441,19 +1661,18 @@ function startBossFight() {
   arena = { x0: level.arenaX * TS, x1: (level.arenaX + level.arenaW) * TS };
   for (let r = 0; r < 12; r++) setTile(level.arenaX, r, 1);
   const bs = level.spawns.find(s => s.ch === "B");
-  spawnBoss(bs.tx * TS - 7, bs.ty * TS + TS - BOSS_H);
+  spawnBoss(bs.tx * TS - 7, bs.ty * TS + TS - BOSS_H, STAGES[stageIdx].boss);
   popText("WARNING", W / 2, 50, "#ff6b6b", true);
   S.warn(); shake = 5; flash = 0.2; flashC = "#f33";
   setSong("boss");
 }
 
 /* ---------- player ---------- */
-const CHARGE_T = 0.5;
 /* ---------- parry ----------
    Raise the blade for a short window. Anything that would hit you from the front in that window is turned aside:
    melee attackers stagger, projectiles fly back at enemies, shockwaves shatter. The first few frames are a
    PERFECT parry (slow motion, longer stagger). A successful parry opens a counter: attack for a lunging riposte. */
-const PARRY_WIN = 0.24, PARRY_PERFECT = 0.09, PARRY_CD = 0.3, PARRY_LAG = 0.28, PARRY_OK = 0.35;
+const PARRY_CD = 0.3, PARRY_LAG = 0.28, PARRY_OK = 0.35;
 function tryParry(src, fromX) {
   const p = player, cx = p.x + 5;
   if (!(Math.abs(fromX - cx) < 8 || sgn(fromX - cx) === p.dir)) return false;
@@ -1474,6 +1693,8 @@ function tryParry(src, fromX) {
     const a = rnd(0, TAU), sp = rnd(60, perfect ? 230 : 160);
     parts.push({ x: px, y: py, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40, life: rnd(0.2, 0.5), ml: 0.5, c: i % 3 ? "#ffe066" : "#fff", sz: i % 4 ? 1 : 2, g: 380 });
   }
+  gainXP(perfect ? 6 : 3);
+  if (perfect && sk("counter") >= 2 && p.hp < p.maxHp) { p.hp++; popText("+HP", cx, p.y - 20, "#ff4d6d"); }
   if (isShot) deflect(src, perfect);
   else if (isBoss) staggerBoss(perfect);
   else parryEnemy(src, perfect);
@@ -1511,14 +1732,18 @@ function hurtPlayer(dmg, fromX, src) {
   const p = player;
   if (p.inv > 0 || p.dash > 0 || p.dead) return;
   if (p.parryT > 0 && src && tryParry(src, fromX)) return "parry";
-  p.hp -= dmg; p.inv = 1.7; p.hurtT = 0.3; p.atk = null; p.comboT = 0; p.chargeT = 0; p.chargeArm = false; p.wallSlide = 0;
+  p.hp -= dmg; p.inv = stat.inv; p.hurtT = 0.3; p.atk = null; p.comboT = 0; p.chargeT = 0; p.chargeArm = false; p.wallSlide = 0;
   combo = 0; comboT = 0;
   const dir = p.x + p.w / 2 < fromX ? -1 : 1;
   p.vx = dir * 120; p.vy = -150; p.ground = false;
   hitstop = Math.max(hitstop, 0.09); shake = Math.max(shake, 4); flash = 0.1; flashC = "#f44";
   S.hurt();
   for (let i = 0; i < 8; i++) parts.push({ x: p.x + 5, y: p.y + 7, vx: rnd(-80, 80), vy: rnd(-100, 0), life: 0.4, ml: 0.4, c: "#ff5a5a", sz: 1, g: 300 });
-  if (p.hp <= 0) { p.hp = 0; die(); }
+  if (p.hp <= 0 && p.secondWind > 0) {
+    p.secondWind--; p.hp = 1; p.inv = 2.5; S.perfect();
+    popText("SECOND WIND!", W / 2, 50, "#9cff9c", true);
+    fxs.push({ kind: "pillar", x: p.x + 5, y: p.y + 14, t: 0, dur: 1.0 });
+  } else if (p.hp <= 0) { p.hp = 0; die(); }
 }
 function die() {
   const p = player;
@@ -1538,13 +1763,22 @@ function startAttack(kind) {
   else if (kind !== "dive") S.slash(kind === "air" ? 1 : kind);
   if (kind === "dive") { p.vy = 360; p.vx *= 0.3; }
   if (typeof kind === "number") { p.comboN = kind; p.comboT = 0; if (kind === 3) p.vx = p.dir * 90; }
+  if (stat.wave && (kind === 3 || kind === "spin")) spawnWave(p);
 }
 function attackBox() {
   const p = player, a = p.atk, d = a.d;
   if (a.kind === "dive") return { x: p.x - 4, y: p.y + p.h - 2, w: p.w + 8, h: 14 };
-  if (a.kind === "spin") return { x: p.x - 22, y: p.y - 8, w: p.w + 44, h: p.h + 12 };
-  const x = p.dir > 0 ? p.x + p.w - 2 : p.x - d.reach + 2;
-  return { x, y: p.y - 5, w: d.reach, h: p.h + 10 };
+  if (a.kind === "spin") { const r = 22 * stat.reach; return { x: p.x - r, y: p.y - 8, w: p.w + r * 2, h: p.h + 12 }; }
+  const reach = d.reach * stat.reach;
+  const x = p.dir > 0 ? p.x + p.w - 2 : p.x - reach + 2;
+  return { x, y: p.y - 5, w: reach, h: p.h + 10 };
+}
+function atkDamage(a) {
+  return a.d.dmg + stat.dmg + (a.kind === "riposte" ? stat.counterDmg : 0) + (a.kind === "spin" ? stat.spinDmg : 0);
+}
+function spawnWave(p) {
+  bullets.push({ x: p.x + 5 + p.dir * 12, y: p.y + 5, vx: p.dir * 250, vy: 0, r: 6 + stat.wave, life: 0.45 + 0.15 * stat.wave, c: "#bfe6ff",
+    kind: "swave", owner: "player", dmg: 1 + stat.wave + stat.dmg, pierce: true, hitIds: new Set(), dir: p.dir });
 }
 function wallAt(p, dir) {
   const tx = dir > 0 ? Math.floor((p.x + p.w + 0.5) / TS) : Math.floor((p.x - 0.5) / TS);
@@ -1579,7 +1813,8 @@ function updatePlayer(dt) {
   if (hit("dash") && p.dashCd <= 0 && !stunned && !diving && (p.ground || p.airDash)) {
     p.parryT = 0; p.parryLag = 0;
     p.dash = DASH_T; p.dashCd = DASH_CD; p.dashDir = mv || p.dir; p.dir = p.dashDir; p.atk = null; p.vy = 0; p.chargeT = 0; p.wallSlide = 0;
-    if (!p.ground) p.airDash = false;
+    if (!p.ground) p.airDash--;
+    p.dashHits = new Set();
     S.dash();
     fxs.push({ kind: "ring", x: p.x + 5, y: p.y + 7, t: 0, dur: 0.2, max: 10, c: "#9cc4ff" });
   }
@@ -1587,6 +1822,10 @@ function updatePlayer(dt) {
     p.dash -= dt;
     p.vx = p.dashDir * DASH_SPD; p.vy = 0;
     p.trail.push({ x: p.x, y: p.y, dir: p.dir, life: 0.18 });
+    if (stat.dashStrike) {
+      for (const e of enemies) if (!e.dead && !p.dashHits.has(e.id) && overlaps(p, e)) { p.dashHits.add(e.id); hurtEnemy(e, 1 + stat.dmg, 80, p.x + 5 - p.dashDir * 12, false, "dash"); }
+      if (boss && !boss.dead && !p.dashHits.has("boss") && overlaps(p, boss)) { p.dashHits.add("boss"); hurtBoss(1 + stat.dmg, 0, p.x + 5 - p.dashDir * 12, false); }
+    }
     if (p.dash <= 0) p.vx = p.dashDir * SPD;
   } else {
     // parry: any attack can be cancelled into it except dives, spins and counters
@@ -1625,14 +1864,14 @@ function updatePlayer(dt) {
     }
     // horizontal movement
     const groundAtk = p.atk && p.ground && (typeof p.atk.kind === "number" || p.atk.kind === "spin");
-    let target = mv * SPD * (p.chargeT > 0.12 ? 0.45 : 1);
+    let target = mv * stat.spd * (p.chargeT > 0.12 ? 0.45 : 1);
     if (groundAtk) target = p.atk.kind === "spin" ? 0 : p.atk.kind === 3 ? (p.atk.t < 0.12 ? p.dir * 60 : 0) : mv * 25;
     if (p.wjLock > 0) target = p.vx;
     if (p.parryT > 0 && p.ground) target = 0;
-    else if (p.parryLag > 0) target = mv * SPD * 0.4;
+    else if (p.parryLag > 0) target = mv * stat.spd * 0.4;
     if (p.parryOk > PARRY_OK - 0.15 && p.ground) target = p.vx;
     if (p.atk && p.atk.kind === "riposte") target = p.atk.t < 0.18 ? p.dir * 300 : 0;
-    const acc = p.ground ? ACC : AIR_ACC;
+    const acc = p.ground ? (STAGES[stageIdx].slip ? (mv ? 700 : 240) : ACC) : AIR_ACC;
     if (!stunned) {
       if (p.vx < target) p.vx = Math.min(p.vx + acc * dt, target);
       else if (p.vx > target) p.vx = Math.max(p.vx - acc * dt, target);
@@ -1641,7 +1880,7 @@ function updatePlayer(dt) {
     // wall slide
     p.wallSlide = 0;
     if (!p.ground && !stunned && !diving && p.vy > 0 && mv && wallAt(p, mv)) {
-      p.wallSlide = mv; p.wallDir = mv; p.wallCoyote = 0.12; p.airDash = true; p.jumps = 1; p.dir = -mv;
+      p.wallSlide = mv; p.wallDir = mv; p.wallCoyote = 0.12; p.airDash = stat.airDashes; p.jumps = 1; p.dir = -mv;
       if (Math.random() < 0.3) parts.push({ x: mv > 0 ? p.x + p.w : p.x, y: p.y + rnd(2, 12), vx: -mv * 10, vy: -10, life: 0.25, ml: 0.25, c: "#d8d0c0", sz: 1 });
     }
     // gravity (lighter while jump is held on the way up)
@@ -1661,8 +1900,8 @@ function updatePlayer(dt) {
         p.vy = JUMP * 0.95; p.vx = -p.wallDir * 170; p.dir = -p.wallDir; p.wjLock = 0.16;
         p.jbuf = 0; p.wallCoyote = 0; p.jumps = 1; p.atk = null; S.jump();
         dust(p.wallDir > 0 ? p.x + p.w : p.x, p.y + 8, 4);
-      } else if (p.jumps < 2 && !diving) {
-        p.vy = JUMP * 0.92; p.jumps = 2; p.jbuf = 0; S.djump(); p.atk = null; p.spinT = 0.35;
+      } else if (p.jumps < stat.jumps && !diving) {
+        p.vy = JUMP * 0.92; p.jumps++; p.jbuf = 0; S.djump(); p.atk = null; p.spinT = 0.35;
         fxs.push({ kind: "ring", x: p.x + 5, y: p.y + 14, t: 0, dur: 0.25, max: 12, c: "#fff" });
       }
     }
@@ -1690,10 +1929,19 @@ function updatePlayer(dt) {
   const r = moveY(p, p.vy * dt, p.dropT > 0);
   p.ground = r === "ground";
   if (p.ground) {
-    p.coyote = 0.1; p.jumps = 0; p.airDash = true; p.spinT = 0;
+    p.coyote = 0.1; p.jumps = 0; p.airDash = stat.airDashes; p.spinT = 0;
     if (!wasGround) {
       if (vyBefore > 140) { p.landT = 0.1; S.land(); dust(p.x + 5, p.y + p.h, 3); }
-      if (p.atk && p.atk.kind === "dive") { p.atk = null; shake = Math.max(shake, 3); dust(p.x + 5, p.y + p.h, 8); }
+      if (p.atk && p.atk.kind === "dive") {
+        p.atk = null; shake = Math.max(shake, 3); dust(p.x + 5, p.y + p.h, 8);
+        if (stat.quake) {
+          S.boom(); shake = Math.max(shake, 5);
+          fxs.push({ kind: "ring", x: p.x + 5, y: p.y + p.h - 2, t: 0, dur: 0.35, max: 44, c: "#d8d0c0" });
+          fxs.push({ kind: "crack", x: p.x + 5, y: p.y + p.h, t: 0, dur: 0.8, segs: makeCrack() });
+          for (const e of enemies) if (!e.dead && Math.abs(e.x + e.w / 2 - (p.x + 5)) < 46 && Math.abs(e.y + e.h - (p.y + p.h)) < 24) hurtEnemy(e, 2 + stat.dmg, 150, p.x + 5, true, "quake");
+          if (boss && !boss.dead && Math.abs(boss.x + boss.w / 2 - (p.x + 5)) < 50 && Math.abs(boss.y + boss.h - (p.y + p.h)) < 24) hurtBoss(2 + stat.dmg, 0, p.x + 5, true);
+        }
+      }
     }
     if (groundBelow(p) && !spikeNear(p)) { p.safeX = p.x; p.safeY = p.y; }
   } else if (wasGround && p.vy >= 0) p.coyote = 0.1;
@@ -1827,16 +2075,16 @@ function resolveAttacks() {
   let hitAny = false;
   for (const e of enemies) {
     if (e.dead || a.hits.has(e.id)) continue;
-    if (overlaps(hb, e)) { a.hits.add(e.id); hurtEnemy(e, d.dmg, d.kb, p.x + 5, heavy, a.kind); hitAny = true; }
+    if (overlaps(hb, e)) { a.hits.add(e.id); hurtEnemy(e, atkDamage(a), d.kb, p.x + 5, heavy, a.kind); hitAny = true; }
   }
-  if (boss && !boss.dead && !a.hits.has("boss") && overlaps(hb, boss)) { a.hits.add("boss"); hurtBoss(d.dmg, d.kb, p.x + 5, heavy); hitAny = true; }
+  if (boss && !boss.dead && !a.hits.has("boss") && overlaps(hb, boss)) { a.hits.add("boss"); hurtBoss(atkDamage(a), d.kb, p.x + 5, heavy); hitAny = true; }
   for (const b of bullets) {
     if (b.dead || b.kind === "wave" || b.owner === "player") continue;
     const br = { x: b.x - b.r, y: b.y - b.r, w: b.r * 2, h: b.r * 2 };
     if (overlaps(hb, br)) { b.dead = true; hitAny = true; score += 20; combo++; comboT = 2; S.clank();
       for (let i = 0; i < 5; i++) parts.push({ x: b.x, y: b.y, vx: rnd(-70, 70), vy: rnd(-70, 70), life: 0.3, ml: 0.3, c: "#fff", sz: 1 }); }
   }
-  if (hitAny && a.kind === "dive") { p.atk = null; p.vy = -250; p.jumps = 1; p.dashCd = 0; p.airDash = true; }
+  if (hitAny && a.kind === "dive") { p.atk = null; p.vy = -250; p.jumps = 1; p.dashCd = 0; p.airDash = stat.airDashes; }
   if (hitAny && a.kind === "air") { p.vy = Math.min(p.vy, -60); }
 }
 
@@ -1895,8 +2143,15 @@ function updateWorld(dt) {
       const br = { x: b.x - b.r, y: b.y - b.r, w: b.r * 2, h: b.r * 2 };
       if (b.owner === "player") {
         if (b.life % 0.03 < dt) parts.push({ x: b.x, y: b.y, vx: 0, vy: 0, life: 0.2, ml: 0.2, c: "#ffe066", sz: 1 });
-        for (const e of enemies) if (!e.dead && overlaps(br, e)) { hurtEnemy(e, 2, 90, b.x - Math.sign(b.vx) * 20, true, "shot"); b.dead = true; break; }
-        if (!b.dead && boss && !boss.dead && boss.state !== "dying" && overlaps(br, boss)) { hurtBoss(3, 0, b.x - Math.sign(b.vx) * 20, true); b.dead = true; }
+        for (const e of enemies) {
+          if (e.dead || !overlaps(br, e) || (b.hitIds && b.hitIds.has(e.id))) continue;
+          hurtEnemy(e, b.dmg || 2, 90, b.x - Math.sign(b.vx) * 20, true, "shot");
+          if (b.pierce) b.hitIds.add(e.id); else { b.dead = true; break; }
+        }
+        if (!b.dead && boss && !boss.dead && boss.state !== "dying" && overlaps(br, boss) && !(b.hitIds && b.hitIds.has("boss"))) {
+          hurtBoss(b.dmg ? b.dmg + 1 : 3, 0, b.x - Math.sign(b.vx) * 20, true);
+          if (b.pierce) b.hitIds.add("boss"); else b.dead = true;
+        }
       } else if (overlaps(br, player)) { if (hurtPlayer(1, b.x, b) !== "parry" && b.kind !== "wave") b.dead = true; }
     }
   }
@@ -1926,6 +2181,7 @@ function updateWorld(dt) {
   for (const t of texts) { t.t -= dt; if (t.num) { t.x += t.vx * dt; t.y += t.vy * dt; t.vy += 160 * dt; } else if (!t.big) t.y -= 18 * dt; }
   texts = texts.filter(t => t.t > 0);
   updateCamera(dt);
+  if (pendingLevels > 0 && !player.dead && (!boss || boss.state !== "dying")) { lvT += dt; if (lvT > 0.8) openLevelUp("play"); }
 }
 function updateCamera(dt) {
   const tx = clamp(player.x + player.w / 2 + player.look - W / 2, 0, level.w * TS - W);
@@ -1943,6 +2199,7 @@ function stageClear() {
   if (score > save.best) save.best = score;
   persist();
   state = stageIdx === STAGES.length - 1 ? "win" : "clear"; stateT = 0;
+  gainXP(40 + 25 * stageIdx);
   lastBonus = bonus;
   S.clear(); setSong(null);
 }
@@ -1950,7 +2207,8 @@ let lastBonus = 0, realT = 0, slowT = 0, kickX = 0, kickY = 0;
 
 /* ---------- menus ---------- */
 const PAUSE_ITEMS = ["RESUME", "RESTART STAGE", "CONTROLS", "QUIT TO TITLE"];
-const PAUSE_Y = 76, TITLE_ITEM_Y = 99, CTRL_Y0 = 30, CTRL_DY = 12, CTRL_COL = [140, 220];
+const TITLE_ITEMS = ["START", "HERO", "CONTROLS"], TITLE_DY = 8;
+const PAUSE_Y = 76, TITLE_ITEM_Y = 97, CTRL_Y0 = 30, CTRL_DY = 12, CTRL_COL = [140, 220];
 let titleItem = 0;
 function togglePause() {
   if (state === "play") { state = "pause"; pauseSel = 0; stateT = 0; S.pause(); }
@@ -1967,6 +2225,7 @@ function toTitle() { state = "title"; stateT = 0; titleSel = Math.min(titleSel, 
 function titleChoose() {
   S.menu();
   if (titleItem === 0) { score = 0; maxCombo = 0; startStage(titleSel); }
+  else if (titleItem === 1) { state = "hero"; stateT = 0; heroSel = 1; heroConfirmT = 0; }
   else openControls("title");
 }
 function stageStep(d) { titleSel = (titleSel + d + save.unlocked) % save.unlocked; S.menu(); }
@@ -1988,7 +2247,7 @@ function updateControls(dt) {
   if ((pressed.Enter || pressed.NumpadEnter || pressed.Space) && stateT > 0.15) ctrlActivate();
 }
 function titleItemAt(pos) {
-  for (let i = 0; i < 2; i++) { const y = TITLE_ITEM_Y + i * 10; if (pos.y >= y - 2 && pos.y < y + 8 && Math.abs(pos.x - W / 2) < 45) return i; }
+  for (let i = 0; i < TITLE_ITEMS.length; i++) { const y = TITLE_ITEM_Y + i * TITLE_DY; if (pos.y >= y - 2 && pos.y < y + 6 && Math.abs(pos.x - W / 2) < 45) return i; }
   return -1;
 }
 function pauseItemAt(pos) {
@@ -2010,6 +2269,8 @@ function ctrlAt(pos) {
 function menuHover(pos) {
   if (state === "title") { const i = titleItemAt(pos); if (i >= 0) titleItem = i; }
   else if (state === "pause") { const i = pauseItemAt(pos); if (i >= 0) pauseSel = i; }
+  else if (state === "levelup") { const i = cardAt(pos); if (i >= 0) luSel = i; }
+  else if (state === "hero") { const i = heroItemAt(pos); if (i >= 0 && i !== heroSel) { heroSel = i; heroConfirmT = 0; } }
   else if (state === "controls" && !capture) { const c = ctrlAt(pos); if (c) { ctrlRow = c.row; if (c.col >= 0) ctrlCol = c.col; } }
 }
 function menuClick(pos) {
@@ -2020,6 +2281,8 @@ function menuClick(pos) {
     return false;
   }
   if (state === "pause") { const i = pauseItemAt(pos); if (i >= 0) { pauseSel = i; pauseChoose(); return true; } return false; }
+  if (state === "levelup") { const i = cardAt(pos); if (i >= 0 && stateT > 0.5) { luSel = i; pickSkill(luChoices[i]); } return true; }
+  if (state === "hero") { const i = heroItemAt(pos); if (i >= 0) { heroSel = i; heroChoose(); } return true; }
   if (state === "controls") {
     const c = ctrlAt(pos);
     if (c) { ctrlRow = c.row; if (c.col >= 0) ctrlCol = c.col; ctrlActivate(); }
@@ -2038,8 +2301,21 @@ function drawBG(st) {
     for (let i = 0; i < 40; i++) { const x = (i * 97 + 13) % W, y = (i * 53 + 7) % 110; if ((i + Math.floor(timer * 3)) % 7) ctx.fillRect(x, y, 1, 1); }
     ctx.fillStyle = "#ffe9b0"; ctx.beginPath(); ctx.arc(250, 36, 12, 0, TAU); ctx.fill();
     ctx.fillStyle = st.sky[0]; ctx.beginPath(); ctx.arc(256, 32, 11, 0, TAU); ctx.fill();
-  } else {
-    ctx.fillStyle = "rgba(255,255,255,0.35)";
+  } else if (st.cloud !== "none") {
+    if (st.sun) { ctx.fillStyle = "rgba(255,250,220,0.35)"; ctx.beginPath(); ctx.arc(70, 40, 20, 0, TAU); ctx.fill(); ctx.fillStyle = "#fff3c0"; ctx.beginPath(); ctx.arc(70, 40, 13, 0, TAU); ctx.fill(); }
+    if (st.weather === "rain") {
+      // distant lightning: a soft glow and a thin bolt every few seconds, faded rather than strobed
+      const ph = realT % 6.5, seed = Math.floor(realT / 6.5);
+      if (ph < 0.6) {
+        const a = 1 - ph / 0.6;
+        ctx.fillStyle = "rgba(200,210,255," + (0.1 * a).toFixed(3) + ")"; ctx.fillRect(0, 0, W, H);
+        ctx.strokeStyle = "rgba(230,235,255," + (0.7 * a).toFixed(3) + ")"; ctx.lineWidth = 1; ctx.beginPath();
+        let bx = 60 + (seed * 97) % 200, by = 0; ctx.moveTo(bx, by);
+        for (let i = 0; i < 7; i++) { bx += ((seed * 31 + i * 17) % 13) - 6; by += 14; ctx.lineTo(bx, by); }
+        ctx.stroke();
+      }
+    }
+    ctx.fillStyle = st.cloud || "rgba(255,255,255,0.35)";
     for (let i = 0; i < 6; i++) { const x = ((i * 90 - cam.x * 0.1) % (W + 60) + W + 60) % (W + 60) - 30, y = 20 + (i * 37) % 50; ctx.fillRect(x, y, 26, 5); ctx.fillRect(x + 5, y - 3, 14, 3); ctx.fillRect(x + 8, y + 5, 12, 2); }
   }
   // far layer (mountains / towers)
@@ -2079,13 +2355,21 @@ function drawTiles(st) {
     } else if (t === 1) {
       ctx.fillStyle = st.ground; ctx.fillRect(x, y, TS, TS);
       ctx.fillStyle = "rgba(0,0,0,0.18)"; ctx.fillRect(x + ((tx * 7 + ty * 3) % 5), y + 6 + ((tx * 3) % 4), 4, 2); ctx.fillRect(x + 9, y + 11, 3, 2);
-      if (tileAt(tx, ty - 1) !== 1) { ctx.fillStyle = st.grass; ctx.fillRect(x, y, TS, 3); ctx.fillRect(x + 2, y - 1, 2, 1); ctx.fillRect(x + 9, y - 1, 3, 1); }
+      if (tileAt(tx, ty - 1) !== 1) {
+        ctx.fillStyle = st.grass; ctx.fillRect(x, y, TS, 3); ctx.fillRect(x + 2, y - 1, 2, 1); ctx.fillRect(x + 9, y - 1, 3, 1);
+        if (st.slip) { ctx.fillStyle = "rgba(170,225,255,0.9)"; ctx.fillRect(x, y + 3, TS, 1); ctx.fillStyle = "#ffffff"; ctx.fillRect(x + ((tx * 5) % 11), y + 1, 2, 1); }
+      }
       if (tileAt(tx - 1, ty) !== 1) { ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.fillRect(x, y, 1, TS); }
       if (tileAt(tx + 1, ty) !== 1) { ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.fillRect(x + TS - 1, y, 1, TS); }
     } else if (t === 2) {
       ctx.fillStyle = st.plat; ctx.fillRect(x, y, TS, 4);
       ctx.fillStyle = "rgba(255,255,255,0.25)"; ctx.fillRect(x, y, TS, 1);
       ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.fillRect(x, y + 3, TS, 1); ctx.fillRect(x + 7, y, 1, 4);
+    } else if (t === 3 && st.lava) {
+      const wv = Math.sin(realT * 4 + tx) > 0 ? 1 : 0;
+      ctx.fillStyle = "#ff5a1a"; ctx.fillRect(x, y + 9 + wv, TS, 7 - wv);
+      ctx.fillStyle = "#ffb03a"; ctx.fillRect(x, y + 9 + wv, TS, 2);
+      if ((Math.floor(realT * 3) + tx) % 4 === 0) { ctx.fillStyle = "#ffe080"; ctx.fillRect(x + 5, y + 7 + wv, 2, 2); }
     } else if (t === 3) {
       ctx.fillStyle = "#cfd6e6";
       for (let i = 0; i < 2; i++) { const sx = x + i * 8; ctx.fillRect(sx + 3, y + 8, 2, 8); ctx.fillRect(sx + 2, y + 11, 4, 5); ctx.fillRect(sx + 1, y + 14, 6, 2); }
@@ -2163,7 +2447,7 @@ function heroDraw(o, c, dx, dy, glow) {
   const fsx = 2 + tl + dx, fsy = -11 + ub + dy;
   const ar = o.arm || 4;
   const hx = fsx + Math.cos(o.ang) * ar, hy = fsy + Math.sin(o.ang) * ar;
-  swordDraw(hx, hy, o.ang, o.len, c, glow);
+  swordDraw(hx, hy, o.ang, o.len + 2 * sk("reach"), c, glow);
   thick(fsx, fsy, hx, hy, c || "#3f78e0");
   ctx.fillStyle = c || "#9a6a3e"; ctx.fillRect(Math.round(hx), Math.round(hy), 2, 2);
   ctx.fillStyle = c || "#c89a5e"; ctx.fillRect(Math.round(hx), Math.round(hy), 1, 1);
@@ -2355,6 +2639,12 @@ function drawFxExtra(f, p) {
     ctx.fillStyle = "#fff"; ctx.fillRect(Math.round(Math.min(x, x + f.dir * len * 0.9)), Math.round(y), Math.round(len * 0.9), 1);
     ctx.globalAlpha = 1; return true;
   }
+  if (f.kind === "pillar") {
+    const a = 1 - p, w = 10 + p * 8;
+    ctx.globalAlpha = a * 0.5; ctx.fillStyle = "#ffe066"; ctx.fillRect(Math.round(x - w / 2), 0, Math.round(w), Math.round(y));
+    ctx.globalAlpha = a * 0.8; ctx.fillStyle = "#fff6c0"; ctx.fillRect(Math.round(x - 2), 0, 4, Math.round(y));
+    ctx.globalAlpha = 1; return true;
+  }
   if (f.kind === "crack") {
     ctx.globalAlpha = 1 - p * p; ctx.strokeStyle = "#120c1c"; ctx.lineWidth = 1;
     ctx.beginPath();
@@ -2371,6 +2661,33 @@ function makeCrack() {
     segs.push(seg);
   }
   return segs;
+}
+function drawWeather(st) {
+  const w = st.weather, T = realT;
+  if (!w) return;
+  const wrap = (v, m) => ((v % m) + m) % m;
+  if (w === "snow") {
+    for (let i = 0; i < 50; i++) {
+      const x = wrap(i * 67.3 + Math.sin(T * 0.8 + i) * 8 - cam.x * (0.3 + (i % 3) * 0.2), W), y = wrap(i * 41.7 + T * (12 + (i % 5) * 6), H + 10) - 5;
+      ctx.fillStyle = i % 4 ? "rgba(255,255,255,0.75)" : "#ffffff"; ctx.fillRect(Math.round(x), Math.round(y), i % 4 ? 1 : 2, i % 4 ? 1 : 2);
+    }
+  } else if (w === "rain") {
+    ctx.fillStyle = "rgba(170,190,230,0.45)";
+    for (let i = 0; i < 60; i++) { const x = wrap(i * 53.1 - T * 60 - cam.x * 0.6, W), y = wrap(i * 29.3 + T * 260, H + 20) - 10; ctx.fillRect(Math.round(x), Math.round(y), 1, 5); ctx.fillRect(Math.round(x) - 1, Math.round(y) + 5, 1, 2); }
+  } else if (w === "sand") {
+    ctx.fillStyle = "rgba(255,225,160,0.35)";
+    for (let i = 0; i < 40; i++) { const x = wrap(i * 71.7 - T * (90 + (i % 4) * 30) - cam.x * 0.5, W), y = wrap(i * 37.9 + Math.sin(T * 2 + i) * 4, H); ctx.fillRect(Math.round(x), Math.round(y), 3 + i % 3, 1); }
+  } else if (w === "ember") {
+    for (let i = 0; i < 36; i++) {
+      const x = wrap(i * 59.3 + Math.sin(T + i) * 10 - cam.x * 0.4, W), y = H - wrap(i * 33.1 + T * (20 + (i % 4) * 8), H + 10);
+      ctx.fillStyle = i % 3 ? "rgba(255,120,40,0.8)" : "rgba(255,220,120,0.9)"; ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
+    }
+  } else if (w === "mist") {
+    for (let i = 0; i < 28; i++) {
+      const x = wrap(i * 83.7 + T * (6 + i % 3 * 4) - cam.x * 0.5, W + 20) - 10, y = wrap(i * 47.3 + Math.sin(T * 0.7 + i) * 6, H);
+      ctx.fillStyle = i % 2 ? "rgba(150,100,255,0.25)" : "rgba(200,170,255,0.18)"; ctx.fillRect(Math.round(x), Math.round(y), 6 + i % 5, 1);
+    }
+  }
 }
 function drawFlag() {
   if (!flag) return;
@@ -2389,7 +2706,7 @@ function drawFlag() {
    where the sword hand sits and the blade points, how the cape flies, and what the off hand is doing. */
 function bossPose(b) {
   const P = { lean: 0, crouch: 0, sword: 0.6, hx: 11, hy: -24, fl: 0, bl: 0, lift: 0, cape: 0.1, arm: "", glow: 0, sx: 0, head: 0, glint: 0, ghosts: 0, smear: null };
-  const spd = b.phase === 2 ? 1.25 : 1, t = b.t, st = b.st;
+  const spd = (b.phase === 2 ? 1.25 : 1) * (b.dark ? 1.15 : 1), t = b.t, st = b.st;
   const jitter = () => Math.floor(t * 30) % 2 ? 1 : -1;
   switch (b.state) {
     case "intro": { const k = clamp((st - 1.0) / 0.9, 0, 1); P.sword = lerp(0.6, -1.5, Math.sin(k * Math.PI)); P.hx = 9; P.hy = -28; P.glow = k; break; }
@@ -2451,13 +2768,22 @@ function bossPose(b) {
   }
   return P;
 }
+/* the final boss reuses the knight's body with a violet palette */
+const DARK_MAP = {
+  "#8b93ad": "#5a4a7a", "#e2e8fa": "#b8a0e0", "#c4cbe0": "#8a70b0", "#5d6584": "#3a2a55", "#aab2cc": "#6a5090", "#4d5470": "#2a1f40",
+  "#3a3f5a": "#241a35", "#2f3450": "#1c1430", "#5a607e": "#3a2f55", "#1f2236": "#120c1c", "#1a1d30": "#0c0814", "#2d3247": "#1a1028",
+  "#ffb547": "#c060ff", "#ffd27a": "#e0a0ff", "#ff8a3d": "#ff40ff", "#d8def0": "#c8b8f0", "#8f9cc4": "#6a5aa0",
+  "#5a0e2a": "#2a0a40", "#7a1a3a": "#4a1a6a", "#2e0716": "#14051f", "#420a20": "#1c0630",
+  "#7a2626": "#4a1a5a", "#b83c3c": "#7a3aa0", "#e06060": "#b070e0", "#d05050": "#9050c0", "#f08080": "#c090f0",
+  "#a01c1c": "#5a1080", "#d03838": "#8a30c0", "#5a0a0a": "#2a0540"
+};
 function drawBoss() {
   const b = boss;
   if (!b || b.dead) return;
   const P = bossPose(b);
   const x = Math.round(b.x - cam.x) + P.sx, y = Math.round(b.y - cam.y);
   const p2 = b.phase === 2;
-  const R = (c, X, Y, w, h, col) => { ctx.fillStyle = c || col; ctx.fillRect(Math.round(X), Math.round(Y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h))); };
+  const R = (c, X, Y, w, h, col) => { ctx.fillStyle = c || (b.dark ? DARK_MAP[col] || col : col); ctx.fillRect(Math.round(X), Math.round(Y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h))); };
   const limb = (c, x0, y0, x1, y1, col) => { const n = Math.max(1, Math.round(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)))); for (let i = 0; i <= n; i++) R(c, lerp(x0, x1, i / n) - 1, lerp(y0, y1, i / n) - 1, 3, 3, col); };
   const body = (c, ox, oy) => {
     const X = ox + P.lean, Y = oy + P.crouch, Yh = Y + P.head;
@@ -2576,9 +2902,14 @@ function drawHUD() {
     ctx.fillStyle = "#3a1a2a"; ctx.fillRect(bx, by, bw, 4);
     ctx.fillStyle = boss.phase === 2 ? "#ff3030" : "#ff6060"; ctx.fillRect(bx, by, Math.ceil(bw * boss.hp / boss.maxHp), 4);
     ctx.fillStyle = "#fff"; ctx.fillRect(bx + bw / 2, by, 1, 4);
-    shadowText("IRON DUKE", W / 2, by - 7, "#ff9a9a", 1, "center");
+    shadowText(boss.dark ? "DARK DUKE" : "IRON DUKE", W / 2, by - 7, boss.dark ? "#d0a0ff" : "#ff9a9a", 1, "center");
   }
-  if (player.dashCd > 0 && !touchMode) { ctx.fillStyle = "#9cc4ff"; ctx.fillRect(4, 19, Math.ceil(20 * (1 - player.dashCd / DASH_CD)), 1); }
+  shadowText("LV" + hero.level, 4, 20, "#c58cff");
+  const xpw = 34, xpx = 4 + (String(hero.level).length + 2) * 4 + 1;
+  ctx.fillStyle = "#000"; ctx.fillRect(xpx - 1, 21, xpw + 2, 4);
+  ctx.fillStyle = "#3a2a55"; ctx.fillRect(xpx, 22, xpw, 2);
+  ctx.fillStyle = "#c58cff"; ctx.fillRect(xpx, 22, hero.level >= MAX_LEVEL ? xpw : Math.floor(xpw * hero.xp / xpNeed(hero.level)), 2);
+  if (player.dashCd > 0 && !touchMode) { ctx.fillStyle = "#9cc4ff"; ctx.fillRect(4, 28, Math.ceil(20 * (1 - player.dashCd / DASH_CD)), 1); }
   if (touchMode && state === "play") { ctx.fillStyle = "rgba(255,255,255,0.5)"; ctx.fillRect(W / 2 - 60, 4, 2, 6); ctx.fillRect(W / 2 - 56, 4, 2, 6); }
   // arrows toward the last few enemies when they are off screen
   if (enemies.length && enemies.length <= 4) {
@@ -2622,6 +2953,13 @@ function drawWorld() {
   drawBoss();
   for (const b of bullets) {
     const x = b.x - cam.x, y = b.y - cam.y;
+    if (b.kind === "swave") {
+      const cx = x - b.dir * 5, a0 = b.dir > 0 ? -1.1 : Math.PI - 1.1, a1 = b.dir > 0 ? 1.1 : Math.PI + 1.1;
+      ctx.globalAlpha = clamp(b.life * 4, 0, 1);
+      ctx.strokeStyle = "#7fb0ff"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(cx, y, b.r + 2, a0, a1); ctx.stroke();
+      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(cx, y, b.r + 3, a0 + 0.2, a1 - 0.2); ctx.stroke();
+      ctx.globalAlpha = 1; continue;
+    }
     if (b.kind === "arrow") { const a = Math.atan2(b.vy, b.vx); pixLine(x - Math.cos(a) * 6, y - Math.sin(a) * 6, x, y, "#d8c8a0"); ctx.fillStyle = "#fff"; ctx.fillRect(Math.round(x), Math.round(y), 1, 1); continue; }
     if (b.kind === "wave") { ctx.fillStyle = "#ffb547"; ctx.fillRect(x - 5, y + 2, 10, 8); ctx.fillStyle = "#ffe08a"; ctx.fillRect(x - 3, y - 1, 6, 4); }
     else { ctx.fillStyle = b.c; ctx.fillRect(x - b.r, y - b.r, b.r * 2, b.r * 2); ctx.fillStyle = "#fff"; ctx.fillRect(x - 1, y - 1, 2, 2); }
@@ -2645,6 +2983,7 @@ function drawWorld() {
   }
   ctx.globalAlpha = 1;
   ctx.restore();
+  drawWeather(st);
   if (flash > 0) { ctx.globalAlpha = clamp(flash * 2, 0, 0.3); ctx.fillStyle = flashC; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
   drawHUD();
 }
@@ -2671,14 +3010,14 @@ function drawTitle(t) {
   shadowText(st.name, W / 2, 81, "#9cc4ff", 1, "center");
   const bt = save.bestTime[String(titleSel)];
   if (bt) shadowText("BEST " + Math.floor(bt / 60) + ":" + String(Math.floor(bt % 60)).padStart(2, "0"), W / 2, 89, "#ddd", 1, "center");
-  ["START", "CONTROLS"].forEach((label, i) => {
+  TITLE_ITEMS.forEach((label, i) => {
     const sel = i === titleItem, blink = sel && Math.floor(t * 3) % 2;
-    shadowText((sel ? "> " : "") + label + (sel ? " <" : ""), W / 2, TITLE_ITEM_Y + i * 10, sel ? (blink ? "#fff" : "#ffe066") : "#9a9a9a", 1, "center");
+    shadowText((sel ? "> " : "") + label + (sel ? " <" : ""), W / 2, TITLE_ITEM_Y + i * TITLE_DY, sel ? (blink ? "#fff" : "#ffe066") : "#9a9a9a", 1, "center");
   });
-  shadowText("JUMP " + firstKey("jump") + "  ATTACK " + firstKey("attack") + "  DASH " + firstKey("dash") + "  PARRY " + firstKey("parry"), W / 2, 120, "#ccc", 1, "center");
-  shadowText("PARRY JUST BEFORE A HIT, THEN ATTACK TO COUNTER", W / 2, 128, "#ffd27a", 1, "center");
-  shadowText("HOLD ATTACK: SPIN   AIR DOWN+ATTACK: DIVE   WALL: SLIDE+JUMP", W / 2, 136, "#aaa", 1, "center");
-  shadowText("DEFEAT EVERY ENEMY TO OPEN THE FLAG", W / 2, 144, "#999", 1, "center");
+  shadowText("JUMP " + firstKey("jump") + "  ATTACK " + firstKey("attack") + "  DASH " + firstKey("dash") + "  PARRY " + firstKey("parry"), W / 2, 123, "#ccc", 1, "center");
+  shadowText("PARRY JUST BEFORE A HIT, THEN ATTACK TO COUNTER", W / 2, 131, "#ffd27a", 1, "center");
+  shadowText("DEFEAT EVERY ENEMY TO OPEN THE FLAG.  LEVEL UP TO LEARN SKILLS", W / 2, 139, "#aaa", 1, "center");
+  shadowText("LV " + hero.level, 4, 4, "#c58cff", 1);
   shadowText("HI " + String(save.best).padStart(7, "0"), W - 4, 4, "#ffe066", 1, "right");
 }
 function drawPause() {
@@ -2724,13 +3063,93 @@ function drawDead(t) {
 }
 function drawClear(t, win) {
   drawWorld(); dim(Math.min(0.7, t));
-  shadowText(win ? "IRON KEEP FALLS" : "STAGE CLEAR", W / 2, 46, "#ffe066", win ? 2 : 3, "center");
+  shadowText(win ? "THE CITADEL FALLS" : "STAGE CLEAR", W / 2, 40, "#ffe066", win ? 2 : 3, "center");
   const m = Math.floor(timer / 60), s = Math.floor(timer % 60);
-  const rows = [["TIME", m + ":" + String(s).padStart(2, "0")], ["KILLS", kills], ["MAX COMBO", maxCombo], ["BONUS", lastBonus], ["SCORE", score]];
-  rows.forEach((r, i) => { if (t > 0.3 + i * 0.25) { shadowText(r[0], W / 2 - 50, 76 + i * 10, "#bbb"); shadowText(String(r[1]), W / 2 + 50, 76 + i * 10, "#fff", 1, "right"); } });
-  if (win && t > 2) shadowText("THANK YOU FOR PLAYING", W / 2, 134, "#9cc4ff", 1, "center");
-  if (t > 2 && Math.floor(t * 2) % 2) shadowText(win ? (touchMode ? "TAP: TITLE" : "ENTER: TITLE") : (touchMode ? "TAP: NEXT STAGE" : "ENTER: NEXT STAGE"), W / 2, 150, "#fff", 1, "center");
+  const rows = [["TIME", m + ":" + String(s).padStart(2, "0")], ["KILLS", kills], ["MAX COMBO", maxCombo], ["XP", "+" + stageXP], ["BONUS", lastBonus], ["SCORE", score]];
+  rows.forEach((r, i) => { if (t > 0.3 + i * 0.2) { shadowText(r[0], W / 2 - 50, 66 + i * 10, i === 3 ? "#c58cff" : "#bbb"); shadowText(String(r[1]), W / 2 + 50, 66 + i * 10, i === 3 ? "#e0c0ff" : "#fff", 1, "right"); } });
+  if (t > 1.6) shadowText("LEVEL " + hero.level + (hero.level < MAX_LEVEL ? "   " + hero.xp + " / " + xpNeed(hero.level) + " XP" : "   MAX"), W / 2, 130, "#c58cff", 1, "center");
+  if (win && t > 2) shadowText("THANK YOU FOR PLAYING", W / 2, 140, "#9cc4ff", 1, "center");
+  if (t > 2 && Math.floor(t * 2) % 2) {
+    const msg = pendingLevels > 0 ? (touchMode ? "TAP: CHOOSE A SKILL" : "LEVEL UP!  ENTER: CHOOSE A SKILL")
+      : win ? (touchMode ? "TAP: TITLE" : "ENTER: TITLE") : (touchMode ? "TAP: NEXT STAGE" : "ENTER: NEXT STAGE");
+    shadowText(msg, W / 2, 152, pendingLevels > 0 ? "#ffe066" : "#fff", 1, "center");
+  }
 }
+function drawIcon(k, x, y, sc) {
+  ctx.save(); ctx.translate(Math.round(x), Math.round(y)); ctx.scale(sc, sc);
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) sprite(k.icon, null, dx / sc, dy / sc, false, OUTLINE);
+  sprite(k.icon, { x: k.col, y: "#ffffff" }, 0, 0);
+  ctx.restore();
+}
+const CARD_W = 96, CARD_Y = 46, CARD_H = 104;
+const cardX = i => 8 + i * (CARD_W + 8);
+function drawLevelUp(t) {
+  drawWorld(); dim(0.78);
+  const pulse = Math.floor(t * 3) % 2;
+  shadowText("LEVEL UP!", W / 2, 6, pulse ? "#ffe066" : "#fff6c0", 3, "center");
+  shadowText("LV " + hero.level + "   CHOOSE A SKILL" + (pendingLevels > 1 ? "   (" + (pendingLevels - 1) + " MORE)" : ""), W / 2, 30, "#c58cff", 1, "center");
+  luChoices.forEach((k, i) => {
+    const sel = i === luSel, x = cardX(i), y = CARD_Y - (sel ? 3 : 0) + Math.max(0, 20 - t * 80 - i * 6);
+    ctx.fillStyle = OUTLINE; ctx.fillRect(x - 1, y - 1, CARD_W + 2, CARD_H + 2);
+    ctx.fillStyle = sel ? "#241a3a" : "#16101f"; ctx.fillRect(x, y, CARD_W, CARD_H);
+    ctx.fillStyle = k.col; ctx.fillRect(x, y, CARD_W, 3);
+    if (sel) { ctx.strokeStyle = "#ffe066"; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, CARD_W - 1, CARD_H - 1); }
+    drawIcon(k, x + CARD_W / 2 - 8, y + 8, 2);
+    shadowText(k.name, x + CARD_W / 2, y + 30, sel ? "#ffffff" : "#d8d8d8", 1, "center");
+    const r = sk(k.id), isFall = k.max > 10;
+    const rankTxt = isFall ? "BONUS" : r === 0 ? "NEW SKILL" : "RANK " + (r + 1) + " / " + k.max;
+    shadowText(rankTxt, x + CARD_W / 2, y + 39, r === 0 && !isFall ? "#9cff9c" : "#ffd27a", 1, "center");
+    k.desc.forEach((line, j) => shadowText(line, x + CARD_W / 2, y + 54 + j * 9, "#bbb", 1, "center"));
+  });
+  shadowText(touchMode ? "TAP A CARD TO LEARN IT" : "LEFT/RIGHT: CHOOSE    ENTER OR CLICK: LEARN", W / 2, 162, "#999", 1, "center");
+}
+function updateLevelUp() {
+  if (mLeft()) { luSel = (luSel + 2) % 3; S.menu(); }
+  if (mRight()) { luSel = (luSel + 1) % 3; S.menu(); }
+  if (stateT > 0.5 && (pressed.Enter || pressed.NumpadEnter || pressed.Space || hitKey("attack") || hitKey("jump") || mouseOk)) pickSkill(luChoices[luSel]);
+}
+function cardAt(pos) { for (let i = 0; i < 3; i++) if (pos.x >= cardX(i) && pos.x < cardX(i) + CARD_W && pos.y >= CARD_Y - 4 && pos.y < CARD_Y + CARD_H) return i; return -1; }
+const HERO_ITEMS = ["RESET PROGRESS", "BACK"], HERO_Y = 150;
+function drawHeroScreen(t) {
+  drawBG(STAGES[titleSel]); dim(0.8);
+  shadowText("HERO", W / 2, 6, "#ffe066", 2, "center");
+  shadowText("LEVEL " + hero.level, W / 2, 22, "#c58cff", 2, "center");
+  const bw = 160, bx = (W - bw) / 2, by = 36;
+  ctx.fillStyle = "#000"; ctx.fillRect(bx - 1, by - 1, bw + 2, 6);
+  ctx.fillStyle = "#3a2a55"; ctx.fillRect(bx, by, bw, 4);
+  ctx.fillStyle = "#c58cff"; ctx.fillRect(bx, by, hero.level >= MAX_LEVEL ? bw : Math.floor(bw * hero.xp / xpNeed(hero.level)), 4);
+  shadowText(hero.level >= MAX_LEVEL ? "MAX LEVEL" : hero.xp + " / " + xpNeed(hero.level) + " XP TO LEVEL " + (hero.level + 1), W / 2, 43, "#bbb", 1, "center");
+  const learned = SKILLS.concat(FALLBACK_SKILLS).filter(k => sk(k.id) > 0 && k.id !== "restore");
+  if (!learned.length) {
+    shadowText("NO SKILLS YET.", W / 2, 78, "#999", 1, "center");
+    shadowText("DEFEAT ENEMIES TO EARN XP. EACH LEVEL LETS YOU LEARN A SKILL.", W / 2, 88, "#999", 1, "center");
+  }
+  learned.forEach((k, i) => {
+    const col = i % 2, row = Math.floor(i / 2), x = col ? 168 : 24, y = 56 + row * 11;
+    drawIcon(k, x, y - 1, 1);
+    shadowText(k.name, x + 12, y + 1, "#ddd");
+    shadowText(k.max > 10 ? "X" + sk(k.id) : "*".repeat(sk(k.id)) + ".".repeat(k.max - sk(k.id)), x + 130, y + 1, k.col, 1, "right");
+  });
+  HERO_ITEMS.forEach((label, i) => {
+    const sel = i === heroSel;
+    let txt = label;
+    if (i === 0 && heroConfirmT > 0) txt = "PRESS AGAIN TO ERASE LEVEL AND SKILLS";
+    shadowText((sel ? "> " : "") + txt + (sel ? " <" : ""), W / 2, HERO_Y + i * 10, sel ? (i === 0 && heroConfirmT > 0 ? "#ff6b6b" : "#ffe066") : "#9a9a9a", 1, "center");
+  });
+}
+function heroChoose() {
+  S.menu();
+  if (heroSel === 1) { state = "title"; stateT = 0; heroConfirmT = 0; return; }
+  if (heroConfirmT > 0) { resetHero(); heroConfirmT = 0; popSys("PROGRESS RESET"); }
+  else heroConfirmT = 3;
+}
+function updateHeroScreen(dt) {
+  if (heroConfirmT > 0) heroConfirmT -= dt;
+  if (pressed.Escape) { state = "title"; stateT = 0; heroConfirmT = 0; return; }
+  if (mUp() || mDown()) { heroSel = 1 - heroSel; heroConfirmT = 0; S.menu(); }
+  if (stateT > 0.2 && (pressed.Enter || pressed.NumpadEnter || pressed.Space)) heroChoose();
+}
+function heroItemAt(pos) { for (let i = 0; i < 2; i++) { const y = HERO_Y + i * 10; if (pos.y >= y - 2 && pos.y < y + 8 && Math.abs(pos.x - W / 2) < 80) return i; } return -1; }
 
 /* ---------- main loop ---------- */
 let last = performance.now();
@@ -2752,9 +3171,18 @@ function frame(now) {
   if (state === "title") {
     if (mLeft()) stageStep(-1);
     if (mRight()) stageStep(1);
-    if (mUp() || mDown()) { titleItem = 1 - titleItem; S.menu(); }
+    if (mUp()) { titleItem = (titleItem + TITLE_ITEMS.length - 1) % TITLE_ITEMS.length; S.menu(); }
+    if (mDown()) { titleItem = (titleItem + 1) % TITLE_ITEMS.length; S.menu(); }
     if (mOk() && stateT > 0.3) titleChoose();
     if (state === "title") drawTitle(stateT);
+  } else if (state === "levelup") {
+    updateLevelUp();
+    if (state === "levelup") drawLevelUp(stateT);
+    else if (state === "play") drawWorld();
+    else if (state === "clear" || state === "win") drawClear(stateT, state === "win");
+  } else if (state === "hero") {
+    updateHeroScreen(dt);
+    if (state === "hero") drawHeroScreen(stateT); else drawTitle(stateT);
   } else if (state === "controls") {
     updateControls(dt);
     if (state === "controls") drawControls(stateT);
@@ -2781,8 +3209,9 @@ function frame(now) {
   } else if (state === "clear" || state === "win") {
     stepFx(dt);
     updateCamera(dt);
-    if (stateT > 2 && mOk()) { if (state === "win") toTitle(); else startStage(stageIdx + 1); }
+    if (stateT > 2 && mOk()) { if (pendingLevels > 0) openLevelUp(state); else if (state === "win") toTitle(); else startStage(stageIdx + 1); }
     if (state === "clear" || state === "win") drawClear(stateT, state === "win");
+    else if (state === "levelup") drawLevelUp(stateT);
   }
   drawTouch();
   if (sysT > 0) shadowText(sysMsg, W / 2, H - 10, "#fff", 1, "center");
@@ -2805,6 +3234,10 @@ window.__blade = {
   god: () => { player.maxHp = 99; player.hp = 99; },
   bossHp: v => { if (boss) boss.hp = v; },
   binds: () => binds,
+  hero: () => ({ level: hero.level, xp: hero.xp, skills: Object.assign({}, hero.skills), pending: pendingLevels, choices: luChoices.map(k => k.id), stat: Object.assign({}, stat) }),
+  giveXP: n => gainXP(n),
+  setSkills: o => { hero.skills = Object.assign({}, o); recalcStats(); },
+  unlockAll: () => { save.unlocked = STAGES.length; },
   shoot: (x, y, vx, vy, kind) => bullets.push({ x, y, vx, vy, r: 2, life: 3, c: "#ff6b6b", kind: kind || "bullet" }),
   bullets: () => bullets.map(b => ({ x: b.x, vx: b.vx, owner: b.owner || "", kind: b.kind })),
   bossSet: st => { if (boss) { bossSet(st); } },
