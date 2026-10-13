@@ -13,7 +13,16 @@
   --glow: #ffb547;
   color-scheme: dark;
 }
-html, body { height: 100%; }
+html, body {
+  height: 100%;
+  /* no trackpad/touch swipe navigation, no pull-to-refresh, no text selection while playing */
+  overscroll-behavior: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
 body {
   position: fixed;
   inset: 0;
@@ -708,10 +717,11 @@ function finishCapture(code) {
   saveBinds(); S.pick();
 }
 
-const PREVENT = new Set(["Space", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Tab"]);
+const KEEP_KEYS = new Set(["F5", "F11", "F12"]);
 addEventListener("keydown", e => {
+  armBackGuard();
   if (capture) { e.preventDefault(); if (!e.repeat) finishCapture(e.code); return; }
-  if (PREVENT.has(e.code) || isBound(e.code)) e.preventDefault();
+  if (!(e.ctrlKey || e.metaKey) && !KEEP_KEYS.has(e.code)) e.preventDefault();
   if (e.repeat) return;
   initAudio();
   if (!keys[e.code]) pressed[e.code] = true;
@@ -750,6 +760,36 @@ cv.addEventListener("wheel", e => {
   pressed[code] = true;
 }, { passive: false });
 cv.addEventListener("auxclick", e => e.preventDefault());
+/* The mouse "back"/"forward" side buttons (and middle click) would otherwise leave the page or start autoscroll.
+   Every mouse button press anywhere on the page is caught here: the default action is cancelled and the button is
+   fed to the game (so side buttons can still be bound in the key settings). */
+for (const type of ["pointerdown", "pointerup", "pointermove"]) {
+  addEventListener(type, e => {
+    if (e.pointerType !== "mouse") return;
+    if (type !== "pointermove") { e.preventDefault(); armBackGuard(); }
+    if (e.target !== cv) setMouseMask(e.buttons); // the canvas handlers below track presses on the canvas itself
+  }, { capture: true, passive: false });
+}
+for (const type of ["mousedown", "mouseup", "auxclick", "contextmenu", "dragstart", "selectstart", "dblclick"]) addEventListener(type, e => e.preventDefault(), { capture: true, passive: false });
+// pinch/ctrl-wheel zoom and horizontal swipe navigation
+addEventListener("wheel", e => { e.preventDefault(); }, { passive: false });
+/* Back-navigation guard: once the player has interacted, an extra history entry absorbs "back" (Alt+Left, a swipe,
+   Android back, a side button the browser handled anyway). Going back just pauses the game instead of leaving it. */
+let backGuard = false;
+function armBackGuard() {
+  if (backGuard) return;
+  backGuard = true;
+  try { history.pushState({ blade: 1 }, "", location.href); } catch (_) {}
+}
+addEventListener("popstate", () => {
+  try { history.pushState({ blade: 1 }, "", location.href); } catch (_) {}
+  if (state === "play") togglePause();
+  popSys("뒤로 가기를 막았습니다");
+});
+// leaving mid-run (closing the tab, a stray shortcut) asks for confirmation first
+addEventListener("beforeunload", e => {
+  if (state === "play" || state === "pause" || state === "levelup") { e.preventDefault(); e.returnValue = ""; }
+});
 
 /* touch: virtual buttons */
 const TBTN = [
@@ -783,7 +823,7 @@ function pointerBtn(pos) {
   return null;
 }
 cv.addEventListener("pointerdown", e => {
-  initAudio();
+  initAudio(); armBackGuard();
   cv.focus();
   e.preventDefault();
   try { cv.setPointerCapture(e.pointerId); } catch (_) {}
@@ -815,7 +855,7 @@ cv.addEventListener("pointermove", e => {
   }
 });
 function endPointer(e) {
-  if (e.pointerType !== "touch") { setMouseMask(e.buttons || 0); return; }
+  if (e.pointerType !== "touch") { e.preventDefault(); setMouseMask(e.buttons || 0); return; }
   pointers.delete(e.pointerId); recomputeTouch();
 }
 cv.addEventListener("pointerup", endPointer);
