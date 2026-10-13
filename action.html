@@ -2723,7 +2723,9 @@ function updateHazards(dt) {
     }
     h.age += dt; h.dur -= dt;
     let box = null;
-    if (h.kind === "spike") box = { x: h.x - h.w / 2, y: h.y - h.h * Math.min(1, h.age / 0.06), w: h.w, h: h.h };
+    // custom hazards (boss modules): h.custom.update(h, dt) returns the damaging box or null
+    if (h.custom) box = h.custom.update ? h.custom.update(h, dt) : null;
+    else if (h.kind === "spike") box = { x: h.x - h.w / 2, y: h.y - h.h * Math.min(1, h.age / 0.06), w: h.w, h: h.h };
     else if (h.kind === "fall" || h.kind === "rock") {
       if (!h.landed) {
         h.fy += (h.kind === "rock" ? 300 : 420) * dt;
@@ -4084,6 +4086,8 @@ function updateWorld(dt) {
   for (const b of bullets) {
     if (b.kind === "gsword") { updateGsword(b, dt); continue; }
     if (b.kind === "bomb" && !b.owner) { updateBomb(b, dt); continue; }
+    // custom bullets (boss modules): b.updFn(b, dt) runs every frame before the usual movement
+    if (b.updFn) { b.updFn(b, dt); if (b.dead) continue; }
     if (b.g) b.vy += b.g * dt;
     if (b.home && !b.owner) {
       // homing: turn gently toward the player
@@ -4860,6 +4864,8 @@ function drawHazards() {
   const gyScreen = y => Math.round(y - cam.y);
   for (const h of hazards) {
     const x = Math.round(h.x - cam.x), blink = Math.floor(realT * 12) % 2;
+    // custom hazards draw themselves, telegraph included (third argument: still warning?)
+    if (h.custom) { if (h.custom.draw) h.custom.draw(h, x, h.t > 0); continue; }
     if (h.t > 0) {
       // telegraph markers
       if (h.kind === "beam") {
@@ -5388,6 +5394,7 @@ function drawWorld(quiet = false) {
   drawHazards();
   for (const b of bullets) {
     const x = b.x - cam.x, y = b.y - cam.y;
+    if (b.drawFn) { b.drawFn(b, x, y); continue; }
     if (b.kind === "swave") {
       const cx = x - b.dir * 5, a0 = b.dir > 0 ? -1.1 : Math.PI - 1.1, a1 = b.dir > 0 ? 1.1 : Math.PI + 1.1;
       ctx.globalAlpha = clamp(b.life * 4, 0, 1);
