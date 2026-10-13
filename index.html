@@ -1635,6 +1635,7 @@ function updateTitleLobby() {
   if (pressed.escape) { setPage(0); return; }
   if (lobby.t < 0.2) return;
   if (lobby.page === 0) {
+    if (pressed.g || (tap !== undefined && ty > 274 && ty < 290)) { location.href = "fight.html"; return; }
     if (ok || tap !== undefined) sortie();
   } else if (lobby.page === -1) {
     const n = PILOTS.length;
@@ -1706,6 +1707,7 @@ function drawTitlePage(blinkOn) {
   if (blinkOn) text("PRESS ENTER OR TAP TO SORTIE", W / 2, 240, "#5fd3ff", 1, "center");
   text("MOVE ARROWS/WASD  DASH SPACE", W / 2, 258, "#9087a3", 1, "center");
   text("FOCUS SHIFT  BOMB C  PAUSE P", W / 2, 268, "#9087a3", 1, "center");
+  text("G: FIGHTING GAME >", W / 2, 280, "#ff5d5a", 1, "center");
 }
 function pilotIcon(p) { if (!p.icon) p.icon = shipCanvas(p.rows, p.pal, false); return p.icon; }
 function drawShopPage() {
