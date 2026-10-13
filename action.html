@@ -4933,6 +4933,8 @@ function drawHazards() {
   }
 }
 function drawFxExtra(f, p) {
+  // custom effects: f.drawFn(f, progress 0..1, screenX, screenY)
+  if (f.drawFn) { f.drawFn(f, p, f.x - cam.x, f.y - cam.y); return true; }
   const x = f.x - cam.x, y = f.y - cam.y;
   if (f.kind === "impact") {
     const n = f.big ? 6 : 4, L = (f.big ? 13 : 8) * (0.5 + p * 0.7);
