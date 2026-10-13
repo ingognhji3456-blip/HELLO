@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Pixel Knockout</title>
+<title>픽셀 녹아웃</title>
 <style>
 /* Layout: the 16:9 arena fills the window; the space around it is a dim backdrop. Single dark look by choice. */
 :root {
@@ -42,12 +42,13 @@ canvas {
 </style>
 </head>
 <body>
-<div class="screen"><canvas id="game" width="320" height="180" tabindex="0" aria-label="PIXEL KNOCKOUT 격투게임 화면"></canvas></div>
+<div class="screen"><canvas id="game" width="1280" height="720" tabindex="0" aria-label="픽셀 녹아웃 격투게임 화면"></canvas></div>
 
 <script>
 (() => {
 "use strict";
-const W = 320, H = 180, G = 162, WL = 12, WR = W - 12, DEG = Math.PI / 180, TAU = Math.PI * 2;
+// The game is laid out on a 320x180 pixel grid; the canvas is 4x so Korean text stays sharp.
+const W = 320, H = 180, SCALE = 4, G = 162, WL = 12, WR = W - 12, DEG = Math.PI / 180, TAU = Math.PI * 2;
 const cv = document.getElementById("game");
 const ctx = cv.getContext("2d");
 ctx.imageSmoothingEnabled = false;
@@ -73,8 +74,19 @@ const GLYPHS = {
   ",":"000000000010100","(":"010100100100010",")":"010001001001010","'":"010010000000000",
   "=":"000111000111000","#":"101111101111101"
 };
+const KFONT = '"Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", "NanumGothic", sans-serif';
+const HANGUL = /[^\x00-\x7F]/;
+// ASCII-only strings use the 3x5 pixel font; anything with Korean is drawn with a system font
+// centered on the same 5*sc-tall line.
 function text(s, x, y, c, sc = 1, align = "left") {
-  s = String(s).toUpperCase();
+  s = String(s);
+  if (HANGUL.test(s)) {
+    ctx.font = "bold " + (6.5 * sc) + "px " + KFONT;
+    ctx.textBaseline = "middle"; ctx.textAlign = align; ctx.fillStyle = c;
+    ctx.fillText(s, x, y + 2.5 * sc + 0.25);
+    return;
+  }
+  s = s.toUpperCase();
   const w = s.length * 4 * sc - sc;
   if (align === "center") x -= Math.floor(w / 2);
   else if (align === "right") x -= w;
@@ -89,7 +101,8 @@ function text(s, x, y, c, sc = 1, align = "left") {
   }
 }
 function shadowText(s, x, y, c, sc = 1, align = "left") {
-  text(s, x + sc, y + sc, "#000", sc, align);
+  const o = HANGUL.test(String(s)) ? Math.max(0.5, sc * 0.5) : sc;
+  text(s, x + o, y + o, "#000", sc, align);
   text(s, x, y, c, sc, align);
 }
 function rect(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); }
@@ -378,25 +391,25 @@ const PO = {
 
 /* ---------- characters ---------- */
 const CHARS = [
-  { id: "kai", name: "KAI", style: "BALANCED", desc: "KARATE MASTER", hp: 100, walk: 1.45, back: 1.1, jumpV: 5.3, jumpX: 1.9,
+  { id: "kai", name: "카이", style: "균형형", desc: "가라테 고수", hp: 100, walk: 1.45, back: 1.1, jumpV: 5.3, jumpX: 1.9,
     sc: 1, bulk: 1, slow: 0, dmg: 1, stage: 0, stats: [3, 3, 3],
     col: { skin: "#f0b88a", top: "#f4f1ea", arm: "#f0b88a", pants: "#e8e3d8", belt: "#22181a", hair: "#2a1a12", band: "#e8403a", glove: "#e8403a", shoe: "#f0b88a", eye: "#1a1018" },
     alt: { top: "#34343e", pants: "#2a2a32", band: "#5fd3ff", glove: "#5fd3ff", belt: "#d8d8e0" },
-    names: { s: "HADO ORB", f: "TORNADO KICK", u: "RISING DRAGON", x: "SHINKU BEAM" } },
-  { id: "runa", name: "RUNA", style: "SPEED", desc: "SHADOW NINJA", hp: 94, walk: 1.95, back: 1.55, jumpV: 5.7, jumpX: 2.4,
+    names: { s: "기공탄", f: "회오리 발차기", u: "승룡권", x: "진공 광선포" } },
+  { id: "runa", name: "루나", style: "스피드형", desc: "그림자 닌자", hp: 94, walk: 1.95, back: 1.55, jumpV: 5.7, jumpX: 2.4,
     sc: 0.92, bulk: 0.9, slow: -1, dmg: 1, stage: 1, stats: [2, 5, 2],
     col: { skin: "#f3c9a5", top: "#4b2a8a", arm: "#4b2a8a", pants: "#3a2070", belt: "#ff5dc8", hair: "#141022", mask: "#2c1856", scarf: "#ff3d5a", glove: "#22183a", shoe: "#22183a", eye: "#ff5dc8" },
     alt: { top: "#1f6a4a", arm: "#1f6a4a", pants: "#164a36", mask: "#0f3326", scarf: "#ffd166", belt: "#ffd166" },
-    names: { s: "SHURIKEN", f: "SHADOW SLIDE", u: "MOON FLIP", x: "SHADOW RUSH" } },
-  { id: "gor", name: "GOR", style: "POWER", desc: "MOUNTAIN WRESTLER", hp: 104, walk: 1.0, back: 0.8, jumpV: 4.8, jumpX: 1.55,
+    names: { s: "수리검", f: "그림자 슬라이딩", u: "달빛 공중제비", x: "그림자 난무" } },
+  { id: "gor", name: "고르", style: "파워형", desc: "산악 레슬러", hp: 104, walk: 1.0, back: 0.8, jumpV: 4.8, jumpX: 1.55,
     sc: 1.16, bulk: 1.3, slow: 1, dmg: 1.12, stage: 2, stats: [5, 1, 5],
     col: { skin: "#b06a3c", top: null, arm: "#b06a3c", pants: "#e07a1f", belt: "#ffd166", hair: "#2a1208", glove: "#5a3a20", shoe: "#3a2410", eye: "#1a0a06", beard: "#2a1208" },
     alt: { pants: "#2b6cb0", belt: "#e8fbff", glove: "#1d2a44" },
-    names: { s: "GROUND WAVE", f: "BULL CHARGE", u: "BEAR HUG", x: "TITAN QUAKE" } },
+    names: { s: "대지 충격파", f: "황소 돌진", u: "곰 껴안기", x: "거인의 지진" } },
 ];
 const SHADOW_COL = { skin: "#2e1c3e", top: "#1c1028", arm: "#2e1c3e", pants: "#150d20", belt: "#ff3d5a", hair: "#0a0610", band: "#ff3d5a",
   glove: "#0a0610", shoe: "#0a0610", eye: "#ff3d5a", mask: "#150d20", scarf: "#ff3d5a", beard: "#0a0610" };
-const DIFFS = [["EASY", 0.3], ["NORMAL", 0.58], ["HARD", 0.85]];
+const DIFFS = [["쉬움", 0.3], ["보통", 0.58], ["어려움", 0.85]];
 
 /* ---------- moves ----------
    st/ac/rc = startup, active, recovery frames. pa = startup pose, pb = active pose.
@@ -1097,8 +1110,8 @@ function roundLogic() {
   const r = rnd;
   r.t++;
   if (r.phase === "intro") {
-    if (r.t === 2) { banner(mode === "training" ? "TRAINING" : r.final ? "FINAL ROUND" : "ROUND " + r.n, "#ffffff", 56); SND.bell(); }
-    if (r.t === 62) { banner("FIGHT!", "#ff5d5a", 40); SND.fight(); }
+    if (r.t === 2) { banner(mode === "training" ? "트레이닝" : r.final ? "파이널 라운드" : "라운드 " + r.n, "#ffffff", 56); SND.bell(); }
+    if (r.t === 62) { banner("싸워라!", "#ff5d5a", 40); SND.fight(); }
     if (r.t >= 70) { r.phase = "fight"; for (const f of F) { f.state = "idle"; f.t = 0; } }
     return;
   }
@@ -1110,14 +1123,14 @@ function roundLogic() {
     const k0 = F[0].hp <= 0, k1 = F[1].hp <= 0;
     if (k0 || k1) {
       r.phase = "ko"; r.t = 0; r.loser = [k0, k1]; slow = 60; flashScreen = 6; SND.ko();
-      banner(k0 && k1 ? "DOUBLE K.O." : "K.O.", "#ff3d5a", 90);
+      banner(k0 && k1 ? "더블 K.O." : "K.O.", "#ff3d5a", 90);
       return;
     }
     if (r.time <= 0 && mode !== "training") {
       r.phase = "time"; r.t = 0;
       const p0 = F[0].hp / F[0].maxHp, p1 = F[1].hp / F[1].maxHp;
       r.loser = [p0 <= p1, p1 <= p0];
-      banner("TIME OVER", "#ffd166", 90);
+      banner("시간 종료", "#ffd166", 90);
     }
     return;
   }
@@ -1127,9 +1140,9 @@ function roundLogic() {
       const f = F[i];
       if (r.loser[i] || f.state === "win" || f.h > 0 || f.state === "held") continue;
       Object.assign(f, { state: "win", move: null, vx: 0, t: 0, float: false, spin: false, poseOv: null });
-      if (r.t === 100 || !banners.length) banner(f.hp >= f.maxHp ? "PERFECT!" : winName(i) + " WINS", "#ffd166", 70);
+      if (r.t === 100 || !banners.length) banner(f.hp >= f.maxHp ? "퍼펙트!" : winName(i) + " 승리", "#ffd166", 70);
     }
-    if (r.t === 100 && r.loser[0] && r.loser[1]) banner("DRAW", "#ffffff", 70);
+    if (r.t === 100 && r.loser[0] && r.loser[1]) banner("무승부", "#ffffff", 70);
   }
   if (r.t >= 210) endRound();
 }
@@ -1242,7 +1255,7 @@ function simulate() {
 }
 
 /* ---------- menus ---------- */
-const TITLE_ITEMS = () => ["ARCADE", "VS 2P", "TRAINING", "LEVEL: " + DIFFS[diff][0], "HOW TO PLAY", "SOUND: " + (muted ? "OFF" : "ON"), "STRIKER (SHOOTER)"];
+const TITLE_ITEMS = () => ["아케이드", "2인 대전", "트레이닝", "난이도: " + DIFFS[diff][0], "조작법", "소리: " + (muted ? "끔" : "켬"), "STRIKER (슈팅게임)"];
 const titleRect = i => ({ x: W / 2 - 54, y: 82 + i * 12, w: 108, h: 11 });
 function listInput(n, cur, rectFn) {
   let s = cur, ok = false;
@@ -1304,7 +1317,7 @@ function updSelect() {
   const need = mode === "arcade" ? [0] : [0, 1];
   if (need.every(i => sel.ready[i])) sel.go = 24;
 }
-const PAUSE_ITEMS = () => ["RESUME", mode === "training" ? "RESET" : "RESTART MATCH", "CHARACTER SELECT", "TITLE", "SOUND: " + (muted ? "OFF" : "ON"), "FULLSCREEN"];
+const PAUSE_ITEMS = () => ["계속하기", mode === "training" ? "리셋" : "처음부터 다시", "캐릭터 선택", "타이틀로", "소리: " + (muted ? "끔" : "켬"), "전체화면"];
 const pauseRect = i => ({ x: W / 2 - 54, y: 64 + i * 13, w: 108, h: 12 });
 function updPause() {
   const r = listInput(PAUSE_ITEMS().length, pauseSel, pauseRect);
@@ -1318,7 +1331,7 @@ function updPause() {
   else if (pauseSel === 4) setMuted(!muted);
   else toggleFullscreen();
 }
-const RESULT_ITEMS = ["REMATCH", "CHARACTER SELECT", "TITLE"];
+const RESULT_ITEMS = ["재대결", "캐릭터 선택", "타이틀로"];
 const resRect = i => ({ x: 158, y: 92 + i * 13, w: 116, h: 12 });
 function updResult() {
   const r = listInput(3, menuSel, resRect);
@@ -1370,7 +1383,7 @@ function floorLines(g, y0, c, vx = 160, k = 0.45) {
   }
 }
 const STAGES = [
-  { name: "SUNSET DOJO", paint(g) {
+  { name: "노을 도장", paint(g) {
       bands(g, ["#2a1640", "#3d1a4a", "#5a2150", "#7e2a52", "#a8364f", "#d04f45", "#ec7a3c", "#f7a548"], 0, 124);
       disc(232, 96, 27, "#ffd36b", g); disc(232, 96, 21, "#ffe9a0", g);
       for (let i = 0; i < 4; i++) { g.fillStyle = "#ec7a3c"; g.fillRect(200, 100 + i * 5, 64, 1 + (i >> 1)); }
@@ -1405,7 +1418,7 @@ const STAGES = [
         rect(x + Math.sin(frame * 0.05 + i) * 4, y, 2, 1, i % 2 ? "#ffb3c8" : "#ff8fb0");
       }
     } },
-  { name: "NEON ROOFTOP", paint(g) {
+  { name: "네온 옥상", paint(g) {
       bands(g, ["#04040f", "#070a1c", "#0b1029", "#101838", "#172048", "#1f2a58"], 0, 136);
       disc(54, 30, 13, "#dfe8ff", g); disc(50, 27, 3, "#b8c4e8", g); disc(58, 34, 2, "#b8c4e8", g);
       const R = srng(7);
@@ -1442,7 +1455,7 @@ const STAGES = [
         seg([x, y], [x - 2, y + 5], 1, "rgba(150,170,255,0.25)");
       }
     } },
-  { name: "MAGMA PIT", paint(g) {
+  { name: "용암 분화구", paint(g) {
       bands(g, ["#120404", "#1e0606", "#2e0a08", "#46100a", "#64180c", "#8a2a10", "#b04016"], 0, 144);
       ridge(g, 128, 14, 0.05, 0.13, "#260c08");
       g.fillStyle = "#1c0a08";
@@ -1477,7 +1490,7 @@ const STAGES = [
         disc(205 + Math.sin(t * 0.05 + i) * 6, 44 - t * 0.35, 3 + t * 0.05, "rgba(60,30,30," + (0.5 - t / 260).toFixed(2) + ")");
       }
     } },
-  { name: "SHADOW VOID", paint(g) {
+  { name: "그림자 차원", paint(g) {
       bands(g, ["#05030a", "#0a0614", "#120a20", "#1a0e2e", "#24123c"], 0, 146);
       disc(160, 62, 34, "#2a1650", g); disc(160, 62, 30, "#b48cff", g); disc(160, 62, 28, "#05030a", g);
       g.fillStyle = "#0a0614"; g.fillRect(0, 146, W, 34);
@@ -1588,7 +1601,7 @@ function drawBar(f, x, dir) {
   const c = k > 0.5 ? "#ffd166" : k > 0.25 ? "#ff9f43" : (frame & 8 ? "#ff3d5a" : "#c8203a");
   fill(k, c);
   rect(dir > 0 ? x : x - Math.round(w * k), y, Math.round(w * k), 2, "rgba(255,255,255,0.35)");
-  const name = f.ch.name + (f.col === SHADOW_COL ? " ?" : "");
+  const name = (f.col === SHADOW_COL ? "섀도 " : "") + f.ch.name;
   shadowText(name, dir > 0 ? x : x, y + 11, "#ffffff", 1, dir > 0 ? "left" : "right");
   for (let i = 0; i < 2; i++) {
     const cx = dir > 0 ? x + w - 4 - i * 8 : x - w + 4 + i * 8;
@@ -1601,11 +1614,11 @@ function drawBar(f, x, dir) {
   rect(mx, my, mw, 4, "#1a1428");
   const mf = Math.round(mw * f.meter / 100);
   rect(dir > 0 ? mx : mx + mw - mf, my, mf, 4, full ? (frame & 4 ? "#ffffff" : "#5fd3ff") : "#3a7ab8");
-  text(full ? "SUPER!" : "SUPER", dir > 0 ? mx + mw + 4 : mx - 4, my - 1, full ? "#ffd166" : "#6a6080", 1, dir > 0 ? "left" : "right");
+  text(full ? "슈퍼!" : "슈퍼", dir > 0 ? mx + mw + 4 : mx - 4, my - 1, full ? "#ffd166" : "#6a6080", 1, dir > 0 ? "left" : "right");
   if (f.combo >= 2 && f.comboT > 0) {
     const cx = dir > 0 ? 10 : W - 10;
-    shadowText(f.combo + " HITS", cx, 40, "#ffd166", 2, dir > 0 ? "left" : "right");
-    shadowText(Math.round(f.comboDmg) + " DMG", cx, 52, "#ff9f43", 1, dir > 0 ? "left" : "right");
+    shadowText(f.combo + " 히트", cx, 40, "#ffd166", 2, dir > 0 ? "left" : "right");
+    shadowText("데미지 " + Math.round(f.comboDmg), cx, 53, "#ff9f43", 1, dir > 0 ? "left" : "right");
   }
 }
 function drawHUD() {
@@ -1616,8 +1629,8 @@ function drawHUD() {
   if (mode === "training") text("--", W / 2, 8, "#9a90a8", 2, "center");
   else text(String(rnd.time).padStart(2, "0"), W / 2, 7, rnd.time <= 10 && (frame & 16) ? "#ff3d5a" : "#ffffff", 2, "center");
   if (mode === "training") {
-    shadowText("DUMMY: " + ["STAND", "BLOCK", "CPU"][dummyMode] + " (T)   RESET (R)", W / 2, 24, "#9ff0ff", 1, "center");
-    if (lastCombo.hits) shadowText("LAST COMBO " + lastCombo.hits + " HITS  " + Math.round(lastCombo.dmg) + " DMG", W / 2, 32, "#ffd166", 1, "center");
+    shadowText("허수아비: " + ["가만히", "전부 막기", "CPU"][dummyMode] + " (T)    리셋 (R)", W / 2, 24, "#9ff0ff", 1, "center");
+    if (lastCombo.hits) shadowText("마지막 콤보 " + lastCombo.hits + "히트  데미지 " + Math.round(lastCombo.dmg), W / 2, 33, "#ffd166", 1, "center");
   }
   for (const b of banners) {
     const sc = b.s.length > 8 ? 3 : 4, y = 62;
@@ -1650,7 +1663,7 @@ function drawSuperCutIn() {
 }
 function drawPause() {
   rect(0, 0, W, H, "rgba(6,4,10,0.75)");
-  shadowText("PAUSE", W / 2, 34, "#ffffff", 4, "center");
+  shadowText("일시정지", W / 2, 34, "#ffffff", 4, "center");
   drawList(PAUSE_ITEMS(), pauseSel, pauseRect);
 }
 function drawList(items, cur, rectFn) {
@@ -1665,39 +1678,39 @@ function drawTitle() {
   rect(0, 0, W, H, "rgba(6,4,12,0.45)");
   paintChar(CHARS[0], CHARS[0].col, PO.stance, 52, G + 4, 1);
   paintChar(CHARS[2], CHARS[2].col, PO.stance, 270, G + 4, -1);
-  shadowText("PIXEL", W / 2, 12, "#5fd3ff", 4, "center");
-  shadowText("KNOCKOUT", W / 2, 36, "#ff5d5a", 4, "center");
-  text("1-ON-1 PIXEL FIGHTING", W / 2, 62, "#ffd166", 1, "center");
+  shadowText("픽셀 녹아웃", W / 2, 14, "#ff5d5a", 5, "center");
+  text("PIXEL KNOCKOUT", W / 2, 50, "#5fd3ff", 1, "center");
+  text("1:1 픽셀 격투게임", W / 2, 62, "#ffd166", 1, "center");
   rect(W / 2 - 60, 77, 120, 90, "rgba(6,4,12,0.55)");
   drawList(TITLE_ITEMS(), titleSel, titleRect);
   const cl = CHARS.filter(c => save.clears[c.id]).map(c => c.name);
-  text(cl.length ? "CLEARED: " + cl.join(" ") : "UP/DOWN + ENTER  OR TAP", W / 2, H - 8, "#6a6080", 1, "center");
+  text(cl.length ? "클리어: " + cl.join(" ") : "위/아래로 고르고 엔터 (또는 탭)", W / 2, H - 8, "#6a6080", 1, "center");
 }
 function drawHowTo() {
   rect(0, 0, W, H, "#0b0812");
-  shadowText("HOW TO PLAY", W / 2, 8, "#ffd166", 2, "center");
+  shadowText("조작법", W / 2, 6, "#ffd166", 2, "center");
   const L = [
-    ["MOVE", "ARROWS / WASD   UP JUMP   DOWN CROUCH"],
-    ["GUARD", "HOLD BACK. CROUCH TO GUARD LOW HITS"],
-    ["", "STAND TO GUARD JUMP ATTACKS AND FLIPS"],
-    ["ATTACK", "PUNCH J/Z   KICK K/X   SPECIAL L/C"],
-    ["SPECIAL", "S / FORWARD+S / UP+S = 3 SPECIAL MOVES"],
-    ["SUPER", "DOWN+S (OR V) WHEN THE METER IS FULL"],
-    ["COMBO", "JAB > KICK > SPECIAL WHILE IT HITS"],
-    ["2P", "1P WASD + F G H    2P ARROWS + , . /"],
-    ["", "(2P CAN ALSO USE NUMPAD 1 2 3)"],
-    ["SYSTEM", "PAUSE P/ESC   SOUND M   FULLSCREEN F"],
-    ["TOUCH", "LEFT SIDE = STICK  RIGHT = P K S BUTTONS"],
+    ["이동", "방향키 / WASD   위: 점프   아래: 앉기"],
+    ["가드", "상대 반대쪽 누르기. 하단 공격은 앉아서 막기"],
+    ["", "점프 공격과 달빛 공중제비는 서서 막기"],
+    ["공격", "펀치 J/Z   킥 K/X   필살기 L/C"],
+    ["필살기", "S / 앞+S / 위+S 로 필살기 3종"],
+    ["슈퍼", "게이지가 가득 차면 아래+S (또는 V)"],
+    ["콤보", "맞히는 중에 잽 > 킥 > 필살기로 연결"],
+    ["2인", "1P: WASD + F G H    2P: 방향키 + , . /"],
+    ["", "(2P는 숫자패드 1 2 3도 사용 가능)"],
+    ["시스템", "일시정지 P/ESC   소리 M   전체화면 F"],
+    ["터치", "화면 왼쪽 = 스틱, 오른쪽 = P K S 버튼"],
   ];
-  L.forEach(([a, b], i) => { text(a, 14, 32 + i * 12, "#5fd3ff"); text(b, 64, 32 + i * 12, "#ece6f6"); });
-  text("ENTER / TAP TO RETURN", W / 2, H - 9, frame & 32 ? "#ffd166" : "#6a6080", 1, "center");
+  L.forEach(([a, b], i) => { text(a, 14, 28 + i * 12, "#5fd3ff"); text(b, 58, 28 + i * 12, "#ece6f6"); });
+  text("엔터 또는 탭: 돌아가기", W / 2, H - 9, frame & 32 ? "#ffd166" : "#6a6080", 1, "center");
 }
 function drawSelect() {
   drawStage(3);
   rect(0, 0, W, H, "rgba(6,4,12,0.5)");
   const two = mode === "versus";
-  shadowText(mode === "training" && sel.step === 1 ? "SELECT DUMMY" : "SELECT FIGHTER", W / 2, 6, "#ffffff", 2, "center");
-  text("< BACK", 4, 4, "#6a6080");
+  shadowText(mode === "training" && sel.step === 1 ? "허수아비 선택" : "캐릭터 선택", W / 2, 5, "#ffffff", 2, "center");
+  text("< 뒤로", 4, 4, "#6a6080");
   for (let k = 0; k < 3; k++) {
     const r = cardRect(k), ch = CHARS[k];
     const c0 = sel.c[0] === k, c1 = (two || (mode === "training" && sel.step === 1)) && sel.c[1] === k;
@@ -1709,15 +1722,15 @@ function drawSelect() {
   }
   const info = (ci, x, w, label, c, ready) => {
     const ch = CHARS[ci];
-    rect(x, 126, w, 52, "rgba(10,6,18,0.85)");
-    text(label + " " + ch.name + " - " + ch.style, x + 4, 129, c);
-    ["POW", "SPD", "HP"].forEach((s, i) => {
-      text(s, x + 4, 137 + i * 7, "#9a90a8");
-      for (let k = 0; k < 5; k++) rect(x + 18 + k * 6, 137 + i * 7, 5, 4, k < ch.stats[i] ? c : "#2a2238");
+    rect(x, 124, w, 54, "rgba(10,6,18,0.85)");
+    text(label + "  " + ch.name + " - " + ch.style, x + 4, 127, c);
+    ["힘", "속도", "체력"].forEach((s, i) => {
+      text(s, x + 4, 138 + i * 9, "#9a90a8");
+      for (let k = 0; k < 5; k++) rect(x + 20 + k * 6, 139 + i * 9, 5, 4, k < ch.stats[i] ? c : "#2a2238");
     });
-    const mv = [["S", ch.names.s], ["F+S", ch.names.f], ["U+S", ch.names.u], ["SUPER", ch.names.x]];
-    mv.forEach(([a, b], i) => { text(a, x + 54, 137 + i * 7 - 1, "#6a6080"); text(b, x + 78, 137 + i * 7 - 1, "#ece6f6"); });
-    if (ready) text("READY!", x + w - 4, 129, frame & 8 ? "#ffd166" : "#ffffff", 1, "right");
+    const mv = [["S", ch.names.s], ["앞+S", ch.names.f], ["위+S", ch.names.u], ["슈퍼", ch.names.x]];
+    mv.forEach(([a, b], i) => { text(a, x + 56, 136 + i * 9, "#7a7090"); text(b, x + 78, 136 + i * 9, "#ece6f6"); });
+    if (ready) text("준비 완료!", x + w - 4, 127, frame & 8 ? "#ffd166" : "#ffffff", 1, "right");
   };
   if (two) { info(sel.c[0], 2, 157, "1P", "#5fd3ff", sel.ready[0]); info(sel.c[1], 161, 157, "2P", "#ff5d5a", sel.ready[1]); }
   else {
@@ -1739,16 +1752,16 @@ function drawVS() {
   shadowText("VS", W / 2, 70, frame & 8 ? "#ffd166" : "#ff5d5a", 5, "center");
   rect(0, 150, W, 22, "rgba(0,0,0,0.6)");
   shadowText(F[0].ch.name, 80, 154, "#5fd3ff", 3, "center");
-  shadowText(F[1].col === SHADOW_COL ? "SHADOW " + F[1].ch.name : F[1].ch.name, 240, F[1].col === SHADOW_COL ? 157 : 154, "#ff5d5a", F[1].col === SHADOW_COL ? 2 : 3, "center");
+  shadowText(F[1].col === SHADOW_COL ? "섀도 " + F[1].ch.name : F[1].ch.name, 240, F[1].col === SHADOW_COL ? 157 : 154, "#ff5d5a", F[1].col === SHADOW_COL ? 2 : 3, "center");
   text(STAGES[stage].name, W / 2, 104, "#ece6f6", 1, "center");
-  if (mode === "arcade") text("MATCH " + (arc.i + 1) + " / " + arc.ladder.length + (arc.i === arc.ladder.length - 1 ? "  FINAL" : ""), W / 2, 6, "#ffd166", 1, "center");
+  if (mode === "arcade") text(arc.ladder.length + "경기 중 " + (arc.i + 1) + "번째" + (arc.i === arc.ladder.length - 1 ? "  (마지막 상대)" : ""), W / 2, 6, "#ffd166", 1, "center");
 }
 function drawResult() {
   drawStage(stage);
   rect(0, 0, W, H, "rgba(6,4,12,0.55)");
   const f = F[resWinner];
   drawBig(CHARS.indexOf(f.ch), f.col, PO.win, 76, 176, 1);
-  shadowText((mode === "versus" ? (resWinner === 0 ? "1P" : "2P") : f.ch.name) + " WINS!", 216, 40, "#ffd166", 3, "center");
+  shadowText((mode === "versus" ? (resWinner === 0 ? "1P" : "2P") : f.ch.name) + " 승리!", 216, 40, "#ffd166", 3, "center");
   text(F[0].wins + " - " + F[1].wins, 216, 66, "#ece6f6", 2, "center");
   drawList(RESULT_ITEMS, menuSel, resRect);
 }
@@ -1756,9 +1769,9 @@ function drawContinue() {
   rect(0, 0, W, H, "#08050e");
   const ci = CHARS.indexOf(F[0].ch);
   paintChar(CHARS[ci], F[0].col, PO.churt, W / 2, 120, 1);
-  shadowText("CONTINUE?", W / 2, 30, "#ffffff", 3, "center");
+  shadowText("이어서 하시겠습니까?", W / 2, 30, "#ffffff", 3, "center");
   shadowText(String(Math.ceil(contT / 60)), W / 2, 58, "#ff3d5a", 4, "center");
-  text("ENTER / TAP TO CONTINUE   ESC TO QUIT", W / 2, 140, frame & 16 ? "#ffd166" : "#9a90a8", 1, "center");
+  text("엔터 또는 탭: 이어하기     ESC: 그만두기", W / 2, 140, frame & 16 ? "#ffd166" : "#9a90a8", 1, "center");
 }
 function drawEnding() {
   drawStage(0);
@@ -1766,16 +1779,17 @@ function drawEnding() {
   const ch = CHARS[arc.ci];
   drawBig(arc.ci, ch.col, PO.win, 80, 178, 1);
   rect(150, 22, 140, 100, "rgba(6,4,12,0.6)");
-  shadowText("CHAMPION!", 220, 32, "#ffd166", 3, "center");
+  shadowText("챔피언!", 220, 32, "#ffd166", 3, "center");
   const s = Math.round(arc.frames / 60), best = save.best[ch.id], mmss = v => Math.floor(v / 60) + ":" + String(v % 60).padStart(2, "0");
-  text(ch.name + " CLEARED ALL " + arc.ladder.length, 220, 60, "#ffffff", 1, "center");
-  text("TIME " + mmss(s), 220, 74, "#5fd3ff", 1, "center");
-  if (best) text("BEST " + mmss(best), 220, 84, "#7cffb2", 1, "center");
-  if (sceneT > 60) text("PRESS ENTER", 220, 104, frame & 16 ? "#ffd166" : "#9a90a8", 1, "center");
+  text(ch.name + ", " + arc.ladder.length + "경기 모두 클리어", 220, 60, "#ffffff", 1, "center");
+  text("기록 " + mmss(s), 220, 74, "#5fd3ff", 1, "center");
+  if (best) text("최고 기록 " + mmss(best), 220, 84, "#7cffb2", 1, "center");
+  if (sceneT > 60) text("엔터를 누르세요", 220, 104, frame & 16 ? "#ffd166" : "#9a90a8", 1, "center");
   for (let i = 0; i < 3; i++) { const x = (frame * 2 + i * 110) % W; rect(x, (frame * 3 + i * 50) % H, 2, 2, ["#ffd166", "#5fd3ff", "#ff5dc8"][i]); }
 }
 function draw() {
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+  ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
   switch (scene) {
     case "title": drawTitle(); break;
@@ -1798,7 +1812,7 @@ function draw() {
   }
   // scanlines
   ctx.fillStyle = "rgba(0,0,0,0.12)";
-  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 0.5);
 }
 
 /* ---------- loop ---------- */
