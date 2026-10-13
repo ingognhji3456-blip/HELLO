@@ -1528,6 +1528,7 @@ function overlaps(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y
 let state = "title";
 let stageIdx = 0, titleSel = 0;
 let player, enemies, bullets, parts, pickups, texts, fxs, flag, boss, arena;
+let traps = [];
 let cam = { x: 0, y: 0 };
 let shake = 0, hitstop = 0, flash = 0, flashC = "#fff";
 let score = 0, stageScore = 0, combo = 0, comboT = 0, maxCombo = 0, timer = 0, kills = 0;
@@ -1560,7 +1561,7 @@ function startStage(si) {
   stageIdx = si;
   recalcStats();
   buildLevel(si);
-  enemies = []; bullets = []; parts = []; pickups = []; texts = []; fxs = []; flag = null; boss = null; arena = null; hazards = [];
+  enemies = []; bullets = []; parts = []; pickups = []; texts = []; fxs = []; flag = null; boss = null; arena = null; hazards = []; traps = [];
   let px = 2 * TS, py = 12 * TS - 14;
   const subs = subsFor(si >> 2), srng = mulberry32(STAGES[si].seed * 131 + 7);
   const plan = level.spawns.map(sp => {
@@ -1591,6 +1592,7 @@ function startStage(si) {
       case "g": pickups.push({ type: "gem", x: x + 6, y: y + 6, w: 4, h: 4, t: Math.random() * 6 }); break;
       case "F": flag = { x: x + 4, y: y - 2, w: 8, h: 18 }; break;
       case "B": break;
+      default: if (TRAP_DEFS[s.ch]) { const tr = TRAP_DEFS[s.ch].make(x, y, s, si); if (tr) traps.push(tr); }
     }
   });
   player = newPlayer(px, py);
@@ -2706,6 +2708,18 @@ function bombBoom(b) {
   b.dead = true; explode(b.x, b.y, 16, "#ff9a30"); S.boom(); shake = Math.max(shake, 3);
   fxs.push({ kind: "ring", x: b.x, y: b.y, t: 0, dur: 0.3, max: 24, c: "#ffd040" });
   if (!player.dead && Math.hypot(player.x + 5 - b.x, player.y + 7 - b.y) < 22) hurtPlayer(1, b.x, { unblockable: true });
+}
+/* ---------- traps ----------
+   Level chunks may contain trap letters; each letter maps to TRAP_DEFS[letter] = { make(x, y, spawn, stageIdx) -> trap
+   object with a "kind" (the letter) or null, update(trap, dt), draw(trap, front) }. Traps live in the "traps" array,
+   update after the player and monsters, and draw behind (front = false) or in front of (front = true) the actors. */
+const TRAP_DEFS = {};
+function updateTraps(dt) {
+  for (const t of traps) { const d = TRAP_DEFS[t.kind]; if (d && d.update) d.update(t, dt); }
+  traps = traps.filter(t => !t.dead);
+}
+function drawTraps(front) {
+  for (const t of traps) { const d = TRAP_DEFS[t.kind]; if (d && d.draw) d.draw(t, front); }
 }
 function updateHazards(dt) {
   for (const h of hazards) {
@@ -4076,6 +4090,7 @@ function updateWorld(dt) {
   enemies = enemies.filter(e => !e.dead);
   if (boss && !boss.dead) updateBoss(dt);
   updateHazards(dt);
+  updateTraps(dt);
   // clearing rules: every enemy must fall before the flag (or the boss gate) opens
   if (enemies.length === 0) {
     if (level.gateX >= 0 && !level.gateOpen && !boss) openGate();
@@ -5385,6 +5400,7 @@ function drawWorld(quiet = false) {
   const sx = sk > 0.3 ? Math.round(Math.sin(realT * 70) * sk) : 0, sy = sk > 0.3 ? Math.round(Math.cos(realT * 57) * sk * 0.6) : 0;
   ctx.translate(sx + Math.round(kickX), sy + Math.round(kickY));
   drawTiles(st);
+  drawTraps(false);
   drawFlag();
   for (const k of pickups) {
     const x = Math.round(k.x - cam.x), y = Math.round(k.y - cam.y + Math.sin(k.t * 4) * 1.5);
@@ -5463,6 +5479,7 @@ function drawWorld(quiet = false) {
     else { ctx.fillStyle = b.c; ctx.fillRect(x - b.r, y - b.r, b.r * 2, b.r * 2); ctx.fillStyle = "#fff"; ctx.fillRect(x - 1, y - 1, 2, 2); }
   }
   drawPlayer();
+  drawTraps(true);
   for (const q of parts) { ctx.globalAlpha = clamp(q.life / q.ml, 0, 1); ctx.fillStyle = q.c; ctx.fillRect(Math.round(q.x - cam.x), Math.round(q.y - cam.y), q.sz || 1, q.sz || 1); }
   ctx.globalAlpha = 1;
   for (const f of fxs) {
@@ -5904,6 +5921,7 @@ window.__blade = {
   bossSet: st => { if (boss) { bossSet(st); } },
   camRef: () => cam,
   play: () => { pendingLevels = 0; state = "play"; },
+  traps: () => traps,
   texts: () => texts.map(t => t.s)
 };
 })();
