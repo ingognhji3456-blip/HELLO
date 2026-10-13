@@ -3867,6 +3867,7 @@ const BOSS_INFO = {
   titan: { name: "용암 거인", hp: 120, xp: 500, col: "#ff8a40" }
 };
 const bossInfo = b => BOSS_INFO[b.kind];
+const BOSS_HP_MUL = 2;
 const KNIGHT_BOSS = new Set(["duke", "dark"]);
 const MIDBOSS = {};
 const BOSS_W = 26, BOSS_H = 36, SLASH_WIND = 0.55, CHARGE_WIND = 0.75;
@@ -3875,8 +3876,8 @@ const groundY = () => 12 * TS;
 function spawnBoss(x, y, kind) {
   if (MIDBOSS[kind]) { boss = MIDBOSS[kind].spawn(x, y); boss.kind = kind; }
   else spawnKnightBoss(x, y, kind);
-  // tougher world by world
-  boss.hp = boss.maxHp = Math.round(BOSS_INFO[kind].hp * (1 + 0.2 * worldOf(stageIdx)));
+  // tougher world by world: 2x the base at world 1, +45% of the base per world after that
+  boss.hp = boss.maxHp = Math.round(BOSS_INFO[kind].hp * BOSS_HP_MUL * (1 + 0.45 * worldOf(stageIdx)));
   boss.pal = kind === "dark" ? col => DARK_MAP[col] || col : null;
 }
 function spawnKnightBoss(x, y, kind) {
