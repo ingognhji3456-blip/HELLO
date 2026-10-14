@@ -3194,7 +3194,8 @@ const tierFor = si => si >> 2;
 let eid = 0;
 function spawnEnemy(type, x, y) {
   const d = EDEF[type];
-  const hp = Math.ceil(d.hp * hpMulFor(stageIdx) * towerHpMul()), T = tierFor(stageIdx);
+  // queen eggs are a timed "smash it before it hatches" object, so they keep their normal health in the tower
+  const hp = Math.ceil(d.hp * hpMulFor(stageIdx) * (type === "egg" ? 1 : towerHpMul())), T = tierFor(stageIdx);
   const e = { id: eid++, type, x, y, w: d.w, h: d.h, vx: 0, vy: 0, hp, maxHp: hp, dir: -1, t: Math.random() * 3,
     state: "idle", st: 0, flash: 0, ground: false, baseY: y, lastHit: -1, stun: 0, dead: false, landT: 0, blockT: 0, recoil: 0, tier: T, evo: evoFor(type, stageIdx), cnt: 0, haste: 1 + 0.04 * Math.max(0, T - 2) };
   enemies.push(e);
@@ -3888,7 +3889,7 @@ function impactFx(x, y, dir, heavy, m) {
     parts.push({ x, y, vx: dir * rnd(40, 200), vy: rnd(-140, 30), life: rnd(0.2, 0.45), ml: 0.45, c: i % 3 ? m.c : m.c2, sz: m.goo ? 2 : (i % 4 ? 1 : 2), g: m.goo ? 520 : 320 });
   }
 }
-function dmgNumber(n, x, y, big) { texts.push({ s: String(n), x: x + rnd(-3, 3), y, t: 0.7, ml: 0.7, c: big ? "#ffd040" : "#ffffff", num: true, vy: -75, vx: rnd(-18, 18) }); }
+function dmgNumber(n, x, y, big) { texts.push({ s: n >= 10000 ? Math.round(n).toLocaleString("ko-KR") : String(n), x: x + rnd(-3, 3), y, t: 0.7, ml: 0.7, c: big ? "#ffd040" : "#ffffff", num: true, vy: -75, vx: rnd(-18, 18) }); }
 function hurtEnemy(e, dmg, kb, fromX, heavy, kind) {
   const cx = e.x + e.w / 2, cy = e.y + e.h / 2;
   const dir = cx < fromX ? -1 : 1;
