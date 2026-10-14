@@ -266,9 +266,19 @@
 
 - 공격, 처치, 패리, 저스트 회피, 처형으로 왼쪽 위 "필살" 게이지가 찹니다. 가득 차면 **R**(모바일은 "필살" 버튼)로 씁니다.
 - 순서:
-  1. 화면이 멈추고 캐릭터 컷인과 필살기 이름이 지나갑니다.
-  2. 캐릭터가 자기만의 자세를 잡고 힘을 모읍니다. 발밑에 마법진이 돌고, 빛이 모여들고, 머리 위로 빛기둥이 솟습니다.
-  3. 필살기가 터집니다.
+  1. 비스듬한 셔터가 양쪽에서 닫히며 **애니메이션 액션 장면**으로 화면이 바뀝니다. 장면은 위아래에 검은 띠가 있는 영화식 화면으로, 캐릭터마다 다른 세 컷이 이어집니다(약 2.6초).
+  2. 하얗게 번쩍이며 전투 화면으로 돌아오고, 그 순간 필살기가 적에게 꽂힙니다.
+  3. 장면이 나오는 동안에는 시간이 멈춰 있습니다. 공격이나 점프 키(모바일은 탭)를 누르면 건너뜁니다.
+
+| 캐릭터 | 1컷 | 2컷 | 3컷 |
+| --- | --- | --- | --- |
+| 카이 | 핏빛 노을과 달 아래 발도 자세, 칼날이 번쩍임 | 검은 화면을 가르는 수많은 검선과 잔상 | 등 뒤의 적들이 차례로 두 동강 나고 "베었다." |
+| 리아 | 거대한 달 앞으로 뛰어오르며 창을 겨눔 | 금빛 용이 하늘을 휘감으며 내려오고 리아가 함께 돌진 | 창이 땅에 꽂히며 빛기둥과 충격파, 적들이 날아감 |
+| 토르 | 폭풍 하늘 아래 대검을 치켜들자 번개가 칼날에 떨어짐 | 거대한 대검이 내리꽂히고 땅이 갈라지며 돌이 튐 | 반구형 충격파가 퍼지며 적들이 튕겨 나감 |
+| 미오 | 어둠 속에서 붉은 눈이 뜨이고 보랏빛 실루엣이 드러남 | 잔상이 적들 사이를 지그재그로 오가며 베고 지나감 | 미오가 앞에 착지하고, 뒤의 적들이 조각나 흩어지며 "끝." |
+| 세라 | 별밤 아래 지팡이를 들자 마법진이 펼쳐짐 | 거대한 별이 긴 꼬리를 그리며 떨어지고 작은 별들이 쏟아짐 | 푸른빛 폭발이 적들을 삼킴 |
+
+- 장면마다 기합 소리("흐읍", "하앗!")와 베는 소리, 폭발음, 번개 소리가 장면에 맞춰 납니다.
 - 필살기를 쓰는 동안은 무적입니다. 화면 안의 모든 적과, 보스전에서는 보스까지 맞힙니다.
 
 | 캐릭터 | 필살기 | 자세 | 연출 |
@@ -659,7 +669,7 @@
 - `action.html` 하나에 전부 들어 있습니다.
   - 레벨은 `CH`의 문자 블록(14줄×16칸)으로 만듭니다. `#` 땅, `=` 한 방향 발판, `^` 가시, `w b t k s a` 적(슬라임, 박쥐, 포탑, 기사, 방패병, 궁수). 2월드부터 이 자리 일부가 `ROSTER` 표(`subsFor`)에 따라 새 몬스터로 바뀌고, 강화 단계는 `tierFor`(월드 번호), 체력과 XP 배수는 `hpMulFor`와 `xpMulFor`가 정합니다. 월드 목록은 `WORLDS`, 스테이지 목록은 `STAGE_DEFS`(이름, 색, 날씨, 배경 모양)를 바탕으로 만든 `STAGES`, 스킬 목록은 `SKILLS`, 필요 XP 공식은 `xpNeed`입니다, `h g` 아이템, `F` 깃발, `B` 보스. 새 블록을 만들어 `POOL`에 넣으면 스테이지에 섞여 나옵니다.
   - 충돌은 축별 AABB(`moveX`, `moveY`)입니다. 소수점 좌표에서도 바닥에 파묻히지 않도록 경계를 작은 오차값으로 계산합니다.
-  - 주인공 자세는 `playerPose`, 적 행동은 `updateEnemy`의 상태 기계, 보스 패턴은 `updateBoss`입니다 (공작은 `updateKnightBoss`, 중간 보스는 `MIDBOSS` 표에 보스마다 `spawn/update/draw/stagger/weak/start`). 보스 이름·체력은 `BOSS_INFO`(기본 체력, 실제 체력은 `BOSS_HP_MUL`과 월드로 계산), 월드별 보스는 `WORLDS[].boss`, 보스 전용 아레나는 스테이지의 `arena`(예: `arenaBloom`)입니다. 보스 전용 바닥 공격은 `hazards`의 `custom`(update/draw) 훅, 전용 탄은 `updFn`/`drawFn` 훅으로 그립니다. 액션 시스템은 `sty`/`styleAdd`(스타일 랭크), `juggleHit`/`jugUpdate`(공중 콤보), `useUlt`/`ultStanceObj`/`drawCutin`(필살기), `justDodge`, `finishTarget`/`executeFinish`(처형), `startGrab`/`throwHeld`/`thrownUpdate`(잡기와 던지기), `ATK.rush`/`airrush`/`cyclone`(커맨드 기술), `RELICS`/`startRun`/`nextFloor`(심연의 탑), `MOVES`/`drawMoves`(기술표), `startTraining`(연습장), `voice`(합성 기합 소리)이고, 맵 질감은 `mapTex`(스테이지별 캐시), 메뉴 버튼은 `uiButton`(매 프레임 등록한 버튼만 클릭에 반응)이고, 캐릭터 강화는 `UP_TRACKS`/`UP_TRAITS`(항목과 비용), `upOf`(저장된 단계), `recalcStats`(능력치 반영)이고, 함정은 `TRAP_DEFS`(블록 문자마다 make/update/draw)에 정의하고 `trapPlan`이 스테이지별 함정 구간 수와 밀도를 정합니다. 바닥 칼날, 낙하물, 번개, 광선 같은 막을 수 없는 공격은 `hazards` 배열이 예고 시간(`t`)과 지속 시간(`dur`)으로 처리합니다. 캐릭터 목록은 `CHARS`입니다.
+  - 주인공 자세는 `playerPose`, 적 행동은 `updateEnemy`의 상태 기계, 보스 패턴은 `updateBoss`입니다 (공작은 `updateKnightBoss`, 중간 보스는 `MIDBOSS` 표에 보스마다 `spawn/update/draw/stagger/weak/start`). 보스 이름·체력은 `BOSS_INFO`(기본 체력, 실제 체력은 `BOSS_HP_MUL`과 월드로 계산), 월드별 보스는 `WORLDS[].boss`, 보스 전용 아레나는 스테이지의 `arena`(예: `arenaBloom`)입니다. 보스 전용 바닥 공격은 `hazards`의 `custom`(update/draw) 훅, 전용 탄은 `updFn`/`drawFn` 훅으로 그립니다. 액션 시스템은 `sty`/`styleAdd`(스타일 랭크), `juggleHit`/`jugUpdate`(공중 콤보), `useUlt`/`CINE`/`cineDraw`(필살기 액션 장면), `justDodge`, `finishTarget`/`executeFinish`(처형), `startGrab`/`throwHeld`/`thrownUpdate`(잡기와 던지기), `ATK.rush`/`airrush`/`cyclone`(커맨드 기술), `RELICS`/`startRun`/`nextFloor`(심연의 탑), `MOVES`/`drawMoves`(기술표), `startTraining`(연습장), `voice`(합성 기합 소리)이고, 맵 질감은 `mapTex`(스테이지별 캐시), 메뉴 버튼은 `uiButton`(매 프레임 등록한 버튼만 클릭에 반응)이고, 캐릭터 강화는 `UP_TRACKS`/`UP_TRAITS`(항목과 비용), `upOf`(저장된 단계), `recalcStats`(능력치 반영)이고, 함정은 `TRAP_DEFS`(블록 문자마다 make/update/draw)에 정의하고 `trapPlan`이 스테이지별 함정 구간 수와 밀도를 정합니다. 바닥 칼날, 낙하물, 번개, 광선 같은 막을 수 없는 공격은 `hazards` 배열이 예고 시간(`t`)과 지속 시간(`dur`)으로 처리합니다. 캐릭터 목록은 `CHARS`입니다.
   - 글자는 `text()`가 겹친 캔버스(`#ui`)에 갈무리11로 그립니다. 새 한국어 문구를 넣으면 폰트를 다시 골라 넣어야 합니다 (안 하면 그 글자만 시스템 폰트로 보입니다).
   - 파일 끝의 `window.__blade`는 자동 테스트용 훅입니다.
 
