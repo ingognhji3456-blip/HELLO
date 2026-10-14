@@ -1524,6 +1524,7 @@ const FALLBACK_SKILLS = [
 for (const k of SKILLS.concat(FALLBACK_SKILLS)) chk("icon " + k.id, k.icon, 8);
 const sk = id => hero.skills[id] || 0;
 const stat = {};
+const MAX_HEARTS = 10;
 let CHARGE_T = 0.5, PARRY_WIN = 0.24, PARRY_PERFECT = 0.09;
 function recalcStats() {
   stat.maxHp = 5 + sk("vit") + sk("tough");
@@ -1554,6 +1555,8 @@ function recalcStats() {
   stat.ultMul = 1; stat.thorns = 0; stat.jdMul = 1; stat.parryMul = 1; stat.extraSecond = 0;
   if (run) for (const id of run.relics) RELIC_BY[id].fx(stat);
   PARRY_WIN *= stat.parryMul; PARRY_PERFECT *= stat.parryMul;
+  // hearts never go above ten, whatever skills, upgrades and relics add up to
+  stat.maxHp = Math.min(MAX_HEARTS, stat.maxHp);
 }
 charIdx = clamp(Math.floor(+save.char) || 0, 0, CHARS.length - 1);
 recalcStats();
@@ -1585,10 +1588,12 @@ function levelUpFx() {
   if (player.hp < player.maxHp) player.hp++;
 }
 function rollChoices() {
-  const avail = SKILLS.filter(k => sk(k.id) < k.max);
+  // at ten hearts the heart skills have nothing left to give
+  const full = stat.maxHp >= MAX_HEARTS, useful = k => !(full && (k.id === "vit" || k.id === "tough"));
+  const avail = SKILLS.filter(k => sk(k.id) < k.max && useful(k));
   for (let i = avail.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [avail[i], avail[j]] = [avail[j], avail[i]]; }
   const out = avail.slice(0, 3);
-  for (const f of FALLBACK_SKILLS) if (out.length < 3) out.push(f);
+  for (const f of FALLBACK_SKILLS) if (out.length < 3 && useful(f)) out.push(f);
   return out;
 }
 function openLevelUp(ret) {
