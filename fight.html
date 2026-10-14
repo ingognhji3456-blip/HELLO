@@ -75,12 +75,12 @@ const GLYPHS = {
   "=":"000111000111000","#":"101111101111101"
 };
 const KFONT = '"Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", "NanumGothic", sans-serif';
-const HANGUL = /[^\x00-\x7F]/;
+const needsFont = s => [...s.toUpperCase()].some(ch => !GLYPHS[ch]);
 // ASCII-only strings use the 3x5 pixel font; anything with Korean is drawn with a system font
 // centered on the same 5*sc-tall line.
 function text(s, x, y, c, sc = 1, align = "left") {
   s = String(s);
-  if (HANGUL.test(s)) {
+  if (needsFont(s)) {
     ctx.font = "bold " + (6.5 * sc) + "px " + KFONT;
     ctx.textBaseline = "middle"; ctx.textAlign = align; ctx.fillStyle = c;
     ctx.fillText(s, x, y + 2.5 * sc + 0.25);
@@ -101,7 +101,7 @@ function text(s, x, y, c, sc = 1, align = "left") {
   }
 }
 function shadowText(s, x, y, c, sc = 1, align = "left") {
-  const o = HANGUL.test(String(s)) ? Math.max(0.5, sc * 0.5) : sc;
+  const o = needsFont(String(s)) ? Math.max(0.5, sc * 0.5) : sc;
   text(s, x + o, y + o, "#000", sc, align);
   text(s, x, y, c, sc, align);
 }
@@ -242,6 +242,8 @@ const keys = {}, pressed = {};
 const NO_SCROLL = ["arrowup", "arrowdown", "arrowleft", "arrowright", " ", "/", "'", "tab"];
 addEventListener("keydown", e => {
   const k = e.key.toLowerCase();
+  if (kc.wait) { e.preventDefault(); if (!e.repeat) kc.input = k; initAudio(); return; }
+  if (scene === "fight" && isBound(k) && !e.ctrlKey && !e.metaKey) e.preventDefault();
   if (NO_SCROLL.includes(k)) e.preventDefault();
   if (!keys[k]) pressed[k] = true;
   keys[k] = true;
@@ -309,9 +311,32 @@ const inR = (p, r) => p && p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < 
 
 const EMPTY = { left: false, right: false, up: false, down: false, p: false, k: false, s: false, x: false };
 const BTNS = ["p", "k", "s", "x"];
-const MAP_SOLO = { left: ["arrowleft", "a"], right: ["arrowright", "d"], up: ["arrowup", "w"], down: ["arrowdown", "s"], p: ["j", "z"], k: ["k", "x"], s: ["l", "c"], x: ["v"] };
-const MAP_P1 = { left: ["a"], right: ["d"], up: ["w"], down: ["s"], p: ["f"], k: ["g"], s: ["h"], x: [] };
-const MAP_P2 = { left: ["arrowleft"], right: ["arrowright"], up: ["arrowup"], down: ["arrowdown"], p: [",", "1"], k: [".", "2"], s: ["/", "3"], x: [] };
+// key bindings: every action has two slots ("" = empty); edited on the key settings screen and saved
+const ACTIONS = [["up", "위 (점프)"], ["down", "아래 (앉기)"], ["left", "왼쪽"], ["right", "오른쪽"], ["p", "펀치"], ["k", "킥"], ["s", "필살기"], ["x", "슈퍼"]];
+const DEFAULT_KEYS = {
+  solo: { up: ["arrowup", "w"], down: ["arrowdown", "s"], left: ["arrowleft", "a"], right: ["arrowright", "d"], p: ["j", "z"], k: ["k", "x"], s: ["l", "c"], x: ["v", ""] },
+  p1: { up: ["w", ""], down: ["s", ""], left: ["a", ""], right: ["d", ""], p: ["f", ""], k: ["g", ""], s: ["h", ""], x: ["t", ""] },
+  p2: { up: ["arrowup", ""], down: ["arrowdown", ""], left: ["arrowleft", ""], right: ["arrowright", ""], p: [",", "1"], k: [".", "2"], s: ["/", "3"], x: ["'", "4"] },
+};
+const PROFILES = [["solo", "1인용"], ["p1", "2인 대전 1P"], ["p2", "2인 대전 2P"]];
+function loadKeys() {
+  const out = JSON.parse(JSON.stringify(DEFAULT_KEYS)), sk = save.keys;
+  if (sk && typeof sk === "object") {
+    for (const [pr] of PROFILES) for (const [a] of ACTIONS) {
+      const v = sk[pr] && sk[pr][a];
+      if (Array.isArray(v) && v.length === 2 && v.every(k => typeof k === "string")) out[pr][a] = v.slice();
+    }
+  }
+  return out;
+}
+let KEYS = loadKeys();
+const KEYNAMES = { arrowup: "↑", arrowdown: "↓", arrowleft: "←", arrowright: "→", " ": "스페이스", enter: "엔터", shift: "Shift", control: "Ctrl", alt: "Alt", tab: "Tab", capslock: "Caps" };
+const keyName = k => !k ? "-" : KEYNAMES[k] || (k.length === 1 ? k.toUpperCase() : k[0].toUpperCase() + k.slice(1));
+const keyList = (pr, a) => KEYS[pr][a].filter(Boolean).map(keyName).join("/") || "-";
+const activeProfiles = () => mode === "versus" ? ["p1", "p2"] : ["solo"];
+// a hotkey (pause, mute, training) only works when the player hasn't bound that key to a fighting action
+const isBound = k => activeProfiles().some(pr => ACTIONS.some(([a]) => KEYS[pr][a].includes(k)));
+const hot = k => pressed[k] && !(scene === "fight" && isBound(k));
 
 // A pad turns held buttons into short "pressed recently" windows so inputs buffer through recovery and hitstop.
 class Pad {
@@ -332,7 +357,7 @@ class Pad {
   clear() { this.raw = this.prev = this.h = EMPTY; this.pend = {}; this.downAge = 99; for (const b of BTNS) this.age[b] = 99; }
 }
 function rawFor(i) {
-  const m = mode === "versus" ? (i === 0 ? MAP_P1 : MAP_P2) : MAP_SOLO;
+  const m = KEYS[mode === "versus" ? (i === 0 ? "p1" : "p2") : "solo"];
   const r = {};
   for (const k in m) { r[k] = held(m[k]); r["t" + k] = hit1(m[k]); }
   if (i === 0 && touch.on) {
@@ -1201,11 +1226,11 @@ function beginMatch() {
 
 /* ---------- main fight step ---------- */
 function updFight() {
-  if (kp("p", "escape")) { paused = !paused; pauseSel = 0; SND.move(); return; }
+  if (pressed.escape || hot("p")) { paused = !paused; pauseSel = 0; SND.move(); return; }
   if (paused) return updPause();
   if (mode === "training") {
-    if (kp("t")) { dummyMode = (dummyMode + 1) % 3; SND.move(); }
-    if (kp("r")) { startRound(1); return; }
+    if (hot("t")) { dummyMode = (dummyMode + 1) % 3; SND.move(); }
+    if (hot("r")) { startRound(1); return; }
   }
   const live = rnd.phase === "fight";
   const human = i => F[i].aiLvl == null;
@@ -1255,8 +1280,8 @@ function simulate() {
 }
 
 /* ---------- menus ---------- */
-const TITLE_ITEMS = () => ["아케이드", "2인 대전", "트레이닝", "난이도: " + DIFFS[diff][0], "조작법", "소리: " + (muted ? "끔" : "켬"), "STRIKER (슈팅게임)"];
-const titleRect = i => ({ x: W / 2 - 54, y: 82 + i * 12, w: 108, h: 11 });
+const TITLE_ITEMS = () => ["아케이드", "2인 대전", "트레이닝", "난이도: " + DIFFS[diff][0], "조작법", "키 설정", "소리: " + (muted ? "끔" : "켬"), "STRIKER (슈팅게임)"];
+const titleRect = i => ({ x: W / 2 - 54, y: 72 + i * 12, w: 108, h: 11 });
 function listInput(n, cur, rectFn) {
   let s = cur, ok = false;
   if (M_UP()) { s = (s + n - 1) % n; SND.move(); }
@@ -1279,16 +1304,20 @@ function updTitle() {
     sel = { c: [0, mode === "versus" ? 2 : 1], ready: [false, false], step: 0, go: 0 };
   } else if (titleSel === 3) { diff = (diff + 1) % 3; save.diff = diff; persist(); }
   else if (titleSel === 4) { scene = "howto"; sceneT = 0; }
-  else if (titleSel === 5) setMuted(!muted);
+  else if (titleSel === 5) openKeys("title");
+  else if (titleSel === 6) setMuted(!muted);
   else location.href = "index.html";
 }
 const cardRect = i => ({ x: 22 + i * 96, y: 22, w: 84, h: 92 });
 function updSelect() {
   if (sel.go > 0) { if (--sel.go === 0) beginMatch(); return; }
   const two = mode === "versus";
+  const K = pr => KEYS[pr];
   const ctrls = two
-    ? [{ l: ["a"], r: ["d"], ok: ["f", " "], back: ["g", "escape"] }, { l: ["arrowleft"], r: ["arrowright"], ok: [",", "1", "enter"], back: [".", "2", "backspace"] }]
-    : [{ l: ["a", "arrowleft"], r: ["d", "arrowright"], ok: ["enter", " ", "j", "z"], back: ["escape", "x", "k", "backspace"] }];
+    ? [{ l: K("p1").left, r: K("p1").right, ok: [...K("p1").p, " "], back: [...K("p1").k, "escape"] },
+       { l: K("p2").left, r: K("p2").right, ok: [...K("p2").p, "enter"], back: [...K("p2").k, "backspace"] }]
+    : [{ l: ["arrowleft", ...K("solo").left], r: ["arrowright", ...K("solo").right], ok: ["enter", " ", ...K("solo").p], back: ["escape", "backspace", ...K("solo").k] }];
+  for (const c of ctrls) for (const k in c) c[k] = c[k].filter(Boolean);
   const confirm = who => {
     sel.ready[who] = true; SND.select();
     if (mode === "training" && who === 0) { sel.step = 1; sel.c[1] = (sel.c[0] + 1) % 3; }
@@ -1317,8 +1346,8 @@ function updSelect() {
   const need = mode === "arcade" ? [0] : [0, 1];
   if (need.every(i => sel.ready[i])) sel.go = 24;
 }
-const PAUSE_ITEMS = () => ["계속하기", mode === "training" ? "리셋" : "처음부터 다시", "캐릭터 선택", "타이틀로", "소리: " + (muted ? "끔" : "켬"), "전체화면"];
-const pauseRect = i => ({ x: W / 2 - 54, y: 64 + i * 13, w: 108, h: 12 });
+const PAUSE_ITEMS = () => ["계속하기", mode === "training" ? "리셋" : "처음부터 다시", "캐릭터 선택", "타이틀로", "키 설정", "소리: " + (muted ? "끔" : "켬"), "전체화면"];
+const pauseRect = i => ({ x: W / 2 - 54, y: 62 + i * 13, w: 108, h: 12 });
 function updPause() {
   const r = listInput(PAUSE_ITEMS().length, pauseSel, pauseRect);
   pauseSel = r.s;
@@ -1328,7 +1357,8 @@ function updPause() {
   else if (pauseSel === 1) { paused = false; if (mode === "arcade") { arc.frames = 0; arcadeFight(); scene = "fight"; } else { F[0].wins = F[1].wins = 0; startRound(1); } }
   else if (pauseSel === 2) { paused = false; scene = "select"; sel = { c: sel.c, ready: [false, false], step: 0, go: 0 }; setSong("menu"); }
   else if (pauseSel === 3) { paused = false; scene = "title"; setSong("menu"); }
-  else if (pauseSel === 4) setMuted(!muted);
+  else if (pauseSel === 4) openKeys("fight");
+  else if (pauseSel === 5) setMuted(!muted);
   else toggleFullscreen();
 }
 const RESULT_ITEMS = ["재대결", "캐릭터 선택", "타이틀로"];
@@ -1343,13 +1373,116 @@ function updResult() {
   else { scene = "title"; setSong("menu"); }
 }
 
+/* ---------- key settings ---------- */
+// rows: -1 = profile tabs, 0..7 = actions (two key slots), 8 = reset to defaults, 9 = back
+const kc = { tab: 0, row: 0, col: 0, wait: false, input: null, msg: "", msgT: 0, back: "title" };
+const kcRow = i => ({ x: 20, y: 38 + i * 12, w: 280, h: 11 });
+const kcSlot = (i, c) => ({ x: 132 + c * 84, y: 38 + i * 12, w: 78, h: 11 });
+const kcTab = t => ({ x: 22 + t * 94, y: 18, w: 88, h: 11 });
+function openKeys(back) {
+  Object.assign(kc, { row: 0, col: 0, wait: false, input: null, msg: "", msgT: 0, back });
+  kc.tab = back === "fight" && mode === "versus" ? 1 : back === "fight" ? 0 : kc.tab;
+  scene = "keys"; sceneT = 0; SND.select();
+}
+function kcMsg(m) { kc.msg = m; kc.msgT = 150; }
+function assignKey(k) {
+  const pr = PROFILES[kc.tab][0], [act, label] = ACTIONS[kc.row];
+  // a key may only do one thing: free it in this profile (and the other 2P side, which shares the keyboard)
+  const group = pr === "solo" ? ["solo"] : ["p1", "p2"];
+  let moved = "";
+  for (const g of group) for (const [a, l] of ACTIONS) {
+    const v = KEYS[g][a];
+    for (let c = 0; c < 2; c++) if (v[c] === k && !(g === pr && a === act && c === kc.col)) { v[c] = ""; moved = (g !== pr ? PROFILES.find(x => x[0] === g)[1] + " " : "") + l; }
+  }
+  KEYS[pr][act][kc.col] = k;
+  save.keys = KEYS; persist();
+  kcMsg(label + " = " + keyName(k) + (moved ? "  (" + moved + "에서 옮김)" : ""));
+  SND.select();
+}
+function updKeys() {
+  if (kc.msgT > 0) kc.msgT--;
+  if (kc.wait) {
+    const k = kc.input;
+    kc.input = null;
+    if (tap) { kc.wait = false; kcMsg("취소했어요"); return; }
+    if (k === null) return;
+    kc.wait = false;
+    if (k === "escape") { kcMsg("취소했어요"); return; }
+    if (k === "backspace" || k === "delete") { KEYS[PROFILES[kc.tab][0]][ACTIONS[kc.row][0]][kc.col] = ""; save.keys = KEYS; persist(); kcMsg("키를 지웠어요"); return; }
+    if (k === "unidentified" || k === "process" || k === "dead" || k.startsWith("f") && k.length > 1 && /^f\d+$/.test(k)) { kcMsg("이 키는 쓸 수 없어요"); return; }
+    assignKey(k);
+    return;
+  }
+  const act = () => {
+    if (kc.row >= 0 && kc.row < ACTIONS.length) { kc.wait = true; kc.input = null; SND.move(); }
+    else if (kc.row === ACTIONS.length) {
+      const pr = PROFILES[kc.tab][0];
+      KEYS[pr] = JSON.parse(JSON.stringify(DEFAULT_KEYS[pr]));
+      if (pr !== "solo") { const o = pr === "p1" ? "p2" : "p1"; KEYS[o] = JSON.parse(JSON.stringify(DEFAULT_KEYS[o])); }
+      save.keys = KEYS; persist(); kcMsg(pr === "solo" ? "1인용 키를 기본값으로 되돌렸어요" : "2인 대전 키를 기본값으로 되돌렸어요"); SND.select();
+    } else { scene = kc.back; SND.move(); }
+  };
+  if (pressed.escape) { scene = kc.back; SND.move(); return; }
+  if (kp("arrowup")) { kc.row = Math.max(-1, kc.row - 1); SND.move(); }
+  if (kp("arrowdown")) { kc.row = Math.min(ACTIONS.length + 1, kc.row + 1); SND.move(); }
+  if (kp("arrowleft") || kp("arrowright")) {
+    const d = kp("arrowleft") ? -1 : 1;
+    if (kc.row === -1) kc.tab = (kc.tab + d + 3) % 3;
+    else if (kc.row < ACTIONS.length) kc.col = clamp(kc.col + d, 0, 1);
+    SND.move();
+  }
+  if (kp("q")) { kc.tab = (kc.tab + 2) % 3; SND.move(); }
+  if (kp("e")) { kc.tab = (kc.tab + 1) % 3; SND.move(); }
+  if ((kp("backspace") || kp("delete")) && kc.row >= 0 && kc.row < ACTIONS.length) { KEYS[PROFILES[kc.tab][0]][ACTIONS[kc.row][0]][kc.col] = ""; save.keys = KEYS; persist(); kcMsg("키를 지웠어요"); }
+  if (kp("enter") || kp(" ")) act();
+  if (tap) {
+    for (let t = 0; t < 3; t++) if (inR(tap, kcTab(t))) { kc.tab = t; kc.row = -1; SND.move(); return; }
+    for (let i = 0; i < ACTIONS.length; i++) for (let c = 0; c < 2; c++) if (inR(tap, kcSlot(i, c))) { kc.row = i; kc.col = c; act(); return; }
+    for (const i of [ACTIONS.length, ACTIONS.length + 1]) if (inR(tap, kcRow(i))) { kc.row = i; act(); return; }
+  }
+}
+function drawKeys() {
+  rect(0, 0, W, H, "#0b0812");
+  shadowText("키 설정", W / 2, 4, "#ffd166", 2, "center");
+  PROFILES.forEach(([, name], t) => {
+    const r = kcTab(t), on = kc.tab === t;
+    rect(r.x, r.y, r.w, r.h, on ? "rgba(255,93,90,0.35)" : "#1a1428");
+    if (on && kc.row === -1) { rect(r.x, r.y + r.h - 1, r.w, 1, "#ffd166"); }
+    text(name, r.x + r.w / 2, r.y + 3, on ? "#ffffff" : "#8a80a0", 1, "center");
+  });
+  const pr = PROFILES[kc.tab][0];
+  ACTIONS.forEach(([a, label], i) => {
+    const r = kcRow(i), cur = kc.row === i;
+    if (cur) rect(r.x, r.y, r.w, r.h, "rgba(255,93,90,0.16)");
+    text(label, r.x + 6, r.y + 3, cur ? "#ffffff" : "#5fd3ff");
+    for (let c = 0; c < 2; c++) {
+      const s2 = kcSlot(i, c), sel2 = cur && kc.col === c, k = KEYS[pr][a][c];
+      rect(s2.x, s2.y, s2.w, s2.h, sel2 ? (kc.wait ? (frame & 8 ? "#ffd166" : "#ff9f43") : "#3a2a48") : "#1a1428");
+      const label2 = sel2 && kc.wait ? "키를 누르세요" : keyName(k);
+      text(label2, s2.x + s2.w / 2, s2.y + 3, sel2 && kc.wait ? "#000000" : k ? "#ece6f6" : "#4a4060", 1, "center");
+    }
+  });
+  ["기본값으로 되돌리기", "돌아가기"].forEach((label, j) => {
+    const i = ACTIONS.length + j, r = kcRow(i), cur = kc.row === i;
+    const rr = { x: W / 2 - 60, y: r.y + 2 + j * 1, w: 120, h: 11 };
+    if (cur) rect(rr.x, rr.y, rr.w, rr.h, "rgba(255,93,90,0.28)");
+    text(label, W / 2, rr.y + 3, cur ? "#ffffff" : "#9a90a8", 1, "center");
+  });
+  text("키 1", kcSlot(0, 0).x + 39, 31, "#6a6080", 1, "center");
+  text("키 2", kcSlot(0, 1).x + 39, 31, "#6a6080", 1, "center");
+  const hint = kc.wait ? "바꿀 키를 누르세요   ESC: 취소   Backspace: 지우기"
+    : kc.msgT > 0 ? kc.msg : "방향키: 이동   엔터: 바꾸기   Q/E: 탭   Del: 지우기   ESC: 뒤로";
+  text(hint, W / 2, H - 8, kc.wait || kc.msgT > 0 ? "#ffd166" : "#6a6080", 1, "center");
+}
+
 /* ---------- step ---------- */
 function step() {
   frame++; sceneT++;
-  if (kp("m")) setMuted(!muted);
+  if (hot("m") && scene !== "keys") setMuted(!muted);
   switch (scene) {
     case "title": setSong("menu"); updTitle(); break;
     case "howto": if (M_OK() || M_BACK() || tap) { scene = "title"; SND.move(); } break;
+    case "keys": updKeys(); break;
     case "select": setSong("menu"); updSelect(); break;
     case "vs":
       setSong("s" + stage);
@@ -1681,7 +1814,7 @@ function drawTitle() {
   shadowText("픽셀 녹아웃", W / 2, 14, "#ff5d5a", 5, "center");
   text("PIXEL KNOCKOUT", W / 2, 50, "#5fd3ff", 1, "center");
   text("1:1 픽셀 격투게임", W / 2, 62, "#ffd166", 1, "center");
-  rect(W / 2 - 60, 77, 120, 90, "rgba(6,4,12,0.55)");
+  rect(W / 2 - 60, 69, 120, 100, "rgba(6,4,12,0.55)");
   drawList(TITLE_ITEMS(), titleSel, titleRect);
   const cl = CHARS.filter(c => save.clears[c.id]).map(c => c.name);
   text(cl.length ? "클리어: " + cl.join(" ") : "위/아래로 고르고 엔터 (또는 탭)", W / 2, H - 8, "#6a6080", 1, "center");
@@ -1690,16 +1823,16 @@ function drawHowTo() {
   rect(0, 0, W, H, "#0b0812");
   shadowText("조작법", W / 2, 6, "#ffd166", 2, "center");
   const L = [
-    ["이동", "방향키 / WASD   위: 점프   아래: 앉기"],
+    ["이동", "점프 " + keyList("solo", "up") + "   앉기 " + keyList("solo", "down") + "   좌우 " + keyList("solo", "left") + "  " + keyList("solo", "right")],
     ["가드", "상대 반대쪽 누르기. 하단 공격은 앉아서 막기"],
     ["", "점프 공격과 달빛 공중제비는 서서 막기"],
-    ["공격", "펀치 J/Z   킥 K/X   필살기 L/C"],
+    ["공격", "펀치 " + keyList("solo", "p") + "   킥 " + keyList("solo", "k") + "   필살기 " + keyList("solo", "s")],
     ["필살기", "S / 앞+S / 위+S 로 필살기 3종"],
-    ["슈퍼", "게이지가 가득 차면 아래+S (또는 V)"],
+    ["슈퍼", "게이지가 가득 차면 아래+필살기 (또는 " + keyList("solo", "x") + ")"],
     ["콤보", "맞히는 중에 잽 > 킥 > 필살기로 연결"],
-    ["2인", "1P: WASD + F G H    2P: 방향키 + , . /"],
-    ["", "(2P는 숫자패드 1 2 3도 사용 가능)"],
-    ["시스템", "일시정지 P/ESC   소리 M   전체화면 F"],
+    ["2인", "1P 펀치/킥/필살기 " + ["p", "k", "s"].map(a => keyList("p1", a)).join(" ") + "    2P " + ["p", "k", "s"].map(a => keyList("p2", a)).join(" ")],
+    ["키 설정", "타이틀이나 일시정지 메뉴의 '키 설정'에서 바꾸기"],
+    ["시스템", "일시정지 P/ESC   소리 M   전체화면 F (메뉴에서)"],
     ["터치", "화면 왼쪽 = 스틱, 오른쪽 = P K S 버튼"],
   ];
   L.forEach(([a, b], i) => { text(a, 14, 28 + i * 12, "#5fd3ff"); text(b, 58, 28 + i * 12, "#ece6f6"); });
@@ -1794,6 +1927,7 @@ function draw() {
   switch (scene) {
     case "title": drawTitle(); break;
     case "howto": drawHowTo(); break;
+    case "keys": drawKeys(); break;
     case "select": drawSelect(); break;
     case "vs": drawVS(); break;
     case "fight": {
