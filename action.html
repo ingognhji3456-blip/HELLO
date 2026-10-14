@@ -3912,6 +3912,7 @@ function hurtEnemy(e, dmg, kb, fromX, heavy, kind) {
       return;
     }
   }
+  const rawDmg = dmg, hpBefore = e.hp;
   if (run && kind !== "trap") dmg = Math.round(dmg * relicPower());   // 유물 공명
   if (e.state === "parried") dmg *= 2;
   if (e.frozen > 0) dmg = Math.ceil(dmg * 1.5);
@@ -3928,7 +3929,7 @@ function hurtEnemy(e, dmg, kb, fromX, heavy, kind) {
   const m = MAT[e.type];
   impactFx(cx - dir * 3, cy + rnd(-3, 3), dir, heavy, m);
   fxs.push({ kind: "slashmark", x: cx, y: cy, t: 0, dur: 0.15, a: rnd(-0.6, 0.6), c: heavy ? "#ffe066" : "#fff" });
-  dmgNumber(dmg, cx, e.y - 4, heavy || dmg >= 3);
+  dmgNumber(run ? Math.min(dmg, Math.max(1, Math.ceil(hpBefore))) : dmg, cx, e.y - 4, heavy || rawDmg >= 3);
   hitstop = Math.max(hitstop, heavy ? 0.11 : 0.06); shake = Math.max(shake, heavy ? 3 : 1.5);
   camKick(dir * (heavy ? 3 : 1.5), heavy ? 1 : 0);
   if (typeof kind === "number" && player.ground) player.vx -= player.dir * 25;
@@ -12833,7 +12834,6 @@ function hurtPlayer(dmg, fromX, src) {
   p.hp -= dmg; p.inv = stat.inv; p.hurtT = 0.3; p.atk = null; p.comboT = 0; p.chargeT = 0; p.chargeArm = false; p.wallSlide = 0;
   combo = 0; comboT = 0; styleHurt();
   if (p.holding) dropHeld(p);
-  if (stat.thorns) for (const e of enemies) if (!e.dead && Math.abs(e.x + e.w / 2 - (p.x + 5)) < 40 && Math.abs(e.y - p.y) < 30) hurtEnemy(e, stat.thorns, 120, p.x + 5, true, "thorns");
   const dir = p.x + p.w / 2 < fromX ? -1 : 1;
   p.vx = dir * 120; p.vy = -150; p.ground = false;
   hitstop = Math.max(hitstop, 0.09); shake = Math.max(shake, 4); flash = 0.1; flashC = "#f44";
@@ -12844,6 +12844,7 @@ function hurtPlayer(dmg, fromX, src) {
     popText("기사회생!", W / 2, 50, "#9cff9c", true);
     fxs.push({ kind: "pillar", x: p.x + 5, y: p.y + 14, t: 0, dur: 1.0 });
   } else if (p.hp <= 0) { p.hp = 0; die(); }
+  if (stat.thorns && !p.dead && p.hp > 0) for (const e of enemies) if (!e.dead && Math.abs(e.x + e.w / 2 - (p.x + 5)) < 40 && Math.abs(e.y - p.y) < 30) hurtEnemy(e, stat.thorns, 120, p.x + 5, true, "thorns");
 }
 function die() {
   const p = player;
@@ -14579,32 +14580,34 @@ function frostNova(p) {
    three relics; they stack for the rest of the run. Dying ends the run: the floor reached is recorded and you earn
    강화석 (3 per floor). Hero XP, levels and upgrades still count. */
 /* Relics grow with the tower. L is the relic level = the floor you are on, so every relic gets stronger as you
-   climb, and on top of that every floor climbed adds a x1.9 "유물 공명" (relic resonance) to all damage you deal
-   in the tower (relicPower). Monster health doubles per floor, so the tower still gets slowly harder (0.95x per
-   floor) but never becomes impossible. desc(L) shows the numbers at level L. */
+   climb, and on top of that every floor climbed adds a x1.92 "유물 공명" (relic resonance) to all damage you deal
+   in the tower (relicPower). Monster health doubles per floor, so the tower still gets slowly harder (0.96x per
+   floor) but never becomes impossible. Flat damage relics grow only slowly because resonance already multiplies
+   them; percentage relics grow toward a cap. desc(L) shows the numbers at level L. */
 const pct = v => Math.round(v * 100) + "%";
 const RELICS = [
-  { id: "flame", name: "불꽃 칼날", col: "#ff7a3a", desc: L => ["모든 공격 피해 +" + 2 * L, "(층마다 +2)"], fx: (s, L) => { s.dmg += 2 * L; } },
+  { id: "flame", name: "불꽃 칼날", col: "#ff7a3a", desc: L => ["모든 공격 피해 +" + (2 + Math.floor(L / 5)), "(5층마다 +1)"], fx: (s, L) => { s.dmg += 2 + Math.floor(L / 5); } },
   { id: "heart", name: "강철 심장", col: "#ff4d6d", desc: () => ["최대 하트 +2", "(최대 10개)"], fx: s => { s.maxHp += 2; }, get: () => { run.hp = (run.hp == null ? 99 : run.hp + 2); } },
   { id: "boots", name: "질풍의 장화", col: "#7fe0ff", desc: L => ["이동 속도 +" + pct(Math.min(0.6, 0.2 + 0.02 * L)), "(층마다 +2%)"], fx: (s, L) => { s.spd *= 1 + Math.min(0.6, 0.2 + 0.02 * L); } },
   { id: "feather", name: "깃털 망토", col: "#f0f0ff", desc: L => ["점프 횟수 +" + (L >= 8 ? 2 : 1), L >= 8 ? "(최대 강화)" : "(8층부터 +2)"], fx: (s, L) => { s.jumps += L >= 8 ? 2 : 1; } },
   { id: "shadow", name: "그림자 신발", col: "#9a7aff", desc: L => ["공중 대시 +" + (L >= 8 ? 2 : 1), L >= 8 ? "(최대 강화)" : "(8층부터 +2)"], fx: (s, L) => { s.airDashes += L >= 8 ? 2 : 1; } },
   { id: "fang", name: "흡혈 송곳니", col: "#c0304a", desc: L => ["처치하면 " + pct(Math.min(0.6, 0.2 + 0.02 * L)) + " 확률로", "하트 1개 회복"], fx: (s, L) => { s.lifesteal = Math.min(0.75, s.lifesteal + Math.min(0.6, 0.2 + 0.02 * L)); } },
   { id: "wide", name: "거인의 칼날", col: "#e8eeff", desc: L => ["공격 범위 +" + pct(Math.min(0.8, 0.25 + 0.03 * L)), "(층마다 +3%)"], fx: (s, L) => { s.reach *= 1 + Math.min(0.8, 0.25 + 0.03 * L); } },
-  { id: "quick", name: "쾌속의 손", col: "#ffe066", desc: L => ["공격 속도 +" + pct(Math.min(0.45, 0.15 + 0.015 * L)), "(층마다 +1.5%)"], fx: (s, L) => { s.aspd *= 1 - Math.min(0.45, 0.15 + 0.015 * L); } },
+  { id: "quick", name: "쾌속의 손", col: "#ffe066", desc: L => ["공격 속도 +" + pct(1 / (1 - Math.min(0.45, 0.15 + 0.015 * L)) - 1), "(층마다 빨라짐)"], fx: (s, L) => { s.aspd *= 1 - Math.min(0.45, 0.15 + 0.015 * L); } },
   { id: "mana", name: "마나 결정", col: "#5fd3ff", desc: L => ["특수 스킬 재사용", "-" + pct(Math.min(0.7, 0.3 + 0.02 * L)) + " (층마다 -2%)"], fx: (s, L) => { s.skillCdMul *= 1 - Math.min(0.7, 0.3 + 0.02 * L); } },
-  { id: "rage", name: "분노의 인장", col: "#ff3a5a", desc: L => ["필살기 게이지가", (2 + 0.1 * L).toFixed(1) + "배로 찹니다"], fx: (s, L) => { s.ultMul *= 2 + 0.1 * L; } },
+  { id: "rage", name: "분노의 인장", col: "#ff3a5a", desc: L => ["필살기 게이지가", Math.min(4, 2 + 0.1 * L).toFixed(1) + "배로 찹니다 (최대 4배)"], fx: (s, L) => { s.ultMul *= Math.min(4, 2 + 0.1 * L); } },
   { id: "charm", name: "수호 부적", col: "#9cff9c", desc: L => ["층마다 " + (L >= 10 ? 2 : 1) + "번, 쓰러질 때", "하트 1개로 버팁니다"], fx: (s, L) => { s.extraSecond += L >= 10 ? 2 : 1; } },
-  { id: "wave", name: "검기의 비석", col: "#bfe6ff", desc: L => ["3타·회전베기 검기", "강화 " + (1 + Math.floor(L / 8)) + "단계 (8층마다 +1)"], fx: (s, L) => { s.wave += 1 + Math.floor(L / 8); } },
+  { id: "wave", name: "검기의 비석", col: "#bfe6ff", desc: L => ["3타·회전베기 검기", "강화 " + Math.min(4, 1 + Math.floor(L / 8)) + "단계 (8층마다 +1, 최대 4)"], fx: (s, L) => { s.wave += Math.min(4, 1 + Math.floor(L / 8)); } },
   { id: "eye", name: "치명의 눈", col: "#ffd040", desc: L => ["치명타 확률 +" + pct(Math.min(0.6, 0.15 + 0.01 * L)), "(치명타는 2배 피해)"], fx: (s, L) => { s.crit += Math.min(0.6, 0.15 + 0.01 * L); } },
   { id: "wall", name: "철벽의 방패", col: "#c8d0e0", desc: L => ["패리 판정 시간", "+" + pct(Math.min(1.5, 0.5 + 0.03 * L)) + " (층마다 +3%)"], fx: (s, L) => { s.parryMul *= 1 + Math.min(1.5, 0.5 + 0.03 * L); } },
   { id: "gold", name: "황금 손", col: "#ffcf40", desc: () => ["탑에서 얻는", "강화석 2배"], fx: () => {} },
-  { id: "cursed", name: "저주받은 검", col: "#b04a9a", desc: L => ["공격력 +" + 4 * L + " (층마다 +4)", "최대 하트 -1"], fx: (s, L) => { s.dmg += 4 * L; s.maxHp = Math.max(2, s.maxHp - 1); } },
+  { id: "cursed", name: "저주받은 검", col: "#b04a9a", desc: L => ["공격력 +" + (4 + Math.floor(L / 3)) + " (3층마다 +1)", "최대 하트 -1"], fx: (s, L) => { s.dmg += 4 + Math.floor(L / 3); s.maxHp = Math.max(2, s.maxHp - 1); } },
   { id: "thorns", name: "가시 갑옷", col: "#a0c060", desc: L => ["맞으면 주변 적에게", "피해 " + (3 + L) + " (층마다 +1)"], fx: (s, L) => { s.thorns += 3 + L; } },
   { id: "time", name: "모래시계", col: "#e0c080", desc: () => ["저스트 회피 판정 2배,", "강화 시간 +2초"], fx: s => { s.jdMul = 2; } }
 ];
-// relic resonance: every floor climbed multiplies all damage dealt in the tower by 1.9
-function relicPower() { return run ? Math.pow(1.9, run.floor - 1) : 1; }
+// relic resonance: every floor climbed multiplies all damage dealt in the tower by 1.92
+const RELIC_RES = 1.92;
+function relicPower() { return run ? Math.pow(RELIC_RES, run.floor - 1) : 1; }
 const fmtMul = v => v >= 100 ? Math.round(v).toLocaleString("ko-KR") : v >= 10 ? v.toFixed(0) : v.toFixed(1);
 const RELIC_BY = {};
 for (const r of RELICS) RELIC_BY[r.id] = r;
@@ -14681,7 +14684,7 @@ function drawRelics(t) {
   drawWorld(true); dim(0.8); menuMotes(t, "#ffb0a0");
   shadowText("유물을 하나 고르세요", W / 2, 10, "#ffe066", 2, "center");
   shadowText("심연의 탑 " + run.floor + "층 돌파 · 다음은 " + (run.floor + 1) + "층", W / 2, 30, "#ffb0a0", 1, "center");
-  shadowText("유물 공명: 모든 피해 ×" + fmtMul(Math.pow(1.9, run.floor)) + " (층마다 ×1.9) · 유물도 층마다 강해집니다", W / 2, 39, "#ffd040", 1, "center");
+  shadowText("유물 공명: 모든 피해 ×" + fmtMul(Math.pow(RELIC_RES, run.floor)) + " (층마다 ×1.92) · 유물도 층마다 강해집니다", W / 2, 39, "#ffd040", 1, "center");
   const cw = 92, gap = 8, x0 = (W - (relicChoices.length * cw + (relicChoices.length - 1) * gap)) / 2;
   relicChoices.forEach((r, i) => {
     const x = Math.round(x0 + i * (cw + gap)), y = 48, h = 92, sel = i === relicSel;
@@ -18596,7 +18599,7 @@ function drawHUD() {
   }
   const m = Math.floor(timer / 60), s = Math.floor(timer % 60);
   shadowText((run ? "심연의 탑 " + run.floor + "층" : training ? "연습장" : "스테이지 " + (stageIdx + 1)) + "  " + m + ":" + String(s).padStart(2, "0"), W / 2, 3, run ? "#ffb0a0" : "#ddd", 1, "center");
-  if (run) { drawRelicRow(4, 57); if (run.floor > 1) shadowText("공명 ×" + fmtMul(relicPower()), 6 + run.relics.length * 10, 55, "#ffd040"); }
+  if (run) { drawRelicRow(4, 57); if (run.floor > 1 && (state === "play" || state === "pause")) shadowText("공명 ×" + fmtMul(relicPower()), 5, 65, "#ffd040"); }
   if (training) drawTrainingHUD();
   if (boss && !boss.dead) {
     const bw = 160, bx = (W - bw) / 2, by = H - 10;
