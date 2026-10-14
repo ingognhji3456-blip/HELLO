@@ -14605,8 +14605,8 @@ function startRun() {
   recalcStats();
   nextFloor();
 }
-// in the tower every floor climbed adds 15% of the base health to every monster and boss (floor 10: x2.35)
-function towerHpMul() { return run ? 1 + 0.15 * (run.floor - 1) : 1; }
+// in the tower monster and boss health doubles on every floor climbed (floor 2: x2, floor 5: x16, floor 10: x512)
+function towerHpMul() { return run ? Math.pow(2, run.floor - 1) : 1; }
 function floorStage(f) {
   const w = Math.min(8, Math.floor((f - 1) / 3));
   if (f % 5 === 0) return w * 4 + 3;
@@ -14622,7 +14622,7 @@ function nextFloor() {
   texts = [];
   popText("심연의 탑 " + run.floor + "층", W / 2, 56, "#ffb0a0", true);
   texts.push({ s: STAGES[si].boss ? "보스가 기다리는 층입니다" : (WORLDS[STAGES[si].world].name + "의 기운이 감돈다"), x: W / 2, y: 76, t: 2.6, ml: 2.6, c: STAGES[si].boss ? "#ff7a6a" : "#ffd0a0", big: true, small: true });
-  if (run.floor > 1) texts.push({ s: "몬스터 체력 ×" + towerHpMul().toFixed(2), x: W / 2, y: 88, t: 2.6, ml: 2.6, c: "#ff9a8a", big: true, small: true });
+  if (run.floor > 1) texts.push({ s: "몬스터 체력 ×" + towerHpMul().toLocaleString("ko-KR"), x: W / 2, y: 88, t: 2.6, ml: 2.6, c: "#ff9a8a", big: true, small: true });
 }
 function endRun() {
   if (!run || run.ended) return;
