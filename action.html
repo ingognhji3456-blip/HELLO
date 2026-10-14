@@ -1553,7 +1553,7 @@ function recalcStats() {
   if (C.id === "mio") stat.aspd *= 1 - 0.06 * U[3];
   // tower relics
   stat.ultMul = 1; stat.thorns = 0; stat.jdMul = 1; stat.parryMul = 1; stat.extraSecond = 0;
-  if (run) for (const id of run.relics) RELIC_BY[id].fx(stat);
+  if (run) for (const id of run.relics) RELIC_BY[id].fx(stat, run.floor);
   PARRY_WIN *= stat.parryMul; PARRY_PERFECT *= stat.parryMul;
   // hearts never go above ten, whatever skills, upgrades and relics add up to
   stat.maxHp = Math.min(MAX_HEARTS, stat.maxHp);
@@ -3912,6 +3912,7 @@ function hurtEnemy(e, dmg, kb, fromX, heavy, kind) {
       return;
     }
   }
+  if (run && kind !== "trap") dmg = Math.round(dmg * relicPower());   // 유물 공명
   if (e.state === "parried") dmg *= 2;
   if (e.frozen > 0) dmg = Math.ceil(dmg * 1.5);
   e.hp -= dmg; e.flash = 0.14;
@@ -6285,6 +6286,7 @@ function hurtBoss(dmg, kb, fromX, heavy) {
     bossFace(); bossSet("slash"); b.plan = [{ wind: 0.16, lunge: true, reach: 50 }]; b.pi = 0; b.ps = "wind";
     return;
   }
+  if (run) dmg = Math.round(dmg * relicPower());   // 유물 공명
   const weak = bossWeak(b);
   if (weak) dmg *= 2;
   b.hp -= dmg; b.flash = 0.14;
@@ -14576,26 +14578,34 @@ function frostNova(p) {
    5th floor is that world's boss. Hearts carry over (one heart heals per floor). After each floor you pick one of
    three relics; they stack for the rest of the run. Dying ends the run: the floor reached is recorded and you earn
    강화석 (3 per floor). Hero XP, levels and upgrades still count. */
+/* Relics grow with the tower. L is the relic level = the floor you are on, so every relic gets stronger as you
+   climb, and on top of that every floor climbed adds a x1.9 "유물 공명" (relic resonance) to all damage you deal
+   in the tower (relicPower). Monster health doubles per floor, so the tower still gets slowly harder (0.95x per
+   floor) but never becomes impossible. desc(L) shows the numbers at level L. */
+const pct = v => Math.round(v * 100) + "%";
 const RELICS = [
-  { id: "flame", name: "불꽃 칼날", col: "#ff7a3a", desc: ["모든 공격 피해 +2"], fx: s => { s.dmg += 2; } },
-  { id: "heart", name: "강철 심장", col: "#ff4d6d", desc: ["최대 하트 +2"], fx: s => { s.maxHp += 2; }, get: () => { run.hp = (run.hp == null ? 99 : run.hp + 2); } },
-  { id: "boots", name: "질풍의 장화", col: "#7fe0ff", desc: ["이동 속도 +20%"], fx: s => { s.spd *= 1.2; } },
-  { id: "feather", name: "깃털 망토", col: "#f0f0ff", desc: ["점프 횟수 +1"], fx: s => { s.jumps += 1; } },
-  { id: "shadow", name: "그림자 신발", col: "#9a7aff", desc: ["공중 대시 +1"], fx: s => { s.airDashes += 1; } },
-  { id: "fang", name: "흡혈 송곳니", col: "#c0304a", desc: ["처치하면 20% 확률로", "하트 1개 회복"], fx: s => { s.lifesteal = Math.min(0.6, s.lifesteal + 0.2); } },
-  { id: "wide", name: "거인의 칼날", col: "#e8eeff", desc: ["공격 범위 +25%"], fx: s => { s.reach *= 1.25; } },
-  { id: "quick", name: "쾌속의 손", col: "#ffe066", desc: ["공격 속도 +15%"], fx: s => { s.aspd *= 0.85; } },
-  { id: "mana", name: "마나 결정", col: "#5fd3ff", desc: ["특수 스킬 재사용 -30%"], fx: s => { s.skillCdMul *= 0.7; } },
-  { id: "rage", name: "분노의 인장", col: "#ff3a5a", desc: ["필살기 게이지가", "두 배로 찹니다"], fx: s => { s.ultMul *= 2; } },
-  { id: "charm", name: "수호 부적", col: "#9cff9c", desc: ["층마다 한 번, 쓰러질 때", "하트 1개로 버팁니다"], fx: s => { s.extraSecond += 1; } },
-  { id: "wave", name: "검기의 비석", col: "#bfe6ff", desc: ["3타와 회전베기가", "검기를 날립니다"], fx: s => { s.wave += 1; } },
-  { id: "eye", name: "치명의 눈", col: "#ffd040", desc: ["치명타 확률 +15%", "(치명타는 2배 피해)"], fx: s => { s.crit += 0.15; } },
-  { id: "wall", name: "철벽의 방패", col: "#c8d0e0", desc: ["패리 판정 시간 +50%"], fx: s => { s.parryMul *= 1.5; } },
-  { id: "gold", name: "황금 손", col: "#ffcf40", desc: ["탑에서 얻는", "강화석 2배"], fx: () => {} },
-  { id: "cursed", name: "저주받은 검", col: "#b04a9a", desc: ["공격력 +4", "최대 하트 -1"], fx: s => { s.dmg += 4; s.maxHp = Math.max(2, s.maxHp - 1); } },
-  { id: "thorns", name: "가시 갑옷", col: "#a0c060", desc: ["맞으면 주변 적에게", "피해 3을 돌려줍니다"], fx: s => { s.thorns += 3; } },
-  { id: "time", name: "모래시계", col: "#e0c080", desc: ["저스트 회피 판정 2배,", "강화 시간 +2초"], fx: s => { s.jdMul = 2; } }
+  { id: "flame", name: "불꽃 칼날", col: "#ff7a3a", desc: L => ["모든 공격 피해 +" + 2 * L, "(층마다 +2)"], fx: (s, L) => { s.dmg += 2 * L; } },
+  { id: "heart", name: "강철 심장", col: "#ff4d6d", desc: () => ["최대 하트 +2", "(최대 10개)"], fx: s => { s.maxHp += 2; }, get: () => { run.hp = (run.hp == null ? 99 : run.hp + 2); } },
+  { id: "boots", name: "질풍의 장화", col: "#7fe0ff", desc: L => ["이동 속도 +" + pct(Math.min(0.6, 0.2 + 0.02 * L)), "(층마다 +2%)"], fx: (s, L) => { s.spd *= 1 + Math.min(0.6, 0.2 + 0.02 * L); } },
+  { id: "feather", name: "깃털 망토", col: "#f0f0ff", desc: L => ["점프 횟수 +" + (L >= 8 ? 2 : 1), L >= 8 ? "(최대 강화)" : "(8층부터 +2)"], fx: (s, L) => { s.jumps += L >= 8 ? 2 : 1; } },
+  { id: "shadow", name: "그림자 신발", col: "#9a7aff", desc: L => ["공중 대시 +" + (L >= 8 ? 2 : 1), L >= 8 ? "(최대 강화)" : "(8층부터 +2)"], fx: (s, L) => { s.airDashes += L >= 8 ? 2 : 1; } },
+  { id: "fang", name: "흡혈 송곳니", col: "#c0304a", desc: L => ["처치하면 " + pct(Math.min(0.6, 0.2 + 0.02 * L)) + " 확률로", "하트 1개 회복"], fx: (s, L) => { s.lifesteal = Math.min(0.75, s.lifesteal + Math.min(0.6, 0.2 + 0.02 * L)); } },
+  { id: "wide", name: "거인의 칼날", col: "#e8eeff", desc: L => ["공격 범위 +" + pct(Math.min(0.8, 0.25 + 0.03 * L)), "(층마다 +3%)"], fx: (s, L) => { s.reach *= 1 + Math.min(0.8, 0.25 + 0.03 * L); } },
+  { id: "quick", name: "쾌속의 손", col: "#ffe066", desc: L => ["공격 속도 +" + pct(Math.min(0.45, 0.15 + 0.015 * L)), "(층마다 +1.5%)"], fx: (s, L) => { s.aspd *= 1 - Math.min(0.45, 0.15 + 0.015 * L); } },
+  { id: "mana", name: "마나 결정", col: "#5fd3ff", desc: L => ["특수 스킬 재사용", "-" + pct(Math.min(0.7, 0.3 + 0.02 * L)) + " (층마다 -2%)"], fx: (s, L) => { s.skillCdMul *= 1 - Math.min(0.7, 0.3 + 0.02 * L); } },
+  { id: "rage", name: "분노의 인장", col: "#ff3a5a", desc: L => ["필살기 게이지가", (2 + 0.1 * L).toFixed(1) + "배로 찹니다"], fx: (s, L) => { s.ultMul *= 2 + 0.1 * L; } },
+  { id: "charm", name: "수호 부적", col: "#9cff9c", desc: L => ["층마다 " + (L >= 10 ? 2 : 1) + "번, 쓰러질 때", "하트 1개로 버팁니다"], fx: (s, L) => { s.extraSecond += L >= 10 ? 2 : 1; } },
+  { id: "wave", name: "검기의 비석", col: "#bfe6ff", desc: L => ["3타·회전베기 검기", "강화 " + (1 + Math.floor(L / 8)) + "단계 (8층마다 +1)"], fx: (s, L) => { s.wave += 1 + Math.floor(L / 8); } },
+  { id: "eye", name: "치명의 눈", col: "#ffd040", desc: L => ["치명타 확률 +" + pct(Math.min(0.6, 0.15 + 0.01 * L)), "(치명타는 2배 피해)"], fx: (s, L) => { s.crit += Math.min(0.6, 0.15 + 0.01 * L); } },
+  { id: "wall", name: "철벽의 방패", col: "#c8d0e0", desc: L => ["패리 판정 시간", "+" + pct(Math.min(1.5, 0.5 + 0.03 * L)) + " (층마다 +3%)"], fx: (s, L) => { s.parryMul *= 1 + Math.min(1.5, 0.5 + 0.03 * L); } },
+  { id: "gold", name: "황금 손", col: "#ffcf40", desc: () => ["탑에서 얻는", "강화석 2배"], fx: () => {} },
+  { id: "cursed", name: "저주받은 검", col: "#b04a9a", desc: L => ["공격력 +" + 4 * L + " (층마다 +4)", "최대 하트 -1"], fx: (s, L) => { s.dmg += 4 * L; s.maxHp = Math.max(2, s.maxHp - 1); } },
+  { id: "thorns", name: "가시 갑옷", col: "#a0c060", desc: L => ["맞으면 주변 적에게", "피해 " + (3 + L) + " (층마다 +1)"], fx: (s, L) => { s.thorns += 3 + L; } },
+  { id: "time", name: "모래시계", col: "#e0c080", desc: () => ["저스트 회피 판정 2배,", "강화 시간 +2초"], fx: s => { s.jdMul = 2; } }
 ];
+// relic resonance: every floor climbed multiplies all damage dealt in the tower by 1.9
+function relicPower() { return run ? Math.pow(1.9, run.floor - 1) : 1; }
+const fmtMul = v => v >= 100 ? Math.round(v).toLocaleString("ko-KR") : v >= 10 ? v.toFixed(0) : v.toFixed(1);
 const RELIC_BY = {};
 for (const r of RELICS) RELIC_BY[r.id] = r;
 let relicChoices = [], relicSel = 1;
@@ -14623,7 +14633,10 @@ function nextFloor() {
   texts = [];
   popText("심연의 탑 " + run.floor + "층", W / 2, 56, "#ffb0a0", true);
   texts.push({ s: STAGES[si].boss ? "보스가 기다리는 층입니다" : (WORLDS[STAGES[si].world].name + "의 기운이 감돈다"), x: W / 2, y: 76, t: 2.6, ml: 2.6, c: STAGES[si].boss ? "#ff7a6a" : "#ffd0a0", big: true, small: true });
-  if (run.floor > 1) texts.push({ s: "몬스터 체력 ×" + towerHpMul().toLocaleString("ko-KR"), x: W / 2, y: 88, t: 2.6, ml: 2.6, c: "#ff9a8a", big: true, small: true });
+  if (run.floor > 1) {
+    texts.push({ s: "몬스터 체력 ×" + towerHpMul().toLocaleString("ko-KR"), x: W / 2, y: 88, t: 2.6, ml: 2.6, c: "#ff9a8a", big: true, small: true });
+    texts.push({ s: "유물 공명: 내 피해 ×" + fmtMul(relicPower()), x: W / 2, y: 98, t: 2.6, ml: 2.6, c: "#ffd040", big: true, small: true });
+  }
 }
 function endRun() {
   if (!run || run.ended) return;
@@ -14667,7 +14680,8 @@ function drawRelicRow(x, y) { if (run) run.relics.forEach((id, i) => relicGem(x 
 function drawRelics(t) {
   drawWorld(true); dim(0.8); menuMotes(t, "#ffb0a0");
   shadowText("유물을 하나 고르세요", W / 2, 10, "#ffe066", 2, "center");
-  shadowText("심연의 탑 " + run.floor + "층 돌파 · 다음은 " + (run.floor + 1) + "층", W / 2, 32, "#ffb0a0", 1, "center");
+  shadowText("심연의 탑 " + run.floor + "층 돌파 · 다음은 " + (run.floor + 1) + "층", W / 2, 30, "#ffb0a0", 1, "center");
+  shadowText("유물 공명: 모든 피해 ×" + fmtMul(Math.pow(1.9, run.floor)) + " (층마다 ×1.9) · 유물도 층마다 강해집니다", W / 2, 39, "#ffd040", 1, "center");
   const cw = 92, gap = 8, x0 = (W - (relicChoices.length * cw + (relicChoices.length - 1) * gap)) / 2;
   relicChoices.forEach((r, i) => {
     const x = Math.round(x0 + i * (cw + gap)), y = 48, h = 92, sel = i === relicSel;
@@ -14675,7 +14689,7 @@ function drawRelics(t) {
     relicGem(x + cw / 2, y + 22 + (sel ? Math.round(Math.sin(t * 5)) : 0), r.col, true);
     if (sel) for (let k = 0; k < 4; k++) { const a = t * 2 + k * 1.57; ctx.fillStyle = k % 2 ? "#ffffff" : r.col; ctx.fillRect(Math.round(x + cw / 2 + Math.cos(a) * 16), Math.round(y + 22 + Math.sin(a) * 12), 1, 1); }
     shadowText(r.name, x + cw / 2, y + 40, sel ? "#ffffff" : r.col, 1, "center");
-    r.desc.forEach((line, j) => shadowText(line, x + cw / 2, y + 56 + j * 10, "#d0d0e0", 1, "center"));
+    r.desc(run.floor + 1).forEach((line, j) => shadowText(line, x + cw / 2, y + 56 + j * 10, "#d0d0e0", 1, "center"));
   });
   if (run.relics.length) { shadowText("가진 유물", 8, 150, "#9a9ab0"); drawRelicRow(44, 150); }
   shadowText(touchMode ? "카드를 탭해서 고르기" : "←/→: 고르기   엔터 또는 클릭: 가져가기", W / 2, 166, "#888888", 1, "center");
@@ -18582,7 +18596,7 @@ function drawHUD() {
   }
   const m = Math.floor(timer / 60), s = Math.floor(timer % 60);
   shadowText((run ? "심연의 탑 " + run.floor + "층" : training ? "연습장" : "스테이지 " + (stageIdx + 1)) + "  " + m + ":" + String(s).padStart(2, "0"), W / 2, 3, run ? "#ffb0a0" : "#ddd", 1, "center");
-  if (run) drawRelicRow(4, 57);
+  if (run) { drawRelicRow(4, 57); if (run.floor > 1) shadowText("공명 ×" + fmtMul(relicPower()), 6 + run.relics.length * 10, 55, "#ffd040"); }
   if (training) drawTrainingHUD();
   if (boss && !boss.dead) {
     const bw = 160, bx = (W - bw) / 2, by = H - 10;
