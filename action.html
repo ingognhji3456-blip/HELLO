@@ -1216,11 +1216,11 @@ const ACTIONS = [
   { id: "up", label: "위" }, { id: "down", label: "아래 / 급강하" },
   { id: "jump", label: "점프" }, { id: "attack", label: "공격" },
   { id: "dash", label: "대시" }, { id: "parry", label: "패리" },
-  { id: "skill", label: "특수 스킬" }, { id: "ult", label: "필살기" }
+  { id: "skill", label: "특수 스킬" }, { id: "ult", label: "필살기" }, { id: "grab", label: "잡기 / 던지기" }
 ];
 const DEFAULT_BINDS = {
   left: ["ArrowLeft", "KeyA"], right: ["ArrowRight", "KeyD"], up: ["ArrowUp", "KeyW"], down: ["ArrowDown", "KeyS"],
-  jump: ["Space", "KeyZ"], attack: ["KeyX", "Mouse0"], dash: ["ShiftLeft", "KeyC"], parry: ["KeyV", "Mouse2"], skill: ["KeyE", "Mouse1"], ult: ["KeyR", null]
+  jump: ["Space", "KeyZ"], attack: ["KeyX", "Mouse0"], dash: ["ShiftLeft", null], parry: ["KeyV", "Mouse2"], skill: ["KeyE", "Mouse1"], ult: ["KeyR", null], grab: ["KeyC", null]
 };
 function cloneBinds(src) { const o = {}; for (const a of ACTIONS) { const v = src[a.id] || []; o[a.id] = [v[0] || null, v[1] || null]; } return o; }
 let binds = cloneBinds(DEFAULT_BINDS);
@@ -1367,8 +1367,11 @@ const MOB_BTNS = [
   { id: "dash", x: 228, y: 160, r: 13, label: "대시", col: "#9cff9c" },
   { id: "parry", x: 232, y: 126, r: 12, label: "패리", col: "#ffe066" },
   { id: "skill", x: 262, y: 116, r: 12, label: "스킬", col: "#c8a0ff" },
-  { id: "ult", x: 298, y: 98, r: 12, label: "필살", col: "#ff6b8a" }
+  { id: "ult", x: 298, y: 98, r: 12, label: "필살", col: "#ff6b8a" },
+  { id: "grab", x: 198, y: 146, r: 11, label: "잡기", col: "#9fe8ff", when: () => state === "play" && !!player && !player.dead && (!!player.holding || (player.ground && !!grabTarget(player))) }
 ];
+// buttons with a "when" show only when they can be used (all of them in the layout editor)
+const mobBtnsOn = () => MOB_BTNS.filter(b => !b.when || state === "mlayout" || b.when());
 const MOB_DIRS = ["left", "right", "up", "down"];
 const MOB_SIZES = [0.8, 1, 1.2, 1.4], MOB_ALPHAS = [0.55, 1, 1.5];
 const MOB_DEFAULT = { move: "stick", stick: "float", size: 1, alpha: 1, hand: "right", vibe: true, pos: {} };
@@ -1416,7 +1419,7 @@ function mobInMoveZone(pos) {
 // the action button under a finger: the nearest one whose (slightly enlarged) circle holds the touch
 function mobBtnAt(pos, exact) {
   let best = null, bd = 1e9;
-  for (const b of MOB_BTNS) {
+  for (const b of mobBtnsOn()) {
     const P = mobPlace(b.id), d = Math.hypot(pos.x - P.x, pos.y - P.y), lim = exact ? P.r : P.r * 1.2 + 3;
     if (d <= lim && d < bd) { bd = d; best = b.id; }
   }
@@ -1585,6 +1588,7 @@ try { const s = JSON.parse(localStorage.getItem("bladerush")); if (s && typeof s
 if (save.binds && typeof save.binds === "object") {
   const b = cloneBinds(DEFAULT_BINDS);
   for (const a of ACTIONS) { const v = save.binds[a.id]; if (Array.isArray(v)) b[a.id] = [0, 1].map(i => typeof v[i] === "string" ? v[i] : null); }
+  if (!Array.isArray(save.binds.grab)) { for (const a of ACTIONS) for (let i = 0; i < 2; i++) if (a.id !== "grab" && b[a.id][i] === "KeyC") b[a.id][i] = null; b.grab = ["KeyC", null]; }
   binds = b;
 }
 if (save.v !== 2) { save.v = 2; save.bestTime = {}; }
@@ -15306,9 +15310,9 @@ function updatePlayer(dt) {
     const guarding = p.parryT > 0 || p.parryLag > 0;
     // attack input (a counter after a successful parry takes priority)
     const freeAtk = hit("attack") && !stunned && !guarding && !p.atk;
-    const grabTg = freeAtk && p.ground && held("down") && !p.holding ? grabTarget(p) : null;   // ↓ + attack asks for a grab first
+    const grabTg = hit("grab") && !stunned && !guarding && p.ground && !p.holding && (!p.atk || typeof p.atk.kind === "number") ? grabTarget(p) : null;   // the grab key (C)
     const finTarget = hit("attack") && !stunned && !guarding && !lockedAtk && p.riposteT <= 0 && !p.holding && !grabTg ? finishTarget(p, 34) : null;
-    if (p.holding) { if (hit("attack") && !stunned && p.holdT > 0.15) throwHeld(p); }
+    if (p.holding) { if ((hit("attack") || hit("grab")) && !stunned && p.holdT > 0.15) throwHeld(p); }
     else if (hit("attack") && !stunned && p.riposteT > 0 && !guarding && !lockedAtk) { p.riposteT = 0; p.chargeArm = false; startAttack("riposte"); }
     else if (finTarget) startFinisher(p, finTarget);
     else if (grabTg) startGrab(p, grabTg);
@@ -17031,7 +17035,7 @@ const MOVES = [
   { name: "급강하 베기", seq: ["jump", "D", "+", "attack"], desc: ["공중에서 아래 + 공격. 떠 있는 적은", "땅에 내리꽂혀 충격파를 일으킵니다."], pose: "dive" },
   { name: "돌진 찌르기", seq: ["R", "R", "attack"], desc: ["같은 방향 두 번 + 공격. 앞으로 돌진하며", "지나가는 적을 모두 찌릅니다 (공중: 돌진베기)."], pose: "rush" },
   { name: "회오리 베기", seq: ["D", "U", "attack"], desc: ["아래, 위 + 공격. 회전하며 솟구쳐", "주변 적을 여러 번 베고 띄웁니다."], pose: "spin" },
-  { name: "잡기 · 던지기", seq: ["D", "+", "attack", "attack"], desc: ["경직된 적 옆에서 아래 + 공격으로 잡고,", "공격으로 던집니다. 벽꽝, 충돌 피해."], pose: "hold" },
+  { name: "잡기 · 던지기", seq: ["grab", "attack"], desc: ["경직된 적 옆에서 잡기로 들어 올리고, 공격이나", "잡기를 한 번 더 누르면 던집니다. 벽꽝, 충돌 피해."], pose: "hold" },
   { name: "패리 · 반격", seq: ["parry", "attack"], desc: ["공격이 닿기 직전 패리. 성공하면 바로", "공격해 강한 반격을 넣습니다."], pose: "guard" },
   { name: "저스트 회피", seq: ["dash"], desc: ["공격이 닿기 직전 대시. 시간이 느려지고", "3초 동안 피해가 1.5배가 됩니다."], pose: "dash" },
   { name: "처형", seq: ["attack"], desc: ["처형 표시가 뜬 적 가까이에서 공격하면", "단번에 끝냅니다. 35%로 하트 회복."], pose: "finisher" },
@@ -17921,7 +17925,7 @@ function drawFinishMarks() {
   if (!p || p.dead) return;
   if (!p.holding && p.ground) {
     const g = grabTarget(p);
-    if (g) shadowText("↓+공격 잡기", Math.round(g.x + g.w / 2 - cam.x), Math.round(g.y - cam.y - 14), "#9fe8ff", 1, "center");
+    if (g) shadowText(touchMode ? "잡기!" : firstKey("grab") + " 잡기", Math.round(g.x + g.w / 2 - cam.x), Math.round(g.y - cam.y - 14), "#9fe8ff", 1, "center");
   }
   for (const e of enemies) {
     if (!canFinish(e)) continue;
@@ -18697,7 +18701,7 @@ let lastBonus = 0, realT = 0, slowT = 0, kickX = 0, kickY = 0;
 const PAUSE_ITEMS = ["계속하기", "스테이지 다시 시작", "기술표", "조작 설정", "타이틀로 나가기"];
 const pauseLabel = i => i === 1 ? (run ? "탑 포기하기" : training ? "연습장 다시 시작" : PAUSE_ITEMS[1]) : PAUSE_ITEMS[i];
 const TITLE_ITEMS = ["게임 시작", "심연의 탑", "캐릭터 선택", "캐릭터 강화", "기술표·연습장", "레벨과 스킬", "조작 설정"];
-const PAUSE_Y = 76, CTRL_Y0 = 27, CTRL_DY = 10, CTRL_COL = [140, 220];
+const PAUSE_Y = 76, CTRL_Y0 = 26, CTRL_DY = 9, CTRL_COL = [140, 220];
 let titleItem = 0;
 function togglePause() {
   if (state === "play") { state = "pause"; pauseSel = 0; stateT = 0; S.pause(); mobReleaseAll(true); }
@@ -21596,7 +21600,7 @@ function drawMobBtn(b, A, edit) {
   mobRing(P.x, P.y, P.r, b.col, (on ? 1 : 0.75) * A, P.r >= 14 ? 2 : 1);
   let label = b.label, ready = true;
   if (!edit && p && state === "play") {
-    if (b.id === "attack" && p.holding) label = "던지기";
+    if ((b.id === "attack" || b.id === "grab") && p.holding) label = "던지기";
     if (b.id === "skill" && p.skillCd > 0) { ready = false; mobPie(P.x, P.y, P.r - 1, p.skillCd / Math.max(0.01, curChar().skill.cd * (stat.skillCdMul || 1)), "#000000", 0.45 * A); }
     if (b.id === "dash" && p.dashCd > 0) mobPie(P.x, P.y, P.r - 1, p.dashCd / DASH_CD, "#000000", 0.4 * A);
     if (b.id === "ult") {
@@ -21614,7 +21618,7 @@ function drawTouch() {
   if (!edit && (state !== "play" || cineT > 0)) return;   // the ultimate scene owns the whole screen
   const A = mob.alpha;
   drawMobMove(A, edit);
-  for (const b of MOB_BTNS) drawMobBtn(b, A, edit);
+  for (const b of mobBtnsOn()) drawMobBtn(b, A, edit);
   ctx.globalAlpha = 1;
 }
 
@@ -21683,7 +21687,7 @@ function mobEditMove(pid, pos) {
   let x = clamp(pos.x + mobEdit.dx, r + 1, W - r - 1), y = clamp(pos.y + mobEdit.dy, 50 + r, H - r - 1);
   if (id === "move") x = mob.hand === "left" ? Math.max(x, W * 0.55 + r) : Math.min(x, W * 0.45 - r);
   // a control can't be dropped on top of another one (it stops at the other's rim)
-  for (const o of ["move"].concat(MOB_BTNS.map(b => b.id))) {
+  for (const o of ["move"].concat(mobBtnsOn().map(b => b.id))) {
     if (o === id) continue;
     const O = mobPlace(o);
     if (Math.hypot(x - O.x, y - O.y) < r + O.r + 1) return;
@@ -21955,19 +21959,19 @@ function drawPause() {
 function drawControls(t) {
   if (ctrlFrom === "pause") { drawWorld(true); dim(0.82); } else { drawBG(STAGES[titleSel]); dim(0.78); }
   shadowText("조작 설정", W / 2, 3, "#ffe066", 2, "center");
-  shadowText("키 1", CTRL_COL[0] + 35, 20, "#888", 1, "center");
-  shadowText("키 2", CTRL_COL[1] + 35, 20, "#888", 1, "center");
+  shadowText("키 1", CTRL_COL[0] + 35, 18, "#888", 1, "center");
+  shadowText("키 2", CTRL_COL[1] + 35, 18, "#888", 1, "center");
   for (let i = 0; i < ACTIONS.length; i++) {
     const a = ACTIONS[i], y = CTRL_Y0 + i * CTRL_DY, rowSel = i === ctrlRow;
-    shadowText(a.label, 30, y + 1, rowSel ? "#fff" : "#aaa");
+    shadowText(a.label, 30, y + 0.5, rowSel ? "#fff" : "#aaa");
     for (let c = 0; c < 2; c++) {
       const bx = CTRL_COL[c], sel = rowSel && c === ctrlCol, cap = capture && capture.action === a.id && capture.slot === c;
       ctx.fillStyle = cap ? "rgba(255,224,102,0.35)" : sel ? "rgba(255,224,102,0.18)" : "rgba(255,255,255,0.06)";
-      ctx.fillRect(bx, y, 70, 10);
-      ctx.strokeStyle = cap || sel ? "#ffe066" : "#444"; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, y + 0.5, 69, 9);
+      ctx.fillRect(bx, y, 70, CTRL_DY);
+      ctx.strokeStyle = cap || sel ? "#ffe066" : "#444"; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, y + 0.5, 69, CTRL_DY - 1);
       const code = binds[a.id][c];
       const label = cap ? (Math.floor(t * 4) % 2 ? "입력 대기" : "") : keyName(code);
-      shadowText(label, bx + 35, y + 1, cap ? "#ffe066" : code ? "#fff" : "#666", 1, "center");
+      shadowText(label, bx + 35, y + 0.5, cap ? "#ffe066" : code ? "#fff" : "#666", 1, "center");
     }
   }
   const yr = CTRL_Y0 + ACTIONS.length * CTRL_DY + 4;
@@ -21975,8 +21979,8 @@ function drawControls(t) {
     uiButton("ctrl" + i, W / 2 - 50, yr + i * 11 - 2, 100, 10, label, i ? "#5a8ac8" : "#d89a3a", ctrlRow === ACTIONS.length + i, () => { ctrlRow = ACTIONS.length + i; ctrlActivate(); });
   });
   shadowText(capture ? "키, 마우스 버튼, 휠 중 하나를 입력하세요 (ESC 취소, DEL 비우기)"
-                     : "엔터 또는 클릭: 변경   DEL: 비우기   ESC: 돌아가기", W / 2, 157, capture ? "#ffe066" : "#999", 1, "center");
-  if (ctrlMsgT > 0) shadowText(ctrlMsg, W / 2, 168, "#9cff9c", 1, "center");
+                     : "엔터 또는 클릭: 변경   DEL: 비우기   ESC: 돌아가기", W / 2, 161, capture ? "#ffe066" : "#999", 1, "center");
+  if (ctrlMsgT > 0) shadowText(ctrlMsg, W / 2, 171, "#9cff9c", 1, "center");
 }
 function drawDead(t) {
   drawWorld(true); dim(Math.min(0.7, t));
