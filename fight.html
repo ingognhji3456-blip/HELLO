@@ -250,6 +250,72 @@ addEventListener("keydown", e => {
   initAudio();
 });
 addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
+// mouse buttons and the wheel count as keys ("mouse0".."mouse4", "wheelup", "wheeldown") so they can be bound
+// read from pointer events (the canvas cancels them, so no mousedown follows); e.buttons also covers chords
+const MOUSE_BITS = [[1, 0], [2, 2], [4, 1], [8, 3], [16, 4]];
+function syncMouse(e) {
+  if (e.pointerType !== "mouse") return;
+  for (const [bit, n] of MOUSE_BITS) {
+    const k = "mouse" + n, down = !!(e.buttons & bit);
+    if (down && !keys[k]) {
+      initAudio();
+      if (kc.wait) {
+        kc.input = PROFILES[kc.tab][0] === "pad" ? "cancel" : k;
+        touch.down = null;  // the click is the new binding, not a tap on the screen
+        keys[k] = true;
+        continue;
+      }
+      pressed[k] = true;
+    }
+    keys[k] = down;
+  }
+}
+for (const t of ["pointerdown", "pointermove", "pointerup"]) addEventListener(t, syncMouse);
+addEventListener("contextmenu", e => e.preventDefault());
+addEventListener("wheel", e => {
+  if (!e.deltaY) return;
+  const k = e.deltaY < 0 ? "wheelup" : "wheeldown";
+  if (kc.wait) { if (PROFILES[kc.tab][0] !== "pad") kc.input = k; return; }
+  pressed[k] = true; keys[k] = true; wheelHeld[k] = 2;
+}, { passive: true });
+const wheelHeld = {};
+
+// gamepads: polled every step; pads[i].held / .prev hold "pad<n>" buttons and "stick<dir>" directions
+let pads = [];
+const padState = {};
+function pollPads() {
+  let list = [];
+  try { list = Array.from(navigator.getGamepads ? navigator.getGamepads() : []).filter(g => g && g.connected); } catch (e) {}
+  pads = list.map(g => {
+    const st = padState[g.index] || (padState[g.index] = { held: {}, prev: {} });
+    st.prev = st.held;
+    const h = {};
+    g.buttons.forEach((b, i) => { if (b && (b.pressed || b.value > 0.5)) h["pad" + i] = true; });
+    const ax = g.axes[0] || 0, ay = g.axes[1] || 0;
+    if (ax < -0.5) h.stickleft = true;
+    if (ax > 0.5) h.stickright = true;
+    if (ay < -0.5) h.stickup = true;
+    if (ay > 0.5) h.stickdown = true;
+    st.held = h;
+    return st;
+  });
+}
+const padEdge = (st, k) => !!k && !!st.held[k] && !st.prev[k];
+const padsAny = (list, ks) => list.some(st => ks.some(k => padEdge(st, k)));
+const padBound = k => ACTIONS.some(([a]) => KEYS.pad[a].includes(k));
+const padDir = d => ["stick" + d, ...KEYS.pad[d]];
+// which pads drive a player: in 2P each pad is one player, otherwise every pad drives 1P
+const padsFor = i => mode === "versus" ? (pads[i] ? [pads[i]] : []) : (i === 0 ? pads : []);
+// menus: pads act like arrow keys / Enter / Esc (the select screen reads pads per player itself)
+function padMenuKeys() {
+  for (const st of pads) if (padEdge(st, "pad9") && !(scene === "fight" && padBound("pad9"))) pressed.escape = true;
+  if ((scene === "fight" && !paused) || scene === "select" || kc.wait) return;
+  const map = { arrowup: padDir("up"), arrowdown: padDir("down"), arrowleft: padDir("left"), arrowright: padDir("right"), enter: ["pad0"], escape: ["pad1"] };
+  for (const k in map) if (padsAny(pads, map[k])) pressed[k] = true;
+}
+addEventListener("gamepadconnected", e => { padToast = { s: "게임패드 연결됨", t: 150 }; });
+addEventListener("gamepaddisconnected", e => { padToast = { s: "게임패드 연결 끊김", t: 150 }; });
+let padToast = null;
 addEventListener("blur", () => {
   for (const k in keys) keys[k] = false;
   if (scene === "fight" && !paused) { paused = true; pauseSel = 0; }
@@ -317,8 +383,10 @@ const DEFAULT_KEYS = {
   solo: { up: ["arrowup", "w"], down: ["arrowdown", "s"], left: ["arrowleft", "a"], right: ["arrowright", "d"], p: ["j", "z"], k: ["k", "x"], s: ["l", "c"], x: ["v", ""] },
   p1: { up: ["w", ""], down: ["s", ""], left: ["a", ""], right: ["d", ""], p: ["f", ""], k: ["g", ""], s: ["h", ""], x: ["t", ""] },
   p2: { up: ["arrowup", ""], down: ["arrowdown", ""], left: ["arrowleft", ""], right: ["arrowright", ""], p: [",", "1"], k: [".", "2"], s: ["/", "3"], x: ["'", "4"] },
+  // standard gamepad layout: 0 A, 1 B, 2 X, 3 Y, 5 RB, 12-15 d-pad (the left stick always moves too)
+  pad: { up: ["pad12", ""], down: ["pad13", ""], left: ["pad14", ""], right: ["pad15", ""], p: ["pad2", ""], k: ["pad0", ""], s: ["pad1", ""], x: ["pad3", "pad5"] },
 };
-const PROFILES = [["solo", "1인용"], ["p1", "2인 대전 1P"], ["p2", "2인 대전 2P"]];
+const PROFILES = [["solo", "1인용"], ["p1", "2인 1P"], ["p2", "2인 2P"], ["pad", "게임패드"]];
 function loadKeys() {
   const out = JSON.parse(JSON.stringify(DEFAULT_KEYS)), sk = save.keys;
   if (sk && typeof sk === "object") {
@@ -331,7 +399,16 @@ function loadKeys() {
 }
 let KEYS = loadKeys();
 const KEYNAMES = { arrowup: "↑", arrowdown: "↓", arrowleft: "←", arrowright: "→", " ": "스페이스", enter: "엔터", shift: "Shift", control: "Ctrl", alt: "Alt", tab: "Tab", capslock: "Caps" };
-const keyName = k => !k ? "-" : KEYNAMES[k] || (k.length === 1 ? k.toUpperCase() : k[0].toUpperCase() + k.slice(1));
+const PADNAMES = ["A", "B", "X", "Y", "LB", "RB", "LT", "RT", "Back", "Start", "L스틱", "R스틱", "↑", "↓", "←", "→", "Home"];
+const MOUSENAMES = ["마우스 왼쪽", "휠 클릭", "마우스 오른쪽", "마우스 뒤로", "마우스 앞으로"];
+function keyName(k) {
+  if (!k) return "-";
+  if (k.startsWith("pad") && k.length > 3) { const n = +k.slice(3); return "패드 " + (PADNAMES[n] || n); }
+  if (k.startsWith("mouse") && k.length > 5) { const n = +k.slice(5); return MOUSENAMES[n] || "마우스 " + n; }
+  if (k === "wheelup") return "휠 위로";
+  if (k === "wheeldown") return "휠 아래로";
+  return KEYNAMES[k] || (k.length === 1 ? k.toUpperCase() : k[0].toUpperCase() + k.slice(1));
+}
 const keyList = (pr, a) => KEYS[pr][a].filter(Boolean).map(keyName).join("/") || "-";
 const activeProfiles = () => mode === "versus" ? ["p1", "p2"] : ["solo"];
 // a hotkey (pause, mute, training) only works when the player hasn't bound that key to a fighting action
@@ -360,6 +437,13 @@ function rawFor(i) {
   const m = KEYS[mode === "versus" ? (i === 0 ? "p1" : "p2") : "solo"];
   const r = {};
   for (const k in m) { r[k] = held(m[k]); r["t" + k] = hit1(m[k]); }
+  for (const st of padsFor(i)) {
+    for (const [a] of ACTIONS) for (const k of KEYS.pad[a]) {
+      if (k && st.held[k]) r[a] = true;
+      if (padEdge(st, k)) r["t" + a] = true;
+    }
+    for (const d of ["up", "down", "left", "right"]) if (st.held["stick" + d]) r[d] = true;
+  }
   if (i === 0 && touch.on) {
     if (touch.stick !== null) {
       if (touch.dx < -7) r.left = true;
@@ -1328,12 +1412,13 @@ function updSelect() {
     scene = "title"; SND.move();
   };
   for (let i = 0; i < ctrls.length; i++) {
-    const c = ctrls[i], who = two ? i : sel.step;
-    if (hit1(c.back)) { goBack(who); return; }
+    const c = ctrls[i], who = two ? i : sel.step, pd = two ? padsFor(i) : pads;
+    const padOk = ["pad0", ...KEYS.pad.p], padBack = ["pad1"].filter(k => !padOk.includes(k));
+    if (hit1(c.back) || padsAny(pd, padBack)) { goBack(who); return; }
     if (sel.ready[who]) continue;
-    if (hit1(c.l)) { sel.c[who] = (sel.c[who] + 2) % 3; SND.move(); }
-    if (hit1(c.r)) { sel.c[who] = (sel.c[who] + 1) % 3; SND.move(); }
-    if (hit1(c.ok)) confirm(who);
+    if (hit1(c.l) || padsAny(pd, padDir("left"))) { sel.c[who] = (sel.c[who] + 2) % 3; SND.move(); }
+    if (hit1(c.r) || padsAny(pd, padDir("right"))) { sel.c[who] = (sel.c[who] + 1) % 3; SND.move(); }
+    if (hit1(c.ok) || padsAny(pd, padOk)) confirm(who);
   }
   if (tap) {
     if (inR(tap, { x: 0, y: 0, w: 40, h: 16 })) { goBack(two ? (sel.ready[1] ? 1 : 0) : sel.step); return; }
@@ -1378,7 +1463,7 @@ function updResult() {
 const kc = { tab: 0, row: 0, col: 0, wait: false, input: null, msg: "", msgT: 0, back: "title" };
 const kcRow = i => ({ x: 20, y: 38 + i * 12, w: 280, h: 11 });
 const kcSlot = (i, c) => ({ x: 132 + c * 84, y: 38 + i * 12, w: 78, h: 11 });
-const kcTab = t => ({ x: 22 + t * 94, y: 18, w: 88, h: 11 });
+const kcTab = t => ({ x: 12 + t * 75, y: 18, w: 71, h: 11 });
 function openKeys(back) {
   Object.assign(kc, { row: 0, col: 0, wait: false, input: null, msg: "", msgT: 0, back });
   kc.tab = back === "fight" && mode === "versus" ? 1 : back === "fight" ? 0 : kc.tab;
@@ -1388,7 +1473,7 @@ function kcMsg(m) { kc.msg = m; kc.msgT = 150; }
 function assignKey(k) {
   const pr = PROFILES[kc.tab][0], [act, label] = ACTIONS[kc.row];
   // a key may only do one thing: free it in this profile (and the other 2P side, which shares the keyboard)
-  const group = pr === "solo" ? ["solo"] : ["p1", "p2"];
+  const group = pr === "p1" || pr === "p2" ? ["p1", "p2"] : [pr];
   let moved = "";
   for (const g of group) for (const [a, l] of ACTIONS) {
     const v = KEYS[g][a];
@@ -1402,12 +1487,15 @@ function assignKey(k) {
 function updKeys() {
   if (kc.msgT > 0) kc.msgT--;
   if (kc.wait) {
-    const k = kc.input;
+    const padTab = PROFILES[kc.tab][0] === "pad";
+    let k = kc.input;
     kc.input = null;
+    if (padTab && k === null) for (const st of pads) for (const b in st.held) if (b.startsWith("pad") && padEdge(st, b)) k = b;
     if (tap) { kc.wait = false; kcMsg("취소했어요"); return; }
     if (k === null) return;
+    if (padTab && !k.startsWith("pad") && !["escape", "backspace", "delete", "cancel"].includes(k)) return;
     kc.wait = false;
-    if (k === "escape") { kcMsg("취소했어요"); return; }
+    if (k === "escape" || k === "cancel") { kcMsg("취소했어요"); return; }
     if (k === "backspace" || k === "delete") { KEYS[PROFILES[kc.tab][0]][ACTIONS[kc.row][0]][kc.col] = ""; save.keys = KEYS; persist(); kcMsg("키를 지웠어요"); return; }
     if (k === "unidentified" || k === "process" || k === "dead" || k.startsWith("f") && k.length > 1 && /^f\d+$/.test(k)) { kcMsg("이 키는 쓸 수 없어요"); return; }
     assignKey(k);
@@ -1418,8 +1506,8 @@ function updKeys() {
     else if (kc.row === ACTIONS.length) {
       const pr = PROFILES[kc.tab][0];
       KEYS[pr] = JSON.parse(JSON.stringify(DEFAULT_KEYS[pr]));
-      if (pr !== "solo") { const o = pr === "p1" ? "p2" : "p1"; KEYS[o] = JSON.parse(JSON.stringify(DEFAULT_KEYS[o])); }
-      save.keys = KEYS; persist(); kcMsg(pr === "solo" ? "1인용 키를 기본값으로 되돌렸어요" : "2인 대전 키를 기본값으로 되돌렸어요"); SND.select();
+      if (pr === "p1" || pr === "p2") { const o = pr === "p1" ? "p2" : "p1"; KEYS[o] = JSON.parse(JSON.stringify(DEFAULT_KEYS[o])); }
+      save.keys = KEYS; persist(); kcMsg({ solo: "1인용", p1: "2인 대전", p2: "2인 대전", pad: "게임패드" }[pr] + " 키를 기본값으로 되돌렸어요"); SND.select();
     } else { scene = kc.back; SND.move(); }
   };
   if (pressed.escape) { scene = kc.back; SND.move(); return; }
@@ -1427,16 +1515,16 @@ function updKeys() {
   if (kp("arrowdown")) { kc.row = Math.min(ACTIONS.length + 1, kc.row + 1); SND.move(); }
   if (kp("arrowleft") || kp("arrowright")) {
     const d = kp("arrowleft") ? -1 : 1;
-    if (kc.row === -1) kc.tab = (kc.tab + d + 3) % 3;
+    if (kc.row === -1) kc.tab = (kc.tab + d + 4) % 4;
     else if (kc.row < ACTIONS.length) kc.col = clamp(kc.col + d, 0, 1);
     SND.move();
   }
-  if (kp("q")) { kc.tab = (kc.tab + 2) % 3; SND.move(); }
-  if (kp("e")) { kc.tab = (kc.tab + 1) % 3; SND.move(); }
+  if (kp("q") || padsAny(pads, ["pad4"])) { kc.tab = (kc.tab + 3) % 4; SND.move(); }
+  if (kp("e") || padsAny(pads, ["pad5"])) { kc.tab = (kc.tab + 1) % 4; SND.move(); }
   if ((kp("backspace") || kp("delete")) && kc.row >= 0 && kc.row < ACTIONS.length) { KEYS[PROFILES[kc.tab][0]][ACTIONS[kc.row][0]][kc.col] = ""; save.keys = KEYS; persist(); kcMsg("키를 지웠어요"); }
   if (kp("enter") || kp(" ")) act();
   if (tap) {
-    for (let t = 0; t < 3; t++) if (inR(tap, kcTab(t))) { kc.tab = t; kc.row = -1; SND.move(); return; }
+    for (let t = 0; t < 4; t++) if (inR(tap, kcTab(t))) { kc.tab = t; kc.row = -1; SND.move(); return; }
     for (let i = 0; i < ACTIONS.length; i++) for (let c = 0; c < 2; c++) if (inR(tap, kcSlot(i, c))) { kc.row = i; kc.col = c; act(); return; }
     for (const i of [ACTIONS.length, ACTIONS.length + 1]) if (inR(tap, kcRow(i))) { kc.row = i; act(); return; }
   }
@@ -1458,7 +1546,7 @@ function drawKeys() {
     for (let c = 0; c < 2; c++) {
       const s2 = kcSlot(i, c), sel2 = cur && kc.col === c, k = KEYS[pr][a][c];
       rect(s2.x, s2.y, s2.w, s2.h, sel2 ? (kc.wait ? (frame & 8 ? "#ffd166" : "#ff9f43") : "#3a2a48") : "#1a1428");
-      const label2 = sel2 && kc.wait ? "키를 누르세요" : keyName(k);
+      const label2 = sel2 && kc.wait ? (PROFILES[kc.tab][0] === "pad" ? "버튼을 누르세요" : "키를 누르세요") : keyName(k);
       text(label2, s2.x + s2.w / 2, s2.y + 3, sel2 && kc.wait ? "#000000" : k ? "#ece6f6" : "#4a4060", 1, "center");
     }
   });
@@ -1470,7 +1558,8 @@ function drawKeys() {
   });
   text("키 1", kcSlot(0, 0).x + 39, 31, "#6a6080", 1, "center");
   text("키 2", kcSlot(0, 1).x + 39, 31, "#6a6080", 1, "center");
-  const hint = kc.wait ? "바꿀 키를 누르세요   ESC: 취소   Backspace: 지우기"
+  const hint = kc.wait ? (PROFILES[kc.tab][0] === "pad" ? "게임패드 버튼을 누르세요   ESC: 취소   Backspace: 지우기" : "키보드 키나 마우스 버튼(휠 포함)을 누르세요   ESC: 취소")
+    : PROFILES[kc.tab][0] === "pad" && !pads.length && kc.msgT <= 0 ? "게임패드가 없어요. 연결한 뒤 아무 버튼이나 누르세요"
     : kc.msgT > 0 ? kc.msg : "방향키: 이동   엔터: 바꾸기   Q/E: 탭   Del: 지우기   ESC: 뒤로";
   text(hint, W / 2, H - 8, kc.wait || kc.msgT > 0 ? "#ffd166" : "#6a6080", 1, "center");
 }
@@ -1478,6 +1567,8 @@ function drawKeys() {
 /* ---------- step ---------- */
 function step() {
   frame++; sceneT++;
+  pollPads();
+  padMenuKeys();
   if (hot("m") && scene !== "keys") setMuted(!muted);
   switch (scene) {
     case "title": setSong("menu"); updTitle(); break;
@@ -1831,8 +1922,8 @@ function drawHowTo() {
     ["슈퍼", "게이지가 가득 차면 아래+필살기 (또는 " + keyList("solo", "x") + ")"],
     ["콤보", "맞히는 중에 잽 > 킥 > 필살기로 연결"],
     ["2인", "1P 펀치/킥/필살기 " + ["p", "k", "s"].map(a => keyList("p1", a)).join(" ") + "    2P " + ["p", "k", "s"].map(a => keyList("p2", a)).join(" ")],
-    ["키 설정", "타이틀이나 일시정지 메뉴의 '키 설정'에서 바꾸기"],
-    ["시스템", "일시정지 P/ESC   소리 M   전체화면 F (메뉴에서)"],
+    ["게임패드", ("스틱/십자키 이동   펀치 " + keyList("pad", "p") + "   킥 " + keyList("pad", "k") + "   필살기 " + keyList("pad", "s") + "   슈퍼 " + keyList("pad", "x")).replace(/패드 /g, "")],
+    ["시스템", "일시정지 P/ESC/Start   소리 M   키·마우스·패드 설정은 '키 설정'"],
     ["터치", "화면 왼쪽 = 스틱, 오른쪽 = P K S 버튼"],
   ];
   L.forEach(([a, b], i) => { text(a, 14, 28 + i * 12, "#5fd3ff"); text(b, 58, 28 + i * 12, "#ece6f6"); });
@@ -1944,6 +2035,7 @@ function draw() {
     case "continue": drawContinue(); break;
     case "ending": drawEnding(); break;
   }
+  if (padToast) { rect(W / 2 - 50, H - 22, 100, 12, "rgba(0,0,0,0.75)"); text(padToast.s, W / 2, H - 19, "#7cffb2", 1, "center"); }
   // scanlines
   ctx.fillStyle = "rgba(0,0,0,0.12)";
   for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 0.5);
@@ -1958,6 +2050,8 @@ function loop(now) {
     step(); acc -= 1 / 60; n++;
     for (const k in pressed) delete pressed[k];
     tap = null; touch.tapb = {};
+    for (const k in wheelHeld) if (--wheelHeld[k] <= 0) { keys[k] = false; delete wheelHeld[k]; }
+    if (padToast && --padToast.t <= 0) padToast = null;
   }
   draw();
   musicTick();
@@ -1968,7 +2062,7 @@ cv.focus();
 
 if (/[?&]test\b/.test(location.search)) {
   window.__pk = {
-    get scene() { return scene; }, get F() { return F; }, get rnd() { return rnd; }, get arc() { return arc; },
+    get scene() { return scene; }, get sel() { return sel; }, get mode() { return mode; }, get F() { return F; }, get rnd() { return rnd; }, get arc() { return arc; },
     setMode(m) { mode = m; }, setSel(a, b) { sel.c = [a, b]; }, beginMatch, step, draw,
     cpuBoth(lvl) { F[0].aiLvl = lvl; F[0].ai = { cool: 30, plan: null, seen: 0, def: 0, jumpIn: false, chained: false, lastMove: null }; },
   };
