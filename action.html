@@ -30029,8 +30029,9 @@ function c2t_cleared(c) { let n = 0; for (let i = c * CH_LEN; i < (c + 1) * CH_L
 function c2t_target(c) {
   if (c === 2) return typeof ch3TitleTarget === "function" ? ch3TitleTarget() : Math.min(save.unlocked - 1, STAGES.length - 1);   // chapter 1: its last open stage; chapter 2: its first unplayed open stage, else its last open one
   if (!c) return Math.min(save.unlocked - 1, CH_LEN - 1);
-  for (let i = CH_LEN; i < save.unlocked && i < STAGES.length; i++) if (typeof save.bestTime[String(i)] !== "number") return i;
-  return Math.min(save.unlocked - 1, STAGES.length - 1);
+  const e2 = Math.min(save.unlocked, 2 * CH_LEN, STAGES.length);   // chapter 2 only, never into chapter 3
+  for (let i = CH_LEN; i < e2; i++) if (typeof save.bestTime[String(i)] !== "number") return i;
+  return e2 - 1;
 }
 function c2t_jump(c) {
   if (!c2t_open() || state !== "title") return false;
