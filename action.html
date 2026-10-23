@@ -51442,6 +51442,21 @@ function al_leave(e) {
 function allyStageStart(si) {
   ALLY3 = []; al_si = si; al_n = -1; al_fight = false; al_exitT = 0; al_holdPrev = false; al_fx = [];
   if (typeof C3_BRK !== "undefined" && C3_BRK) for (const k in C3_BRK) delete C3_BRK[k];
+  al_stageSpawn(si);
+}
+// joined allies also follow the player through the whole stage (chapters 2-3), like 렌; they stay after the boss
+function al_stageSpawn(si) {
+  if (!AL_ON || !player || !level || !al_stageOk(si)) return;
+  let k = 0;
+  for (const id of C3_ALLY_IDS) {
+    if (!c3Joined(id) || !al_idOk(id, si)) continue;
+    const e = al_make(id, Math.max(TS, player.x - 16 - 12 * AL_SLOT[id]), player.y, 1);
+    if (!e) continue;
+    e.c3stage = true;
+    ALLY3.push(e);
+    al_arrive(e, AL_ARRIVE0 + AL_ARRIVE_GAP * k);
+    k++;
+  }
 }
 function allyReset() { ALLY3 = []; al_fx = []; al_n = -1; al_fight = false; al_exitT = 0; }
 function allyAllowed(ent) { return !training && !run && !f4Mode && (!ent || !ent.al || !(ent.al.inT > 0)); }
