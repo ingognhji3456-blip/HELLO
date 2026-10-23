@@ -31123,7 +31123,7 @@ function hai_say(ent, group, opt) {
 
 /* ---------- lifecycle ---------- */
 var comp = null;   // the companion hero entity (team "ally") or null
-function hai_allowed() { return !training && !run && typeof REN_IDX === "number" && REN_IDX >= 0 && charIdx !== REN_IDX; }
+function hai_allowed() { return !training && typeof REN_IDX === "number" && REN_IDX >= 0 && charIdx !== REN_IDX; }
 function hai_spawn(x, y, dir, ci) {
   const e = heroEnt(ci === undefined ? REN_IDX : ci, "ally", x, y);
   e.hai_comp = true; e.dir = dir || 1; e.hp = e.maxHp;
@@ -31136,7 +31136,7 @@ function hai_spawn(x, y, dir, ci) {
 function compStageStart(si) {
   comp = null;
   const f4C = f4M("compAllowed") ? f4Mode.compAllowed(si) : null;
-  if (!save || !save.comp || (f4C === true ? false : f4C === false || chOf(si) < 1 || si === 39) || !hai_allowed() || tagPartner() === REN_IDX || !player) return;
+  if (!save || !save.comp || (f4C === true || run ? false : f4C === false || chOf(si) < 1 || si === 39) || !hai_allowed() || tagPartner() === REN_IDX || !player) return;
   comp = hai_spawn(player.x - 24, player.y, 1);
   comp.safeX = comp.x; comp.safeY = comp.y;
   const A = comp.ai, lw = lwOf(si);
@@ -51367,8 +51367,9 @@ function al_cx(o) { return o.x + o.w / 2; }
 function al_fy(o) { return o.y + o.h; }
 function al_live(e) { return typeof c3Live === "function" ? c3Live(e) : !!e && !e.dead; }
 // chapter / mode gates (E.1)
-function al_stageOk(si) { return chOf(si) >= 1 && si !== 39 && !run && !training && !f4Mode; }
-function al_idOk(id, si) { return !(id === "astel" && si === 83) && !(id === "solan" && si === 95); }
+// 도전 모드 (the tower, the waves): every joined ally comes along, whatever floor or arena
+function al_stageOk(si) { return !training && (run || f4Mode ? true : chOf(si) >= 1 && si !== 39); }
+function al_idOk(id, si) { return !!(run || f4Mode) || !(id === "astel" && si === 83) && !(id === "solan" && si === 95); }
 // heroRecalc without the statGen ping-pong (each recalc bumps statGen, which would make every other hero entity
 // recalc on its next step, every frame): the real hero's stats did not change, so the counter is put back
 function al_recalc(e) {
@@ -51459,9 +51460,9 @@ function al_stageSpawn(si) {
   }
 }
 function allyReset() { ALLY3 = []; al_fx = []; al_n = -1; al_fight = false; al_exitT = 0; }
-function allyAllowed(ent) { return !training && !run && !f4Mode && (!ent || !ent.al || !(ent.al.inT > 0)); }
+function allyAllowed(ent) { return !training && (!ent || !ent.al || !(ent.al.inT > 0)); }
 function allyArena() {
-  if (!AL_ON || f4Mode || run || training || !arena || !player || !level) return;
+  if (!AL_ON || training || !arena || !player || !level) return;
   if (!al_stageOk(stageIdx)) return;
   let k = 0;
   for (const id of C3_ALLY_IDS) {
@@ -51942,7 +51943,7 @@ function al_hudRows() {
   let i = 0;
   for (const e of ALLY3) {
     if (!e.ai || e.ai.hidden || (e.al && e.al.inT > 0)) continue;
-    const pos = !renRow && i === 0 ? { x: 4, y: 28 } : { x: 4, y: AL_HUD_Y + 7 * (renRow ? i : i - 1) };
+    const pos = !renRow && i === 0 ? { x: 4, y: 28 } : { x: 4, y: AL_HUD_Y + (run ? 10 : f4Mode ? 3 : 0) + 7 * (renRow ? i : i - 1) };
     out.push({ e, x: pos.x, y: pos.y, first: !renRow && i === 0 });
     i++;
   }
