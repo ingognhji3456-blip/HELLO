@@ -42,6 +42,7 @@ kbd {
 #res { position: absolute; left: 16px; top: 16px; padding: 10px 14px; display: grid; gap: 6px; min-width: 168px; }
 .row { display: flex; align-items: center; gap: 8px; font-size: 14px; font-variant-numeric: tabular-nums; }
 .row b { font-size: 19px; margin-left: auto; }
+#carryVal { font-size: 14px; max-width: 170px; text-align: right; }
 .row .dim { color: var(--ink-dim); }
 .row svg { width: 22px; height: 22px; flex: none; }
 .row.full b { color: var(--bad); }
@@ -61,7 +62,9 @@ kbd {
 #stamina { position: absolute; left: 50%; bottom: 60px; width: 180px; height: 6px; transform: translateX(-50%); border-radius: 4px; background: rgba(0, 0, 0, 0.4); overflow: hidden; opacity: 0; transition: opacity 0.4s; }
 #stamina i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #d9a441, #f3d27a); }
 #treeHp { position: absolute; left: 0; top: 0; width: 120px; transform: translate(-50%, -100%); text-align: center; font-size: 12px; text-shadow: 0 1px 3px #000; }
-#treeHp .bar { height: 7px; margin-top: 3px; border-radius: 4px; background: rgba(0, 0, 0, 0.55); border: 1px solid rgba(255, 255, 255, 0.25); overflow: hidden; }
+#treeHp .name .mult { color: #ffe39a; }
+#treeHp { width: 200px; }
+#treeHp .bar { margin-left: 40px; margin-right: 40px; height: 7px; margin-top: 3px; border-radius: 4px; background: rgba(0, 0, 0, 0.55); border: 1px solid rgba(255, 255, 255, 0.25); overflow: hidden; }
 #treeHp .bar i { display: block; height: 100%; background: linear-gradient(90deg, #8bc34a, #c5e17a); transition: width 0.12s; }
 #toasts { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); display: grid; gap: 6px; justify-items: center; width: min(420px, calc(100vw - 380px)); }
 @media (max-width: 760px) { #toasts { top: 210px; width: calc(100vw - 32px); } }
@@ -69,6 +72,8 @@ kbd {
 .toast.big { font-size: 22px; font-weight: 800; letter-spacing: 0.04em; color: #ffe2a0; background: rgba(40, 24, 8, 0.6); }
 .toast.out { opacity: 0; transition: opacity 0.5s; }
 @keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } }
+.mutLabel { position: absolute; left: 0; top: 0; padding: 2px 9px; border-radius: 999px; font-size: 13px; font-weight: 800; white-space: nowrap;
+  background: rgba(10, 8, 6, 0.5); border: 1px solid currentColor; text-shadow: 0 1px 3px #000; pointer-events: none; }
 .floater { position: absolute; transform: translate(-50%, -50%); font-weight: 800; font-size: 18px; color: #ffe39a; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8); animation: floatUp 1.1s ease-out forwards; white-space: nowrap; }
 @keyframes floatUp { to { transform: translate(-50%, -260%); opacity: 0; } }
 #pauseBtn {
@@ -157,7 +162,7 @@ kbd {
   <div id="res" class="panel">
     <div class="row" id="logRow">
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="7" width="14" height="10" rx="1" fill="#7a5131"/><path d="M5 9h14M5 12h14M5 15h14" stroke="#5e3d24" stroke-width=".8"/><ellipse cx="19" cy="12" rx="3.2" ry="5" fill="#e2bd86"/><ellipse cx="19" cy="12" rx="1.8" ry="3" fill="none" stroke="#a67c4c" stroke-width=".8"/><ellipse cx="5" cy="12" rx="3.2" ry="5" fill="#6a4529"/></svg>
-      <span>통나무</span><b id="logCount">0</b><span class="dim">/ <span id="logCap">6</span></span>
+      <span>운반</span><b id="carryVal">없음</b>
     </div>
     <div class="row">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="#e3b341"/><circle cx="12" cy="12" r="6.5" fill="none" stroke="#a87b16" stroke-width="1.4"/><path d="M12 8v8M10 10h3.2a1.6 1.6 0 010 3.2H10" stroke="#8a6210" stroke-width="1.4" fill="none"/></svg>
@@ -173,9 +178,10 @@ kbd {
   <div id="treeHp" class="hidden"><div class="name"></div><div class="bar"><i></i></div></div>
   <div id="toasts"></div>
   <div id="floaters"></div>
+  <div id="mutLabels"></div>
   <div id="touch" class="hidden">
     <div id="joy"><div id="joyKnob"></div></div>
-    <div id="bUse" class="tbtn">상점</div>
+    <div id="bUse" class="tbtn">들기</div>
     <div id="bChop" class="tbtn">도끼질</div>
   </div>
 </div>
@@ -191,7 +197,7 @@ kbd {
       <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>이동 (<kbd>Shift</kbd> 달리기)</span>
       <span><kbd>Space</kbd> / 클릭</span><span>도끼질 (누르고 있으면 계속)</span>
       <span>마우스 드래그 · 휠</span><span>카메라 회전 · 확대</span>
-      <span><kbd>E</kbd></span><span>오두막 상점</span>
+      <span><kbd>E</kbd> / <kbd>Q</kbd></span><span>쓰러진 나무 들기 · 내려놓기 · 상점</span>
       <span><kbd>Esc</kbd> <kbd>M</kbd></span><span>일시정지 · 소리</span>
     </div>
   </div>
@@ -200,7 +206,7 @@ kbd {
 <div id="shop" class="overlay hidden">
   <div class="sheet panel" role="dialog" aria-label="오두막 상점">
     <h2>나무꾼 오두막</h2>
-    <div class="sub">통나무는 오두막 옆 장작더미(바닥의 노란 원)에 가면 자동으로 팔립니다. <span id="shopCoins"></span></div>
+    <div class="sub">쓰러뜨린 나무를 메고 오두막 옆 장작더미(바닥의 노란 원)로 가면 자동으로 팔립니다. <span id="shopCoins"></span></div>
     <div class="cards" id="shopCards"></div>
     <div class="shopFoot">
       <div class="stats" id="shopStats"></div>
@@ -317,8 +323,9 @@ const isTouch = matchMedia("(pointer: coarse)").matches;
 const QUALITY = {
   pixelRatio: Math.min(devicePixelRatio || 1, isTouch ? 1.25 : 1.5),
   shadow: isTouch ? 1024 : 2048,
-  grassR: isTouch ? 38 : 56,
+  grassR: isTouch ? 48 : 78,
   grassDensity: isTouch ? 0.55 : 1,
+  nearR: isTouch ? 26 : 40,
 };
 const canvas = $("#view");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
@@ -333,7 +340,10 @@ const MAXANISO = renderer.capabilities.getMaxAnisotropy();
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0xb8d2e8, 0.0058);
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 520);
-const U = { time: { value: 0 }, wind: { value: 1 }, grassFade: { value: new THREE.Vector2(QUALITY.grassR - 14, QUALITY.grassR) } };
+const U = {
+  time: { value: 0 }, wind: { value: 1 }, grassFade: { value: new THREE.Vector2(QUALITY.grassR - 14, QUALITY.grassR) },
+  snow: { value: 0 }, wetGround: { value: 0 }, focus: { value: new THREE.Vector3() }, sunView: { value: new THREE.Vector3(0, 1, 0) }, sunCol: { value: new THREE.Color(0, 0, 0) },
+};
 const UP = new THREE.Vector3(0, 1, 0);
 
 /* ---------- canvas texture helpers ---------- */
@@ -382,12 +392,12 @@ function groundTextures() {
   return { map: tex(c, { srgb: false }), normal: tex(normalCanvas(hf, S, S, 1.6), { srgb: false }) };
 }
 function barkTextures(kind) {
-  const W = 256, H = 512, R = mulberry32(kind.length * 977);
+  const W = 512, H = 1024, R = mulberry32(kind.length * 977);
   let c, hf = new Float32Array(W * H);
   if (kind === "pine") {
     c = pixelCanvas(W, H, (x, y, o) => {
       const u = x / W, v = y / H;
-      const plates = tfbm(u, v, 6, 3, 4, 10), crack = Math.abs(tfbm(u, v, 8, 4, 3, 40) - 0.5), fine = tfbm(u, v, 64, 32, 2, 80);
+      const plates = tfbm(u, v, 6, 3, 4, 10), crack = Math.abs(tfbm(u, v, 8, 4, 4, 40) - 0.5), fine = tfbm(u, v, 64, 32, 3, 80);
       const k = smooth(0.015, 0.06, crack), sh = (0.4 + 0.6 * k) * (0.85 + fine * 0.3);
       hf[y * W + x] = k * (0.6 + plates * 0.4) + fine * 0.15;
       o[0] = lerp(60, 128, plates) * sh; o[1] = lerp(38, 76, plates) * sh; o[2] = lerp(28, 52, plates) * sh;
@@ -395,7 +405,7 @@ function barkTextures(kind) {
   } else if (kind === "oak") {
     c = pixelCanvas(W, H, (x, y, o) => {
       const u = x / W, v = y / H;
-      const n = tfbm(u, v, 10, 3, 4, 50), ridge = 1 - Math.abs(n * 2 - 1), fine = tfbm(u, v, 48, 24, 2, 90);
+      const n = tfbm(u, v, 10, 3, 5, 50), ridge = 1 - Math.abs(n * 2 - 1), fine = tfbm(u, v, 48, 24, 3, 90);
       const k = smooth(0.25, 0.75, ridge), sh = (0.35 + 0.65 * k) * (0.85 + fine * 0.3);
       hf[y * W + x] = k + fine * 0.2;
       o[0] = 96 * sh; o[1] = 84 * sh; o[2] = 70 * sh;
@@ -406,19 +416,19 @@ function barkTextures(kind) {
       o[0] = l; o[1] = l * 0.985; o[2] = l * 0.95;
     });
     const g = c.getContext("2d");
-    for (let i = 0; i < 280; i++) {
-      const x = R() * W, y = R() * H, w = 6 + R() * 34, h = 1.5 + R() * 2.5;
+    for (let i = 0; i < 520; i++) {
+      const x = R() * W, y = R() * H, w = 12 + R() * 64, h = 2 + R() * 5;
       g.fillStyle = `rgba(${(38 + R() * 30) | 0},${(34 + R() * 24) | 0},${(30 + R() * 20) | 0},${0.55 + R() * 0.4})`;
       g.fillRect(x, y, w, h); if (x + w > W) g.fillRect(x - W, y, w, h);
     }
     for (let i = 0; i < 16; i++) {
-      const x = R() * W, y = R() * H, rx = 6 + R() * 18, ry = 3 + R() * 9;
+      const x = R() * W, y = R() * H, rx = 12 + R() * 36, ry = 6 + R() * 18;
       g.fillStyle = "rgba(30,26,22,0.85)";
       for (const ox of [0, -W, W]) { g.beginPath(); g.ellipse(x + ox, y, rx, ry, 0, 0, TAU); g.fill(); }
     }
     hf = lumaField(c);
   }
-  return { map: tex(c), normal: tex(normalCanvas(hf, W, H, kind === "birch" ? 2 : 4.5), { srgb: false }) };
+  return { map: tex(c), normal: tex(normalCanvas(hf, W, H, kind === "birch" ? 3.5 : 8), { srgb: false }) };
 }
 function endGrainTexture() {
   const S = 256;
@@ -454,65 +464,88 @@ function rockTextures() {
   });
   return { map: tex(c), normal: tex(normalCanvas(hf, S, S, 5), { srgb: false }) };
 }
-function drawLeaf(g, x, y, len, wid, ang, col) {
+// Half-width of a leaf at t∈[0,1] along its length: lobed oak, finely toothed birch, or a plain ellipse.
+function leafHalfW(t, wid, shape) {
+  if (shape === "oak") return wid * Math.pow(Math.sin(Math.PI * t), 0.6) * (0.66 + 0.34 * Math.abs(Math.cos(t * 3.5 * Math.PI)));
+  if (shape === "birch") return wid * Math.sin(Math.PI * Math.pow(t, 0.7)) * (0.93 + 0.07 * ((t * 18) % 1));
+  return wid * Math.sin(Math.PI * t);
+}
+// One leaf from (x, y) along `ang`; col = [h, s, l]. Shaded across the blade with a pale midrib.
+function drawLeaf(g, x, y, len, wid, ang, col, shape = "plain") {
   g.save(); g.translate(x, y); g.rotate(ang);
+  const N = shape === "plain" ? 8 : 16;
   g.beginPath(); g.moveTo(0, 0);
-  g.quadraticCurveTo(len * 0.45, -wid, len, 0); g.quadraticCurveTo(len * 0.45, wid, 0, 0);
-  g.fillStyle = col; g.fill();
-  g.strokeStyle = "rgba(0,0,0,0.16)"; g.lineWidth = 0.8;
-  g.beginPath(); g.moveTo(0, 0); g.lineTo(len * 0.88, 0); g.stroke();
+  for (let i = 1; i <= N; i++) { const t = i / N; g.lineTo(t * len, -leafHalfW(t, wid, shape)); }
+  for (let i = N - 1; i >= 1; i--) { const t = i / N; g.lineTo(t * len, leafHalfW(t, wid, shape)); }
+  g.closePath();
+  const [h, sat, l] = col, gr = g.createLinearGradient(0, -wid, len * 0.5, wid);
+  gr.addColorStop(0, `hsl(${h},${sat}%,${l + 7}%)`); gr.addColorStop(1, `hsl(${h + 5},${sat}%,${l - 6}%)`);
+  g.fillStyle = gr; g.fill();
+  g.strokeStyle = `hsla(${h - 12},${sat * 0.6}%,${l + 20}%,0.45)`; g.lineWidth = Math.max(0.6, wid * 0.12);
+  g.beginPath(); g.moveTo(0, 0); g.lineTo(len * 0.9, 0); g.stroke();
   g.restore();
 }
-// Leaf atlas: cards region u∈[0,0.47] (alpha sprigs), core region u∈[0.55,0.98] (opaque foliage).
+// Leaf atlas (1024x512): cards region u∈[0,0.47] (alpha sprigs), core region u∈[0.55,0.98] (opaque foliage).
 const CARD_U = 240 / 512, CORE_U0 = 284 / 512, CORE_U1 = 504 / 512;
 function leafAtlas(kind) {
-  const c = cnv(512, 256), g = c.getContext("2d"), R = mulberry32(kind === "birch" ? 11 : 10);
-  const pal = kind === "birch" ? [72, 92, 42, 60, 30, 46] : [86, 110, 30, 50, 19, 35];
-  const col = (dl = 0) => `hsl(${lerp(pal[0], pal[1], R())},${lerp(pal[2], pal[3], R())}%,${lerp(pal[4], pal[5], R()) + dl}%)`;
-  const LL = kind === "birch" ? 13 : 17, LW = kind === "birch" ? 5.5 : 7;
-  g.fillStyle = `hsl(${pal[0] + 8},${pal[2]}%,${pal[4] - 7}%)`; g.fillRect(272, 0, 240, 256);
-  for (let i = 0; i < 1500; i++) drawLeaf(g, 272 + R() * 240, R() * 256, LL * (0.7 + R() * 0.6), LW * (0.7 + R() * 0.5), R() * TAU, col(-3));
-  g.save(); g.beginPath(); g.rect(0, 0, 240, 256); g.clip();
-  for (let s = 0; s < 10; s++) {
-    const cx = 120 + (R() - 0.5) * 90, cy = 128 + (R() - 0.5) * 100, a = R() * TAU, len = 55 + R() * 40;
-    const x0 = cx - Math.cos(a) * len * 0.5, y0 = cy - Math.sin(a) * len * 0.5;
-    g.strokeStyle = "rgba(74,52,32,0.95)"; g.lineWidth = 2;
-    g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 + Math.cos(a) * len, y0 + Math.sin(a) * len); g.stroke();
-    const n = Math.floor(len / 5);
-    for (let k = 0; k <= n; k++) {
-      const t = k / n, px = x0 + Math.cos(a) * len * t, py = y0 + Math.sin(a) * len * t;
-      for (const sd of [-1, 1]) drawLeaf(g, px, py, LL * (0.8 + R() * 0.5) * (1 - t * 0.25), LW * (0.8 + R() * 0.4), a + sd * (0.55 + R() * 0.6), col());
+  const S = 2, c = cnv(512 * S, 256 * S), g = c.getContext("2d"), R = mulberry32(kind === "birch" ? 11 : 10);
+  const pal = kind === "birch" ? [70, 92, 40, 58, 30, 46] : [84, 108, 30, 48, 19, 34];
+  const col = (dl = 0) => (R() < 0.04 ? [lerp(38, 52, R()), 52, pal[5] + 2 + dl] : [lerp(pal[0], pal[1], R()), lerp(pal[2], pal[3], R()), lerp(pal[4], pal[5], R()) + dl]);
+  const shape = kind === "birch" ? "birch" : "oak", LL = (kind === "birch" ? 13 : 18) * S, LW = (kind === "birch" ? 5 : 7) * S;
+  g.fillStyle = `hsl(${pal[0] + 8},${pal[2]}%,${pal[4] - 8}%)`; g.fillRect(272 * S, 0, 240 * S, 256 * S);
+  for (let i = 0; i < 1800; i++) drawLeaf(g, (272 + R() * 240) * S, R() * 256 * S, LL * (0.7 + R() * 0.6), LW * (0.7 + R() * 0.5), R() * TAU, col(-5 + (i / 1800) * 7), shape);
+  // cards region: a leafy branchlet growing from the left edge, so cards can sit on twigs like real sprays
+  g.save(); g.beginPath(); g.rect(0, 0, 240 * S, 256 * S); g.clip(); g.lineCap = "round";
+  const oak = kind !== "birch";
+  const shoot = (x0, y0, ang, len, w, depth) => {
+    const bendA = (R() - 0.5) * 0.35, cx = x0 + Math.cos(ang) * len * 0.5 + Math.cos(ang + Math.PI / 2) * len * bendA * 0.3, cy = y0 + Math.sin(ang) * len * 0.5 + Math.sin(ang + Math.PI / 2) * len * bendA * 0.3;
+    const x1 = x0 + Math.cos(ang + bendA * 0.5) * len, y1 = y0 + Math.sin(ang + bendA * 0.5) * len;
+    const at = (t) => [(1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * cx + t * t * x1, (1 - t) * (1 - t) * y0 + 2 * (1 - t) * t * cy + t * t * y1];
+    g.strokeStyle = "rgba(88,64,40,0.95)"; g.lineWidth = w;
+    g.beginPath(); g.moveTo(x0, y0); g.quadraticCurveTo(cx, cy, x1, y1); g.stroke();
+    if (depth < 1) for (let k = 1; k <= 6; k++) {
+      const t = k / 7.2, [px, py] = at(t), sd = k % 2 ? 1 : -1;
+      shoot(px, py, ang + sd * (0.5 + R() * 0.3), len * (0.5 - t * 0.24), w * 0.6, depth + 1);
     }
-  }
+    const n = Math.floor(len / ((oak ? 10 : 6.5) * S));
+    for (let i = 0; i < n; i++) {
+      const t = (i + 0.6) / (n + 0.4), [px, py] = at(t), sd = i % 2 ? 1 : -1, big = oak ? 0.7 + t * 0.5 : 1;
+      drawLeaf(g, px, py, LL * big * (0.75 + R() * 0.4), LW * big * (0.8 + R() * 0.3), ang + sd * (0.65 + R() * 0.5), col(-4 + t * 8 + depth * 2), shape);
+    }
+    // oaks bunch their leaves in rosettes at the shoot tips; birches end in a single drooping leaf
+    const tipN = oak ? 5 : 2;
+    for (let k = 0; k < tipN; k++) drawLeaf(g, x1, y1, LL * (oak ? 1.05 : 0.9), LW * (oak ? 1.0 : 0.85), ang + bendA * 0.5 + (k - (tipN - 1) / 2) * 0.55, col(4), shape);
+  };
+  shoot(4 * S, 128 * S, (R() - 0.5) * 0.08, 200 * S, 2.8 * S, 0);
   g.restore();
   const t = tex(c, { wrap: false }); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
   return t;
 }
 function pineAtlas() {
-  const c = cnv(512, 256), g = c.getContext("2d"), R = mulberry32(21);
-  const needle = (dl = 0) => `hsl(${lerp(116, 140, R())},${lerp(22, 38, R())}%,${lerp(13, 25, R()) + dl}%)`;
-  g.fillStyle = "hsl(130,28%,11%)"; g.fillRect(272, 0, 240, 256); g.lineCap = "round";
-  for (let i = 0; i < 2600; i++) {
-    const x = 272 + R() * 240, y = R() * 256, a = R() * TAU, l = 6 + R() * 8;
-    g.strokeStyle = needle(); g.lineWidth = 1.4; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+  const S = 2, c = cnv(512 * S, 256 * S), g = c.getContext("2d"), R = mulberry32(21);
+  const needle = (dl = 0) => `hsl(${lerp(112, 140, R())},${lerp(22, 40, R())}%,${lerp(13, 25, R()) + dl}%)`;
+  g.fillStyle = "hsl(130,28%,10%)"; g.fillRect(272 * S, 0, 240 * S, 256 * S); g.lineCap = "round";
+  for (let i = 0; i < 7000; i++) {
+    const x = (272 + R() * 240) * S, y = R() * 256 * S, a = R() * TAU, l = (6 + R() * 8) * S;
+    g.strokeStyle = needle(); g.lineWidth = 1.3 * S; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
   }
   const twig = (x0, y0, ang, len, w, depth) => {
-    const x1 = x0 + Math.cos(ang) * len, y1 = y0 + Math.sin(ang) * len, steps = Math.floor(len / 2.2);
+    const x1 = x0 + Math.cos(ang) * len, y1 = y0 + Math.sin(ang) * len, steps = Math.floor(len / (2 * S));
     for (let k = 0; k < steps; k++) {
-      const t = k / steps, px = x0 + (x1 - x0) * t, py = y0 + (y1 - y0) * t, nl = (10 + R() * 7) * (1 - t * 0.35) * (depth ? 0.85 : 1);
+      const t = k / steps, px = x0 + (x1 - x0) * t, py = y0 + (y1 - y0) * t, nl = (10 + R() * 7) * S * (1 - t * 0.35) * (depth ? 0.85 : 1);
       for (const sd of [-1, 1]) {
         const a = ang + sd * (0.75 + R() * 0.35);
-        g.strokeStyle = needle(t * 6); g.lineWidth = 1.3;
+        g.strokeStyle = needle(t * 7 + (t > 0.86 ? 7 : 0)); g.lineWidth = 1.2 * S;
         g.beginPath(); g.moveTo(px, py); g.lineTo(px + Math.cos(a) * nl, py + Math.sin(a) * nl); g.stroke();
       }
     }
-    g.strokeStyle = "rgba(84,60,40,0.95)"; g.lineWidth = w; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
-    if (depth < 1) for (let k = 1; k < 7; k++) {
-      const t = k / 7.5, px = x0 + (x1 - x0) * t, py = y0 + (y1 - y0) * t;
-      for (const sd of [-1, 1]) if (R() < 0.85) twig(px, py, ang + sd * (0.55 + R() * 0.25), len * (1 - t) * 0.42 + 12, w * 0.55, depth + 1);
+    g.strokeStyle = "rgba(92,64,40,0.95)"; g.lineWidth = w; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+    if (depth < 1) for (let k = 1; k < 8; k++) {
+      const t = k / 8.5, px = x0 + (x1 - x0) * t, py = y0 + (y1 - y0) * t;
+      for (const sd of [-1, 1]) if (R() < 0.85) twig(px, py, ang + sd * (0.55 + R() * 0.25), len * (1 - t) * 0.42 + 12 * S, w * 0.55, depth + 1);
     }
   };
-  g.save(); g.beginPath(); g.rect(0, 0, 240, 256); g.clip(); twig(4, 128, 0, 228, 3, 0); g.restore();
+  g.save(); g.beginPath(); g.rect(0, 0, 240 * S, 256 * S); g.clip(); twig(4 * S, 128 * S, 0, 228 * S, 3 * S, 0); g.restore();
   const t = tex(c, { wrap: false }); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
   return t;
 }
@@ -535,7 +568,7 @@ function fernTexture() {
   const c = cnv(256, 128), g = c.getContext("2d"), R = mulberry32(41);
   for (let k = 0; k < 26; k++) {
     const t = k / 26, x = 6 + t * 240, L = 50 * Math.pow(1 - t, 0.7) + 6;
-    for (const sd of [-1, 1]) drawLeaf(g, x, 64, L, 5 + 3 * (1 - t), sd * (1.25 - t * 0.3), `hsl(${lerp(95, 115, R())},${lerp(35, 50, R())}%,${lerp(24, 36, R())}%)`);
+    for (const sd of [-1, 1]) drawLeaf(g, x, 64, L, 5 + 3 * (1 - t), sd * (1.25 - t * 0.3), [lerp(95, 115, R()), lerp(35, 50, R()), lerp(24, 36, R())]);
   }
   g.strokeStyle = "hsl(95,35%,22%)"; g.lineWidth = 2.2; g.beginPath(); g.moveTo(0, 64); g.lineTo(250, 64); g.stroke();
   const t = tex(c, { wrap: false }); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
@@ -635,6 +668,20 @@ function softDot() {
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
   return tex(c, { wrap: false });
 }
+// Four-pointed glint with a soft core, for sparkles floating around special trees.
+function starTexture() {
+  const c = cnv(64, 64), g = c.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 14);
+  gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  for (const [w, l, a] of [[2.2, 30, 1], [1.4, 18, 0.7]]) {
+    g.save(); g.translate(32, 32); if (a < 1) g.rotate(Math.PI / 4);
+    const lg = g.createLinearGradient(-l, 0, l, 0);
+    lg.addColorStop(0, "rgba(255,255,255,0)"); lg.addColorStop(0.5, `rgba(255,255,255,${a})`); lg.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = lg; g.fillRect(-l, -w / 2, l * 2, w); g.rotate(Math.PI / 2); g.fillRect(-l, -w / 2, l * 2, w);
+    g.restore();
+  }
+  return tex(c, { wrap: false });
+}
 function waterNormal() {
   const S = 256, hf = new Float32Array(S * S);
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) hf[y * S + x] = tfbm(x / S, y / S, 8, 8, 4, 250);
@@ -644,10 +691,16 @@ function waterNormal() {
 /* ---------- shader patches ---------- */
 const NORMAL_NOFLIP = THREE.ShaderChunk.normal_fragment_begin.replace("normal *= faceDirection;", "");
 // Screen-door fade for foliage and bark right in front of the camera, so the woodcutter stays visible in thick forest.
+// Trees between the camera and the woodcutter dissolve in a screen-door pattern inside a narrow tube along
+// that line, so he is never hidden; anything touching the lens fades too.
 const NEAR_FADE = `#include <clipping_planes_fragment>
 {
-  float camD = length(vViewPosition);
-  if (camD < 3.4 && fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453) > smoothstep(1.3, 3.4, camD)) discard;
+  float dither = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453);
+  vec3 ab = uFocus - cameraPosition;
+  float tt = clamp(dot(vTreeWPos - cameraPosition, ab) / max(dot(ab, ab), 1e-4), 0.0, 1.0);
+  float dseg = length(vTreeWPos - (cameraPosition + ab * tt));
+  float keep = min(smoothstep(0.6, 1.7, dseg) + step(0.93, tt), smoothstep(0.4, 1.4, length(vViewPosition)));
+  if (dither > keep) discard;
 }`;
 const windChunk = (flutter) => `#include <begin_vertex>
 {
@@ -663,41 +716,179 @@ const windChunk = (flutter) => `#include <begin_vertex>
   transformed.x += sway + flut;
   transformed.z += sway * 0.6 - flut * 0.7;
 }`;
-function addWind(mat, flutter) {
+// Mutations are drawn in the tree shaders from two per-instance attributes:
+// aMut = (gold, crystal, wet, frost), aMut2 = (lightning-struck, titan, big, unused).
+const MUT_VERT_PARS = `
+#ifdef TREE_MUT
+  #ifdef USE_INSTANCING
+    attribute vec4 aMut;
+    attribute vec4 aMut2;
+  #endif
+  varying vec4 vMut;
+  varying vec4 vMut2;
+  varying vec3 vLocalPos;
+#endif`;
+const MUT_VERT = `
+#ifdef TREE_MUT
+  #ifdef USE_INSTANCING
+    vMut = aMut; vMut2 = aMut2;
+  #else
+    vMut = vec4(0.0); vMut2 = vec4(0.0);
+  #endif
+  vLocalPos = position;
+#endif`;
+const TREE_FRAG_PARS = `
+uniform vec3 uFocus;
+varying vec3 vTreeWPos;
+uniform float uTime;
+uniform float uSnow;
+uniform vec3 uSunView;
+uniform vec3 uSunCol;
+uniform vec3 uSkyTop;
+uniform vec3 uSkyHor;
+#ifdef TREE_MUT
+  varying vec4 vMut;
+  varying vec4 vMut2;
+  varying vec3 vLocalPos;
+#endif`;
+const TREE_SURFACE = `#include <emissivemap_fragment>
+{
+  vec3 upV = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+  float upF = clamp(dot(normal, upV), 0.0, 1.0);
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.93, 0.97), uSnow * smoothstep(0.3, 0.8, upF) * (0.6 + 0.35 * smoothstep(0.8, 1.0, uSnow)));
+#ifdef TREE_MUT
+  vec3 Vv = normalize(vViewPosition);
+  vec3 Rw = normalize((vec4(reflect(-Vv, normal), 0.0) * viewMatrix).xyz);
+  vec3 skyRef = mix(uSkyHor, uSkyTop, smoothstep(-0.05, 0.6, Rw.y)) * mix(0.3, 1.0, smoothstep(-0.3, 0.05, Rw.y));
+  float fres = pow(1.0 - clamp(dot(normal, Vv), 0.0, 1.0), 4.0);
+  float lum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+  float rnd = fract(sin(dot(floor(vLocalPos * 8.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+  #ifdef IS_BARK
+    // titan: ancient bark furred with moss on its upper sides
+    float moss = vMut2.y * smoothstep(0.2, 0.7, upF + (rnd - 0.5) * 0.7);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.15, 0.25, 0.06) * (0.7 + lum), moss * 0.85);
+  #endif
+  // gold: polished metal that mirrors the sky, with sparkling glints
+  vec3 goldC = vec3(1.0, 0.6, 0.12);
+  float skyL = dot(skyRef, vec3(0.3, 0.59, 0.11));
+  diffuseColor.rgb = mix(diffuseColor.rgb, goldC * (0.25 + lum * 1.1), vMut.x);
+  metalnessFactor = mix(metalnessFactor, 0.8, vMut.x);
+  roughnessFactor = mix(roughnessFactor, 0.3, vMut.x);
+  totalEmissiveRadiance += vMut.x * goldC * ((0.12 + 0.45 * skyL) * (0.55 + 0.9 * fres) + 0.06);
+  // crystal: the wood stays wood but turns cold and pale, lit faintly from the crystals growing on it
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.9, 1.05) + vec3(0.03, 0.05, 0.08), vMut.y);
+  totalEmissiveRadiance += vMut.y * vec3(0.2, 0.5, 0.9) * 0.08 * (0.5 + 0.5 * fres);
+  // wet: soaked bark and leaves turn darker and richer, with a soft sheen (no mirror) and darker rain trails
+  float trail = 0.5 + 0.5 * sin(atan(vLocalPos.z, vLocalPos.x) * 9.0 + sin(vLocalPos.y * 1.7) * 1.5);
+  diffuseColor.rgb = mix(diffuseColor.rgb, pow(diffuseColor.rgb, vec3(1.2)) * 0.6, vMut.z * (0.75 + 0.25 * trail));
+  roughnessFactor = mix(roughnessFactor, 0.4, vMut.z);
+  totalEmissiveRadiance += vMut.z * skyRef * fres * 0.06;
+  // frost: sheathed in blue-white ice that glitters
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.8, 0.91, 1.0), vMut.w * (0.72 + 0.28 * upF));
+  roughnessFactor = mix(roughnessFactor, 0.3, vMut.w);
+  totalEmissiveRadiance += vMut.w * (vec3(0.5, 0.72, 1.0) * 0.1 + skyRef * 0.3 * fres);
+  // lightning-struck: the bolt tore a spiral strip of bark off one side, baring pale split wood with scorched edges;
+  // the rest of the tree is sooty and part of the leaves are scorched brown
+  float sh = vMut2.x;
+  #ifdef IS_BARK
+    float ang = atan(vLocalPos.z, vLocalPos.x);
+    float scarD = abs(mod(ang - vLocalPos.y * 0.35 + 3.14159, 6.28318) - 3.14159);
+    float scar = 1.0 - smoothstep(0.22, 0.3, scarD), edge = smoothstep(0.18, 0.3, scarD) * (1.0 - smoothstep(0.3, 0.55, scarD));
+    vec3 bare = vec3(0.78, 0.66, 0.48) * (0.8 + 0.4 * rnd);
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.62, sh);
+    diffuseColor.rgb = mix(diffuseColor.rgb, bare, sh * scar);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.03, 0.025, 0.02), sh * edge * 0.85);
+    totalEmissiveRadiance += sh * edge * vec3(1.0, 0.35, 0.08) * 0.12 * (0.7 + 0.3 * sin(uTime * 1.3 + vLocalPos.y));
+  #else
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.32, 0.2, 0.08) * (0.6 + lum), sh * step(0.55, rnd) * 0.85);
+  #endif
+#endif
+}`;
+// Light through the leaves when looking toward the sun.
+const LEAF_TRANSLUCENCY = `
+{
+  float bt = pow(max(dot(-normalize(vViewPosition), uSunView), 0.0), 3.0);
+  outgoingLight += diffuseColor.rgb * uSunCol * (0.5 * bt + 0.04);
+}
+#include <opaque_fragment>`;
+// Wind sway for trees and bushes, plus (optionally) mutation looks, translucency and near-camera fade.
+function treeShader(mat, { flutter = false, mut = false, bark = false, trans = false } = {}) {
+  const depth = !!mat.isMeshDepthMaterial;
+  if (mut && !depth) mat.defines = Object.assign(mat.defines || {}, { TREE_MUT: "" }, bark ? { IS_BARK: "" } : {});
   mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uTime = U.time; sh.uniforms.uWind = U.wind;
-    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uTime;\nuniform float uWind;")
-      .replace("#include <begin_vertex>", windChunk(flutter));
+    Object.assign(sh.uniforms, { uTime: U.time, uWind: U.wind, uSnow: U.snow, uSunView: U.sunView, uSunCol: U.sunCol, uSkyTop: skyMat.uniforms.uTop, uSkyHor: skyMat.uniforms.uHorizon, uFocus: U.focus });
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uTime;\nuniform float uWind;" + (depth ? "" : MUT_VERT_PARS + "\nvarying vec3 vTreeWPos;"))
+      .replace("#include <begin_vertex>", windChunk(flutter) + (depth ? "" : MUT_VERT));
+    if (!depth) sh.vertexShader = sh.vertexShader.replace("#include <project_vertex>", `#include <project_vertex>
+      {
+        vec4 twp = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          twp = instanceMatrix * twp;
+        #endif
+        vTreeWPos = (modelMatrix * twp).xyz;
+      }`);
     if (mat.side === THREE.DoubleSide) sh.fragmentShader = sh.fragmentShader.replace("#include <normal_fragment_begin>", NORMAL_NOFLIP);
-    if (!mat.isMeshDepthMaterial) sh.fragmentShader = sh.fragmentShader.replace("#include <clipping_planes_fragment>", NEAR_FADE);
+    if (depth) return;
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>" + TREE_FRAG_PARS)
+      .replace("#include <clipping_planes_fragment>", NEAR_FADE)
+      .replace("#include <emissivemap_fragment>", TREE_SURFACE);
+    if (trans) sh.fragmentShader = sh.fragmentShader.replace("#include <opaque_fragment>", LEAF_TRANSLUCENCY);
   };
-  mat.customProgramCacheKey = () => "wind" + (flutter ? 1 : 0) + mat.type;
+  const key = ["tree", flutter, mut, bark, trans, mat.type, mat.side].join("|");
+  mat.customProgramCacheKey = () => key;
   return mat;
 }
-function leafMaterial(map) {
-  const m = addWind(new THREE.MeshStandardMaterial({ map, vertexColors: true, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.82, alphaToCoverage: true }), true);
-  m.userData.depth = addWind(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map, alphaTest: 0.42, side: THREE.DoubleSide }), true);
+function leafMaterial(map, mut = false) {
+  const m = treeShader(new THREE.MeshStandardMaterial({ map, vertexColors: true, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.78, alphaToCoverage: true }), { flutter: true, mut, trans: true });
+  m.userData.depth = treeShader(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map, alphaTest: 0.42, side: THREE.DoubleSide }), { flutter: true });
   return m;
 }
 function cardMaterial(map, extra = {}) {
   const m = new THREE.MeshStandardMaterial({ map, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.9, alphaToCoverage: true, ...extra });
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.uTime = U.time; sh.uniforms.uFade = U.grassFade;
-    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uTime;\nuniform vec2 uFade;")
+    sh.uniforms.uTime = U.time; sh.uniforms.uFade = U.grassFade; sh.uniforms.uSnow = U.snow; sh.uniforms.uWind = U.wind;
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uTime;\nuniform vec2 uFade;\nuniform float uSnow;\nuniform float uWind;")
       .replace("#include <begin_vertex>", `#include <begin_vertex>
       {
         vec3 gp = instanceMatrix[3].xyz;
         float gd = distance(gp.xz, cameraPosition.xz);
         transformed *= 1.0 - smoothstep(uFade.x, uFade.y, gd);
+        transformed.y *= 1.0 - 0.6 * smoothstep(0.65, 1.0, uSnow);
         float tip = uv.y * uv.y;
-        float ph = uTime * 1.9 + gp.x * 0.35 + gp.z * 0.27;
-        transformed.x += (sin(ph) * 0.09 + sin(ph * 2.7) * 0.03) * tip;
-        transformed.z += cos(ph * 0.83) * 0.07 * tip;
+        float ph = uTime * 1.9 * (0.7 + 0.3 * uWind) + gp.x * 0.35 + gp.z * 0.27;
+        transformed.x += (sin(ph) * 0.09 + sin(ph * 2.7) * 0.03) * tip * uWind;
+        transformed.z += cos(ph * 0.83) * 0.07 * tip * uWind;
       }`);
-    sh.fragmentShader = sh.fragmentShader.replace("#include <normal_fragment_begin>", NORMAL_NOFLIP);
+    sh.fragmentShader = sh.fragmentShader.replace("#include <normal_fragment_begin>", NORMAL_NOFLIP)
+      .replace("#include <common>", "#include <common>\nuniform float uSnow;")
+      .replace("#include <color_fragment>", "#include <color_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.88, 0.91, 0.96), clamp(uSnow * mix(0.5, 1.15, smoothstep(0.1, 0.9, vMapUv.y)) + smoothstep(0.75, 1.0, uSnow) * 0.4, 0.0, 1.0));");
   };
   m.customProgramCacheKey = () => "card";
   return m;
+}
+// Snow cover and rain-darkened surfaces for the ground, rocks and roofs.
+function groundFx(mat, { wet = true } = {}) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uSnow = U.snow; sh.uniforms.uWetGround = U.wetGround;
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying float vWorldY;")
+      .replace("#include <worldpos_vertex>", `#include <worldpos_vertex>
+      vec4 gfxWP = vec4(transformed, 1.0);
+      #ifdef USE_INSTANCING
+        gfxWP = instanceMatrix * gfxWP;
+      #endif
+      vWorldY = (modelMatrix * gfxWP).y;`);
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uSnow;\nuniform float uWetGround;\nvarying float vWorldY;")
+      .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
+      {
+        vec3 upV = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+        float cover = uSnow * smoothstep(0.55, 0.85, dot(normal, upV)) * smoothstep(0.1, 0.6, vWorldY);
+        ${wet ? "diffuseColor.rgb *= 1.0 - 0.28 * uWetGround; roughnessFactor = mix(roughnessFactor, 0.42, uWetGround);" : ""}
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.93, 0.97), cover);
+        roughnessFactor = mix(roughnessFactor, 0.65, cover);
+      }`);
+  };
+  mat.customProgramCacheKey = () => "groundfx" + wet + mat.type;
+  return mat;
 }
 
 /* ---------- geometry builder ---------- */
@@ -715,8 +906,13 @@ class GB {
       let u = T ? T.getX(i) : 0, w = T ? T.getY(i) : 0;
       if (uvFn) [u, w] = uvFn(u, w, v);
       this.uv.push(u, w);
-      const c = colFn ? colFn(v, n) : 1; this.c.push(c, c, c);
+      const c = colFn ? colFn(v, n) : 1;
+      if (typeof c === "number") this.c.push(c, c, c); else this.c.push(c[0], c[1], c[2]);
     }
+  }
+  vert(p, n, u, v, c) {
+    this.p.push(p.x, p.y, p.z); this.n.push(n.x, n.y, n.z); this.uv.push(u, v);
+    if (typeof c === "number") this.c.push(c, c, c); else this.c.push(c[0], c[1], c[2]);
   }
   quad(a, b, c, d, uv, nrm, ao) {
     const P = [a, b, c, d], UVS = [[uv[0], uv[1]], [uv[2], uv[1]], [uv[2], uv[3]], [uv[0], uv[3]]];
@@ -810,12 +1006,13 @@ function gridSample(arr, x, z, k) {
 }
 const slopeAt = (x, z) => 1 - gridSample(TNRM, x, z, 1);
 
+let terrainMesh = null;
 function buildTerrain() {
   for (let j = 0; j < NV; j++) for (let i = 0; i < NV; i++) HGT[j * NV + i] = terrainHeight(-HALF + i * CELL, -HALF + j * CELL);
   const C = (s) => new THREE.Color(s);
   const K = {
     meadow: C("#6f8c38"), lush: C("#50762a"), dry: C("#9c9752"), forest: C("#4f4b2d"), moss: C("#3f5c27"),
-    path: C("#8b7352"), rock: C("#7e7a71"), rockD: C("#58544d"), sand: C("#a49369"), mud: C("#5d5439"),
+    path: C("#8b7352"), rock: C("#6f6b63"), rockD: C("#4a4741"), sand: C("#a49369"), mud: C("#5d5439"),
     deep: C("#2c3224"), snow: C("#e8eef2"), alpine: C("#3a4829"),
   };
   const col = new THREE.Color(), tmp = new THREE.Color();
@@ -838,7 +1035,7 @@ function buildTerrain() {
     const mm = smooth(150, 178, edgeDist(x, z));
     col.lerp(K.alpine, mm * (1 - smooth(20, 34, h + n1 * 5)) * 0.9);
     col.lerp(tmp.copy(K.rock).lerp(K.rockD, clamp(0.5 + n2, 0, 1)), clamp(smooth(0.42, 0.7, slope + n2 * 0.1) + mm * smooth(26, 40, h + n2 * 6), 0, 1));
-    col.lerp(K.snow, smooth(48, 62, h + n1 * 8) * (1 - smooth(0.75, 1.0, slope)));
+    col.lerp(K.snow, smooth(64, 80, h + n1 * 10) * (1 - smooth(0.6, 0.85, slope)));
     const vv = 1 + nC(x * 0.17, z * 0.17) * 0.07;
     clr.set([col.r * vv, col.g * vv, col.b * vv], k * 3);
     TCOL.set([col.r, col.g, col.b], k * 3);
@@ -857,10 +1054,10 @@ function buildTerrain() {
   geo.setIndex(new THREE.BufferAttribute(idx, 1));
   geo.computeBoundingSphere();
   const gt = groundTextures();
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: gt.map, normalMap: gt.normal, normalScale: new THREE.Vector2(0.45, 0.45), roughness: 0.97 });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.receiveShadow = true;
-  scene.add(mesh);
+  const mat = groundFx(new THREE.MeshStandardMaterial({ vertexColors: true, map: gt.map, normalMap: gt.normal, normalScale: new THREE.Vector2(0.45, 0.45), roughness: 0.97 }));
+  terrainMesh = new THREE.Mesh(geo, mat);
+  terrainMesh.receiveShadow = true;
+  scene.add(terrainMesh);
 }
 
 /* ---------- render chunks: instanced props are split by area so off-screen ones are culled ---------- */
@@ -888,7 +1085,7 @@ const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, fog: false,
   uniforms: {
     uTop: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() }, uSunDir: { value: new THREE.Vector3(0, 1, 0) },
-    uSunColor: { value: new THREE.Color() }, uSunVis: { value: 1 }, uNight: { value: 0 }, uTime: U.time,
+    uSunColor: { value: new THREE.Color() }, uSunVis: { value: 1 }, uNight: { value: 0 }, uTime: U.time, uCover: { value: 0 },
   },
   vertexShader: `
     varying vec3 vDir;
@@ -899,7 +1096,7 @@ const skyMat = new THREE.ShaderMaterial({
     }`,
   fragmentShader: `
     uniform vec3 uTop, uHorizon, uSunDir, uSunColor;
-    uniform float uSunVis, uNight, uTime;
+    uniform float uSunVis, uNight, uTime, uCover;
     varying vec3 vDir;
     float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -921,11 +1118,12 @@ const skyMat = new THREE.ShaderMaterial({
         float star = step(0.993, h) * smoothstep(0.35, 0.0, length(fract(g) - 0.5)) * (0.6 + 0.4 * sin(uTime * 3.0 + h * 50.0));
         col += vec3(star) * uNight * smoothstep(0.02, 0.2, y);
         vec2 cp = d.xz / (y + 0.08) * 0.9 + vec2(uTime * 0.004, uTime * 0.0017);
-        float c = smoothstep(0.53, 0.8, fbm(cp)) * smoothstep(0.04, 0.38, y);
+        float c = smoothstep(0.53 - uCover * 0.45, 0.8 - uCover * 0.3, fbm(cp)) * smoothstep(0.04 - uCover * 0.04, 0.38 - uCover * 0.3, y);
         float shade = smoothstep(0.42, 0.9, fbm(cp * 2.1 + 5.0));
         vec3 lit = mix(vec3(1.0), uSunColor, 0.3) * (0.22 + 0.85 * uSunVis);
         vec3 cc = mix(lit, lit * 0.6 + uHorizon * 0.18, shade);
         cc = mix(cc, uTop * 0.6 + 0.015, uNight);
+        cc = mix(cc, uHorizon * (0.75 + 0.2 * lit), uCover * 0.7);
         col = mix(col, cc, c * 0.88);
       }
       gl_FragColor = vec4(col, 1.0);
@@ -980,7 +1178,7 @@ function buildWater() {
 const SKY = {
   dayTop: new THREE.Color("#3b74c4"), dayHor: new THREE.Color("#bcd5ea"), setTop: new THREE.Color("#3d4f84"), setHor: new THREE.Color("#f0a35f"),
   nightTop: new THREE.Color("#050a18"), nightHor: new THREE.Color("#18233a"), sunHi: new THREE.Color("#fff3df"), sunLo: new THREE.Color("#ff9a52"),
-  moon: new THREE.Color("#9fb4ff"), hemiDay: new THREE.Color("#c7dcff"), hemiNight: new THREE.Color("#5a6f9c"),
+  moon: new THREE.Color("#9fb4ff"), rainGrey: new THREE.Color("#7a8591"), snowGrey: new THREE.Color("#b4bdc7"), hemiDay: new THREE.Color("#c7dcff"), hemiNight: new THREE.Color("#5a6f9c"),
 };
 const sunDir = new THREE.Vector3(), lightDir = new THREE.Vector3();
 const env = { day: 1, night: 0, golden: 0 };
@@ -995,10 +1193,18 @@ function updateSky(hour) {
   hor.copy(SKY.nightHor).lerp(SKY.dayHor, day).lerp(SKY.setHor, golden * 0.85);
   skyMat.uniforms.uSunDir.value.copy(sunDir);
   skyMat.uniforms.uSunColor.value.copy(SKY.sunLo).lerp(SKY.sunHi, smooth(0.0, 0.4, sy));
-  skyMat.uniforms.uSunVis.value = smooth(-0.06, 0.04, sy);
-  skyMat.uniforms.uNight.value = night;
+  // overcast skies for rain and snow, white flashes for lightning
+  const oc = Math.max(weather.rain, weather.snow * (0.85 + 0.15 * weather.blizz)), fl = weather.flash;
+  const grey = new THREE.Color().setRGB(0.012, 0.014, 0.018).lerp(weather.snow > weather.rain ? SKY.snowGrey : SKY.rainGrey, day);
+  top.lerp(grey, oc * 0.8); hor.lerp(grey, oc * 0.7);
+  top.addScalar(fl * 0.35); hor.addScalar(fl * 0.3);
+  skyMat.uniforms.uCover.value = oc;
+  skyMat.uniforms.uSunVis.value = smooth(-0.06, 0.04, sy) * (1 - oc);
+  skyMat.uniforms.uNight.value = night * (1 - oc * 0.8);
   scene.fog.color.copy(hor).multiplyScalar(0.92);
-  const sunI = 3.3 * day, moonI = 0.85 * (1 - smooth(-0.2, 0.0, sy));
+  scene.fog.density = 0.0058 * (1 + 1.5 * weather.rain + 1.1 * weather.snow + 5 * weather.blizz);
+  if (weather.blizz > 0.01) scene.fog.color.lerp(new THREE.Color(0.55, 0.6, 0.66).multiplyScalar(0.35 + 0.65 * day), weather.blizz * 0.7);
+  const sunI = 3.3 * day * (1 - 0.78 * oc), moonI = 0.85 * (1 - smooth(-0.2, 0.0, sy)) * (1 - 0.7 * oc);
   if (sunI >= moonI) {
     lightDir.copy(sunDir);
     sun.color.copy(skyMat.uniforms.uSunColor.value);
@@ -1010,7 +1216,9 @@ function updateSky(hour) {
   }
   hemi.color.copy(SKY.hemiNight).lerp(SKY.hemiDay, day).lerp(SKY.setHor, golden * 0.45);
   hemi.groundColor.setRGB(0.07, 0.065, 0.045).lerp(new THREE.Color(0.025, 0.03, 0.04), night);
-  hemi.intensity = 0.9 + 0.3 * day + golden * (1 - day);
+  hemi.color.lerp(grey.clone().multiplyScalar(1.6), oc * 0.5);
+  hemi.intensity = (0.9 + 0.3 * day + golden * (1 - day)) * (1 - 0.1 * oc) + fl * 4;
+  U.sunCol.value.copy(sun.color).multiplyScalar(sun.intensity * 0.12);
   renderer.toneMappingExposure = 1 + 0.85 * night + 0.45 * (1 - day) * (1 - night);
 }
 
@@ -1022,45 +1230,47 @@ const SPECIES = {
   birch: { name: "자작나무", hp: 5, price: 7, logR: 0.13 },
   oak: { name: "참나무", hp: 12, price: 12, logR: 0.27 },
 };
+// Tree mutations. Values multiply together when a tree carries several.
+const MUTS = {
+  big: { name: "거대", mult: 1.5, color: "#c7e48a", scale: 1.6, hp: 3, logs: 2 },
+  titan: { name: "타이탄", mult: 3, color: "#ff9f5a", scale: 2.6, hp: 8, logs: 3 },
+  gold: { name: "황금", mult: 5, color: "#ffd34d" },
+  crystal: { name: "수정", mult: 8, color: "#7fe3ff" },
+  wet: { name: "젖은", mult: 2, color: "#6fb6ff" },
+  frost: { name: "서리", mult: 3, color: "#e4f3ff" },
+  shock: { name: "번개 맞은", mult: 10, color: "#c49bff" },
+};
+const MUT_ORDER = ["titan", "big", "gold", "crystal", "shock", "frost", "wet"];
+function treeTags(t) {
+  const m = t.mut, out = [];
+  if (m.size) out.push(m.size);
+  for (const k of ["gold", "crystal", "shock", "frost", "wet"]) if (m[k]) out.push(k);
+  return out;
+}
+const tagMult = (tags) => tags.reduce((a, k) => a * MUTS[k].mult, 1);
+const logPrice = (L) => Math.round(SPECIES[L.sp].price * tagMult(L.m));
+const fmtMult = (x) => (Math.round(x * 10) / 10).toLocaleString("ko-KR");
 const MAT = {};
-function trunkGeo(H, r0, r1, seg, flare, bendFn) {
-  const g = new THREE.CylinderGeometry(r1, r0, H, seg, Math.max(4, Math.round(H / 1.2)), true);
-  g.translate(0, H / 2, 0);
-  const P = g.attributes.position;
-  for (let i = 0; i < P.count; i++) {
-    const y = P.getY(i), f = 1 + flare * Math.pow(Math.max(0, 1 - y / 0.9), 2);
-    const a = Math.atan2(P.getZ(i), P.getX(i)), wob = 1 + nA(a * 2 + y * 0.8, y * 0.5) * 0.06;
-    let x = P.getX(i) * f * wob, z = P.getZ(i) * f * wob;
-    if (bendFn) { const b = bendFn(y); x += b[0]; z += b[1]; }
-    P.setXYZ(i, x, y, z);
-  }
-  g.computeVertexNormals();
-  return g;
-}
-function branchCyl(gb, a, b, r0, r1, ao) {
-  const dir = new THREE.Vector3().subVectors(b, a), L = dir.length(); dir.normalize();
-  const g = new THREE.CylinderGeometry(r1, r0, L, 6, Math.max(1, Math.round(L / 1.4)), true); g.translate(0, L / 2, 0);
-  gb.addGeo(g, M4(a, new THREE.Quaternion().setFromUnitVectors(UP, dir)), () => ao, (u, v) => [u * 2, v * L / 1.6]);
-}
 function crownAO(C, rad) {
   return (p) => {
     const rx = (p.x - C.x) / rad.x, ry = (p.y - C.y) / rad.y, rz = (p.z - C.z) / rad.z;
-    return clamp(0.36 + 0.42 * Math.min(1.2, Math.hypot(rx, ry, rz)) + 0.2 * ry, 0.28, 1.05);
+    return clamp(0.34 + 0.44 * Math.min(1.2, Math.hypot(rx, ry, rz)) + 0.2 * ry, 0.26, 1.06);
   };
 }
-function leafCards(gb, R, C, rad, count, size, normalC, centers) {
-  const ao = crownAO(normalC || C, rad.clone().multiplyScalar(centers ? 1.6 : 1));
+function leafCards(gb, R, C, rad, count, size, normalC, centers, droop = 0) {
+  const ao = crownAO(normalC || C, rad.clone().multiplyScalar(centers ? 1.6 : 1)), nc = normalC || C;
   for (let i = 0; i < count; i++) {
-    const dir = randDir(R), rr = 0.72 + R() * 0.38;
-    const p = new THREE.Vector3(C.x + dir.x * rad.x * rr, C.y + dir.y * rad.y * rr, C.z + dir.z * rad.z * rr);
-    const n = randDir(R).lerp(dir, 0.35).normalize();
+    const dir = randDir(R), inner = i < count * 0.3, rr = inner ? 0.45 + R() * 0.3 : 0.75 + R() * 0.35;
+    const p = new THREE.Vector3(C.x + dir.x * rad.x * rr, C.y + dir.y * rad.y * rr - droop * R(), C.z + dir.z * rad.z * rr);
+    const n = randDir(R).lerp(dir, 0.45).normalize();
     const t = new THREE.Vector3().crossVectors(n, Math.abs(n.y) < 0.9 ? UP : new THREE.Vector3(1, 0, 0)).normalize();
     const b = new THREE.Vector3().crossVectors(n, t);
-    const s = size * (0.75 + R() * 0.5);
-    t.multiplyScalar(s / 2); b.multiplyScalar(s / 2);
+    const sz = size * (inner ? 0.85 : 1) * (0.75 + R() * 0.5);
+    t.multiplyScalar(sz / 2); b.multiplyScalar(sz / 2);
     const q = [p.clone().sub(t).sub(b), p.clone().add(t).sub(b), p.clone().add(t).add(b), p.clone().sub(t).add(b)];
-    const nc = normalC || C;
-    gb.quad(q[0], q[1], q[2], q[3], [0.01, 0.01, CARD_U - 0.01, 0.99], q.map((v) => v.clone().sub(nc).normalize().lerp(UP, 0.2).normalize()), q.map(ao));
+    const flip = R() < 0.5;
+    const uv = flip ? [CARD_U - 0.01, 0.01, 0.01, 0.99] : [0.01, 0.01, CARD_U - 0.01, 0.99];
+    gb.quad(q[0], q[1], q[2], q[3], uv, q.map((v) => v.clone().sub(nc).normalize().lerp(UP, 0.2).normalize()), q.map((v) => ao(v) * (inner ? 0.75 : 1)));
   }
 }
 function coreBlob(gb, R, C, rad, normalC, aoMul = 0.75, detail = 1) {
@@ -1072,93 +1282,186 @@ function coreBlob(gb, R, C, rad, normalC, aoMul = 0.75, detail = 1) {
   const nc = normalC || C, ao = crownAO(nc, rad);
   gb.addGeo(g, new THREE.Matrix4().compose(C, new THREE.Quaternion(), rad), (p) => ao(p) * aoMul, (u, v) => [CORE_U0 + u * (CORE_U1 - CORE_U0), v], (p, n) => n.copy(p).sub(nc).normalize());
 }
-function buildPine(seed) {
-  const R = mulberry32(seed), bark = new GB(), leaves = new GB();
-  const H = 10.5 + R() * 3, r0 = 0.26, c0 = 2.3 + R() * 0.8, maxR = 2.3 + R() * 0.5;
-  const tg = trunkGeo(H, r0, 0.035, 9, 0.35);
-  bark.addGeo(tg, new THREE.Matrix4(), (p) => lerp(0.55, 1, smooth(0, 1.4, p.y)) * lerp(1, 0.75, smooth(c0, H, p.y)), (u, v) => [u * 3, v * H / 2.4]);
-  for (let k = 0; k < 5; k++) {
-    const y = 1.2 + R() * (c0 - 1.3), a = R() * TAU, s = new THREE.Vector3(Math.cos(a) * 0.15, y, Math.sin(a) * 0.15);
-    branchCyl(bark, s, s.clone().add(new THREE.Vector3(Math.cos(a) * 0.5, -0.1, Math.sin(a) * 0.5)), 0.03, 0.01, 0.6);
+
+/* ---------- procedural trees: trunk → limbs → branches → twigs, with leaf sprays on the twigs ---------- */
+const _tq = new THREE.Quaternion();
+function perpTo(v) { return new THREE.Vector3().crossVectors(v, Math.abs(v.y) < 0.95 ? UP : new THREE.Vector3(1, 0, 0)).normalize(); }
+// A tapered tube along a polyline, framed by parallel transport so it never twists.
+function addTube(gb, pts, radii, radial, { uRep = 2, vTile = 2, col = 1, seed = 0, wob = 0.06 } = {}) {
+  const n = pts.length, T = [], N = [], B = [], len = [0];
+  for (let i = 0; i < n; i++) {
+    T.push(new THREE.Vector3().subVectors(pts[Math.min(n - 1, i + 1)], pts[Math.max(0, i - 1)]).normalize());
+    if (i) len.push(len[i - 1] + pts[i].distanceTo(pts[i - 1]));
   }
-  const card = (S, dir, L, W, roll, ao0, ao1, out) => {
-    let side = new THREE.Vector3().crossVectors(dir, UP).normalize();
-    side.applyAxisAngle(dir, roll).multiplyScalar(W / 2);
-    const E = S.clone().addScaledVector(dir, L);
-    const n0 = out.clone().multiplyScalar(0.6).add(new THREE.Vector3(0, 0.8, 0)).normalize(), n1 = out.clone().add(new THREE.Vector3(0, 0.45, 0)).normalize();
-    leaves.quad(S.clone().sub(side), E.clone().sub(side), E.clone().add(side), S.clone().add(side), [0.005, 0.02, CARD_U - 0.01, 0.98], [n0, n1, n1, n0], [ao0, ao1, ao1, ao0]);
-  };
-  for (let y = c0; y < H - 0.45; y += 0.5 + R() * 0.25) {
-    const t = (y - c0) / (H - c0), L0 = maxR * Math.pow(1 - t, 0.85) + 0.4, n = 6 + Math.floor(R() * 3), a0 = R() * TAU;
-    for (let i = 0; i < n; i++) {
-      const a = a0 + (i / n) * TAU + (R() - 0.5) * 0.5, droop = lerp(0.42, 0.04, t) + (R() - 0.5) * 0.18, L = L0 * (0.85 + R() * 0.3);
-      const out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
-      const dir = new THREE.Vector3(Math.cos(a) * Math.cos(droop), -Math.sin(droop), Math.sin(a) * Math.cos(droop));
-      const S = new THREE.Vector3(Math.cos(a) * 0.06, y, Math.sin(a) * 0.06), ao0 = lerp(0.42, 0.6, t), ao1 = lerp(0.82, 1.05, t);
-      card(S, dir, L, L * 0.8, (R() - 0.5) * 0.6, ao0, ao1, out);
-      card(S, dir, L * 0.9, L * 0.62, 1.2 + (R() - 0.5) * 0.4, ao0 * 0.9, ao1 * 0.9, out);
+  N.push(perpTo(T[0]));
+  for (let i = 1; i < n; i++) N.push(N[i - 1].clone().applyQuaternion(_tq.setFromUnitVectors(T[i - 1], T[i])).normalize());
+  for (let i = 0; i < n; i++) B.push(new THREE.Vector3().crossVectors(T[i], N[i]));
+  const rings = [];
+  for (let i = 0; i < n; i++) {
+    const row = [];
+    for (let j = 0; j <= radial; j++) {
+      const a = (j / radial) * TAU, dir = N[i].clone().multiplyScalar(Math.cos(a)).addScaledVector(B[i], Math.sin(a));
+      const r = radii[i] * (1 + nA(Math.cos(a) * 1.3 + seed, Math.sin(a) * 1.3 + len[i] * 0.8) * wob);
+      const p = pts[i].clone().addScaledVector(dir, r);
+      row.push({ p, n: dir, u: (j / radial) * uRep, v: len[i] / vTile, c: typeof col === "function" ? col(p, i / (n - 1)) : col });
     }
+    rings.push(row);
   }
-  const cone = new THREE.ConeGeometry(maxR * 0.5, H - c0 - 0.3, 10, 4, true);
-  cone.translate(0, c0 + 0.3 + (H - c0 - 0.3) / 2, 0);
-  leaves.addGeo(cone, new THREE.Matrix4(), (p) => lerp(0.35, 0.6, (p.y - c0) / (H - c0)), (u, v) => [CORE_U0 + u * (CORE_U1 - CORE_U0), v]);
-  const tip = new THREE.Vector3(0, H - 0.6, 0);
-  card(tip, UP.clone(), 1.0, 0.7, 0, 0.8, 1, new THREE.Vector3(1, 0, 0));
-  card(tip, UP.clone(), 1.0, 0.7, Math.PI / 2, 0.8, 1, new THREE.Vector3(0, 0, 1));
-  return { trunk: bark.build(), leaves: leaves.build(), height: H, crownR: maxR, trunkR: r0 };
+  for (let i = 0; i < n - 1; i++) for (let j = 0; j < radial; j++) {
+    const a = rings[i][j], b = rings[i][j + 1], c = rings[i + 1][j + 1], d = rings[i + 1][j];
+    for (const q of [a, b, c, a, c, d]) gb.vert(q.p, q.n, q.u, q.v, q.c);
+  }
 }
-function buildBirch(seed) {
-  const R = mulberry32(seed), bark = new GB(), leaves = new GB();
-  const H = 9 + R() * 2.5, r0 = 0.15, ph = R() * TAU;
-  const bend = (y) => [Math.sin(y * 0.33 + ph) * 0.18 * (y / H), Math.cos(y * 0.27 + ph) * 0.12 * (y / H)];
-  bark.addGeo(trunkGeo(H, r0, 0.03, 8, 0.25, bend), new THREE.Matrix4(), (p) => lerp(0.75, 1, smooth(0, 1.5, p.y)), (u, v) => [u * 1, v * H / 2.2]);
-  const top = bend(H * 0.68), C = new THREE.Vector3(top[0], H * 0.66, top[1]), rad = new THREE.Vector3(1.9 + R() * 0.4, H * 0.3, 1.9 + R() * 0.4);
-  for (let k = 0; k < 7; k++) {
-    const y = H * (0.38 + R() * 0.45), b = bend(y), a = R() * TAU, s = new THREE.Vector3(b[0], y, b[1]);
-    const L = 1.2 + R() * 1.2, e = s.clone().add(new THREE.Vector3(Math.cos(a) * L * 0.75, L * 0.65, Math.sin(a) * L * 0.75));
-    branchCyl(bark, s, e, 0.045, 0.012, 0.85);
-  }
-  coreBlob(leaves, R, C, rad.clone().multiplyScalar(0.62), C, 0.8);
-  leafCards(leaves, R, C, rad, 58, 1.35, C);
-  return { trunk: bark.build(), leaves: leaves.build(), height: H, crownR: rad.x, trunkR: r0 };
+function sampleAlong(pts, radii, t) {
+  const f = clamp(t, 0, 1) * (pts.length - 1), i = Math.min(pts.length - 2, Math.floor(f)), k = f - i;
+  return [pts[i].clone().lerp(pts[i + 1], k), lerp(radii[i], radii[i + 1], k), new THREE.Vector3().subVectors(pts[i + 1], pts[i]).normalize()];
 }
-function buildOak(seed) {
-  const R = mulberry32(seed), bark = new GB(), leaves = new GB();
-  const Ht = 3.2 + R() * 0.8, r0 = 0.42;
-  bark.addGeo(trunkGeo(Ht + 0.4, r0, 0.28, 10, 0.45), new THREE.Matrix4(), (p) => lerp(0.55, 0.95, smooth(0, 1.2, p.y)), (u, v) => [u * 4, v * (Ht + 0.4) / 2]);
-  const crownC = new THREE.Vector3(0, Ht + 2.8, 0), nb = 4 + Math.floor(R() * 2), a0 = R() * TAU, ends = [];
-  for (let k = 0; k < nb; k++) {
-    const a = a0 + (k / nb) * TAU + (R() - 0.5) * 0.6, el = 0.6 + R() * 0.4, L = 2.5 + R() * 1.1;
-    const s = new THREE.Vector3(0, Ht - 0.2, 0), e = s.clone().add(new THREE.Vector3(Math.cos(a) * Math.cos(el) * L, Math.sin(el) * L, Math.sin(a) * Math.cos(el) * L));
-    branchCyl(bark, s, e, 0.24, 0.09, 0.7);
-    const e2 = e.clone().add(new THREE.Vector3(Math.cos(a + 0.6) * 1.1, 0.8, Math.sin(a + 0.6) * 1.1));
-    branchCyl(bark, e, e2, 0.09, 0.03, 0.75);
-    ends.push(e.clone().lerp(e2, 0.5));
+const TREE_P = {
+  // Korean red pine: straight trunk bare below, whorled branches curving up, needle sprays at the tips
+  pine: {
+    height: (R) => 12 + R() * 4, trunkR: 0.28, lean: 0.06, flare: 0.35, roots: 5, vTile: 2.4, stubs: 7,
+    leafSize: 1.25, leafSizeFar: 1.9, cardAspect: 0.78, leafAngle: 0.35, leafDroop: 0.05, leafStart: 0.3,
+    barkCol: (p, level, H) => { const ao = level ? 0.7 : lerp(0.55, 1, smooth(0, 1.6, p.y)), k = level ? 0.6 : smooth(H * 0.25, H * 0.55, p.y); return [ao * lerp(1, 1.42, k), ao * lerp(1, 0.94, k), ao * lerp(1, 0.72, k)]; },
+    levels: [
+      { sections: 12, radial: 10, gnarl: 0.035, taper: 0.06, children: 20, childStart: 0.42, childEnd: 0.985, lenFalloff: 0.86, uRep: 3 },
+      { lenRatio: 0.31, radRatio: 0.3, angle: (t) => lerp(1.42, 0.7, t), sections: 5, radial: 5, gnarl: 0.1, force: 0.2, taper: 0.25, children: 5, childStart: 0.3, lenFalloff: 0.3, leaves: 5, leavesFar: 16 },
+      { lenRatio: 0.42, radRatio: 0.5, angle: 0.6, sections: 2, radial: 3, gnarl: 0.14, force: 0.12, taper: 0.2, leaves: 5, skipFar: true },
+    ],
+  },
+  // birch: one slender white leader, thin branches whose twigs hang down
+  birch: {
+    height: (R) => 9.5 + R() * 3, trunkR: 0.15, lean: 0.08, flare: 0.3, roots: 4, vTile: 2.2,
+    leafSize: 1.0, leafSizeFar: 1.7, cardAspect: 0.95, leafAngle: 0.65, leafDroop: -0.45, leafStart: 0.2,
+    barkCol: (p, level) => (level ? 0.85 : lerp(0.42, 1, smooth(0.1, 2.2, p.y + nC(p.x * 9, p.z * 9 + p.y) * 0.5))),
+    levels: [
+      { sections: 10, radial: 9, gnarl: 0.035, taper: 0.1, children: 12, childStart: 0.3, childEnd: 0.97, lenFalloff: 0.55, uRep: 1 },
+      { lenRatio: 0.33, radRatio: 0.38, angle: (t) => 0.8 - t * 0.35, sections: 5, radial: 5, gnarl: 0.14, force: -0.14, taper: 0.25, children: 5, childStart: 0.3, lenFalloff: 0.3, leaves: 3, leavesFar: 20 },
+      { lenRatio: 0.5, radRatio: 0.5, angle: 0.65, sections: 3, radial: 3, gnarl: 0.18, force: -0.45, taper: 0.2, leaves: 7, skipFar: true },
+    ],
+  },
+  // oak: short stout trunk splitting into crooked limbs that spread into a broad crown
+  oak: {
+    height: (R) => 3.4 + R() * 0.9, trunkR: 0.42, lean: 0.07, flare: 0.5, roots: 6, vTile: 2.0,
+    leafSize: 1.35, leafSizeFar: 2.3, cardAspect: 0.95, leafAngle: 0.85, leafDroop: 0.05, leafStart: 0.25,
+    barkCol: (p, level) => (level ? lerp(0.85, 1.0, level / 3) : lerp(0.65, 1.05, smooth(0, 1.2, p.y))),
+    levels: [
+      { sections: 6, radial: 12, gnarl: 0.06, taper: 0.62, children: 5, childStart: 0.62, childEnd: 1.0, uRep: 4 },
+      { lenRatio: 1.25, radRatio: 0.6, angle: 0.82, sections: 7, radial: 8, gnarl: 0.17, force: 0.03, taper: 0.3, children: 5, childStart: 0.25, lenFalloff: 0.3, uRep: 3 },
+      { lenRatio: 0.55, radRatio: 0.55, angle: 0.85, sections: 4, radial: 5, gnarl: 0.22, force: 0.02, taper: 0.3, children: 4, childStart: 0.3, lenFalloff: 0.4, leaves: 4, leavesFar: 18 },
+      { lenRatio: 0.5, radRatio: 0.55, angle: 0.75, sections: 2, radial: 3, gnarl: 0.25, taper: 0.2, leaves: 6, skipFar: true },
+    ],
+  },
+};
+// Builds one tree in two detail levels from a single growth: the distant version is the same tree with its
+// twigs dropped, fewer tube segments and every other leaf spray enlarged, so swapping between them barely shows.
+function makeTreeLods(sp, seed) {
+  const P = TREE_P[sp], R = mulberry32(seed), tubes = [], cards = [], anchors = [], hangs = [];
+  const H = P.height(R);
+  let az = R() * TAU;
+  const grow = (origin, dir, len, rad, level) => {
+    const L = P.levels[level], pts = [origin.clone()], radii = [rad], d = dir.clone();
+    let p = origin.clone();
+    for (let i = 1; i <= L.sections; i++) {
+      const t = i / L.sections;
+      d.addScaledVector(randDir(R), L.gnarl).addScaledVector(UP, (L.force || 0) * t).normalize();
+      p = p.clone().addScaledVector(d, len / L.sections);
+      pts.push(p); radii.push(rad * lerp(1, L.taper, t));
+    }
+    if (level === 0) {
+      // flared base: an extra ring just above the ground
+      pts.splice(1, 0, pts[0].clone().lerp(pts[1], 0.12)); radii.splice(1, 0, rad * (1 + P.flare * 0.45));
+      radii[0] = rad * (1 + P.flare);
+    }
+    tubes.push({ pts, radii, level, far: !L.skipFar, radial: L.radial, opts: { uRep: L.uRep || 2, vTile: P.vTile, col: (q) => P.barkCol(q, level, H), seed: level * 7 + seed * 0.001, wob: level ? 0.05 : 0.08 } });
+    const next = P.levels[level + 1];
+    if (next) {
+      const n = Math.max(1, Math.round(L.children * (0.85 + R() * 0.3)));
+      for (let k = 0; k < n; k++) {
+        const t = lerp(L.childStart, L.childEnd ?? 0.97, (k + R() * 0.8) / n);
+        const [cp, cr, cd] = sampleAlong(pts, radii, t);
+        az += 2.39996 + (R() - 0.5) * 0.6;
+        const side = perpTo(cd).applyAxisAngle(cd, az), ang = (typeof next.angle === "function" ? next.angle(t) : next.angle) * (0.85 + R() * 0.3);
+        const cdir = cd.clone().multiplyScalar(Math.cos(ang)).addScaledVector(side, Math.sin(ang)).normalize();
+        const clen = len * next.lenRatio * (1 - (L.lenFalloff || 0) * t) * (0.8 + R() * 0.4);
+        grow(cp.clone().addScaledVector(cdir, -cr * 0.7), cdir, clen + cr * 0.7, Math.max(0.012, cr * next.radRatio), level + 1);
+      }
+    }
+    if (level >= 1 && level <= 2) for (const t of [0.35, 0.6, 0.85]) { const [hp, hr] = sampleAlong(pts, radii, t); hangs.push({ p: hp.setY(hp.y - hr), r: hr }); }
+    for (let k = 0; k < (L.leaves || 0); k++) {
+      const t = lerp(P.leafStart, 1, Math.pow(R(), 0.6));
+      const [lp, , ld] = sampleAlong(pts, radii, t);
+      az += 2.39996;
+      const side = perpTo(ld).applyAxisAngle(ld, az), a = P.leafAngle * (0.6 + R() * 0.8);
+      const ldir = ld.clone().multiplyScalar(Math.cos(a)).addScaledVector(side, Math.sin(a));
+      ldir.y += P.leafDroop; ldir.normalize();
+      cards.push({ p: lp, d: ldir, size: P.leafSize * (0.75 + R() * 0.5), roll: (R() - 0.5) * 1.3 });
+      if (k % 2 === 0) anchors.push({ p: lp.clone().addScaledVector(ldir, 0.3), d: ldir.clone() });
+    }
+  };
+  const trunkDir = new THREE.Vector3((R() - 0.5) * P.lean * 2, 1, (R() - 0.5) * P.lean * 2).normalize();
+  grow(new THREE.Vector3(0, -0.15, 0), trunkDir, H, P.trunkR, 0);
+  // root buttresses (starting inside the trunk so no cut ends show) and, for pines, dead stubs left by self-pruning
+  const rootCol = (q) => { const c = P.barkCol(q, 0, H); return typeof c === "number" ? c * 0.9 : c.map((x) => x * 0.9); };
+  for (let k = 0; k < P.roots; k++) {
+    const a = (k / P.roots) * TAU + R() * 0.7, r0 = P.trunkR, ext = r0 * (1.8 + R() * 1.2);
+    const pts = [new THREE.Vector3(0, r0 * 2.2, 0), new THREE.Vector3(Math.cos(a) * r0 * 0.75, r0 * 0.9, Math.sin(a) * r0 * 0.75), new THREE.Vector3(Math.cos(a) * (r0 + ext * 0.5), r0 * 0.12, Math.sin(a) * (r0 + ext * 0.5)), new THREE.Vector3(Math.cos(a) * (r0 + ext), -0.25, Math.sin(a) * (r0 + ext))];
+    tubes.push({ pts, radii: [r0 * 0.3, r0 * 0.42, r0 * 0.24, r0 * 0.05], level: 1, far: true, radial: 7, opts: { vTile: P.vTile, col: rootCol, seed: k } });
   }
-  ends.push(new THREE.Vector3(0, Ht + 3.6, 0));
-  const crad = new THREE.Vector3(4.6, 3.0, 4.6);
-  for (const e of ends) {
-    const r = 1.7 + R() * 0.6, rad = new THREE.Vector3(r, r * 0.78, r);
-    coreBlob(leaves, R, e, rad.clone().multiplyScalar(0.7), crownC, 0.75);
-    leafCards(leaves, R, e, rad, 17, 1.6, crownC, true);
+  for (let k = 0; k < (P.stubs || 0); k++) {
+    const y = 1.2 + R() * (H * 0.38 - 1.2), a = R() * TAU, o = new THREE.Vector3(Math.cos(a) * 0.15, y, Math.sin(a) * 0.15);
+    tubes.push({ pts: [o, o.clone().add(new THREE.Vector3(Math.cos(a) * (0.3 + R() * 0.4), -0.08, Math.sin(a) * (0.3 + R() * 0.4)))], radii: [0.035, 0.01], level: 2, far: false, radial: 5, opts: { vTile: P.vTile, col: 0.5 } });
   }
-  return { trunk: bark.build(), leaves: leaves.build(), height: Ht + 5.5, crownR: crad.x * 0.8, trunkR: r0 };
+  // crown shading: cards deeper inside the crown and lower down are darker; normals bend outward for a soft, rounded look
+  const C = new THREE.Vector3(), ext = new THREE.Vector3();
+  for (const c of cards) C.add(c.p);
+  C.divideScalar(Math.max(1, cards.length));
+  for (const c of cards) { ext.x = Math.max(ext.x, Math.abs(c.p.x - C.x)); ext.y = Math.max(ext.y, Math.abs(c.p.y - C.y)); ext.z = Math.max(ext.z, Math.abs(c.p.z - C.z)); }
+  ext.addScalar(0.8);
+  const ao = crownAO(C, ext);
+  const build = (far) => {
+    const bark = new GB(), leaves = new GB();
+    for (const tb of tubes) {
+      if (far && !tb.far) continue;
+      const keep = far ? tb.pts.map((_, i) => i % 2 === 0 || i === tb.pts.length - 1) : null;
+      addTube(bark, far ? tb.pts.filter((_, i) => keep[i]) : tb.pts, far ? tb.radii.filter((_, i) => keep[i]) : tb.radii, far ? Math.max(4, tb.radial - 2) : Math.max(5, tb.radial), tb.opts);
+    }
+    cards.forEach((c, i) => {
+      if (far && i % 2) return;
+      const size = c.size * (far ? 1.35 : 1), w = new THREE.Vector3().crossVectors(c.d, UP);
+      if (w.lengthSq() < 1e-4) w.set(1, 0, 0);
+      w.normalize().applyAxisAngle(c.d, c.roll).multiplyScalar((size * P.cardAspect) / 2);
+      const E = c.p.clone().addScaledVector(c.d, size), q = [c.p.clone().sub(w), E.clone().sub(w), E.clone().add(w), c.p.clone().add(w)];
+      leaves.quad(q[0], q[1], q[2], q[3], [0.005, 0.01, CARD_U - 0.01, 0.99], q.map((v) => v.clone().sub(C).normalize().lerp(UP, 0.25).normalize()), q.map((v, k) => Math.max(0.42, ao(v)) * (k === 0 || k === 3 ? 0.88 : 1)));
+    });
+    return { bark, leaves };
+  };
+  const near = build(false), farB = build(true);
+  let top = 0;
+  for (const arr of [near.bark.p, near.leaves.p]) for (let i = 1; i < arr.length; i += 3) top = Math.max(top, arr[i]);
+  return {
+    lod0: { trunk: near.bark.build(), leaves: near.leaves.build() }, lod1: { trunk: farB.bark.build(), leaves: farB.leaves.build() },
+    height: top, crownR: Math.max(ext.x, ext.z), crownY: C.y, trunkR: P.trunkR, anchors, hangs,
+  };
+}
+function makeVariant(sp, seed) {
+  const t = makeTreeLods(sp, seed);
+  return { sp, ...t, trunk: t.lod0.trunk, leaves: t.lod0.leaves };
 }
 const VARIANTS = [];
 const trees = [];
 function buildTreeAssets() {
   const pb = barkTextures("pine"), bb = barkTextures("birch"), ob = barkTextures("oak");
-  const barkMat = (t) => addWind(new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normal, normalScale: new THREE.Vector2(1.1, 1.1), roughness: 0.95, vertexColors: true }), false);
+  const barkMat = (t) => treeShader(new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normal, normalScale: new THREE.Vector2(1.2, 1.2), roughness: 0.95, vertexColors: true }), { mut: true, bark: true });
   MAT.bark = { pine: barkMat(pb), birch: barkMat(bb), oak: barkMat(ob) };
   const logBark = (t) => new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normal, roughness: 0.95 });
   MAT.logBark = { pine: logBark(pb), birch: logBark(bb), oak: logBark(ob) };
   MAT.endGrain = new THREE.MeshStandardMaterial({ map: endGrainTexture(), roughness: 0.85 });
   const oakLeaf = leafAtlas("oak");
-  MAT.leaf = { pine: leafMaterial(pineAtlas()), birch: leafMaterial(leafAtlas("birch")), oak: leafMaterial(oakLeaf) };
+  MAT.leaf = { pine: leafMaterial(pineAtlas(), true), birch: leafMaterial(leafAtlas("birch"), true), oak: leafMaterial(oakLeaf, true) };
   MAT.oakLeafTex = oakLeaf;
-  for (const s of [101, 102, 103]) VARIANTS.push({ sp: "pine", ...buildPine(s) });
-  for (const s of [201, 202]) VARIANTS.push({ sp: "birch", ...buildBirch(s) });
-  for (const s of [301, 302]) VARIANTS.push({ sp: "oak", ...buildOak(s) });
+  for (const s of [101, 102, 103, 104]) VARIANTS.push(makeVariant("pine", s));
+  for (const s of [201, 202, 203]) VARIANTS.push(makeVariant("birch", s));
+  for (const s of [301, 302, 303]) VARIANTS.push(makeVariant("oak", s));
   const logGeo = (r) => new THREE.CylinderGeometry(r, r, 1.15, 12, 1);
   MAT.logGeo = { pine: logGeo(SPECIES.pine.logR), birch: logGeo(SPECIES.birch.logR), oak: logGeo(SPECIES.oak.logR) };
   MAT.stumpGeo = new THREE.CylinderGeometry(1, 1.2, 1, 12, 1);
@@ -1173,8 +1476,37 @@ function speciesAt(x, z, h, f, R) {
   if (sn < -0.2) return r < 0.55 ? "oak" : r < 0.85 ? "pine" : "birch";
   return r < 0.65 ? "pine" : r < 0.85 ? "oak" : "birch";
 }
+const SPACE = { null: 2.6, big: 3.8, titan: 6 };
+function rollMaterialMut(t, R) {
+  const r = R();
+  t.mut.gold = r < 0.006; t.mut.crystal = !t.mut.gold && r < 0.009;
+}
+function setupTree(t) {
+  const M = t.mut.size ? MUTS[t.mut.size] : null;
+  t.s = t.baseS * (M ? M.scale : 1);
+  t.maxHp = Math.round(SPECIES[t.sp].hp * Math.pow(t.baseS, 1.5) * (M ? M.hp : 1)); t.hp = t.maxHp;
+  t.r = VARIANTS[t.v].trunkR * t.s * 1.1;
+  t.space = SPACE[t.mut.size];
+}
+// Instanced meshes share a variant's vertex data but each needs its own per-instance mutation attributes.
+function treeGeo(src, n) {
+  const g = new THREE.BufferGeometry();
+  for (const k in src.attributes) g.setAttribute(k, src.attributes[k]);
+  g.boundingSphere = src.boundingSphere;
+  g.setAttribute("aMut", new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4));
+  g.setAttribute("aMut2", new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4));
+  return g;
+}
+// Distant trees live in per-chunk instanced meshes with the lighter LOD; the closest trees of each
+// variant borrow a slot in a full-detail "near" mesh instead.
+const NEAR_IN = QUALITY.nearR, NEAR_OUT = QUALITY.nearR + 8, NEAR_CAP = 90;
 function placeTrees() {
   const R = mulberry32(555);
+  const fits = (x, z, space) => {
+    let ok = true;
+    gNear(x, z, 8, (o) => { if (ok && Math.hypot(o.x - x, o.z - z) < (o.kind === "tree" ? Math.max(space, o.space) : o.r + 1.5 + (space - 2.6) * 0.5)) ok = false; });
+    return ok;
+  };
   for (let gz = -190; gz < 190; gz += 5) for (let gx = -190; gx < 190; gx += 5) {
     const x = gx + R() * 5, z = gz + R() * 5, f = forestAt(x, z), dc = cabinDist(x, z);
     let p = 0.03 + f * 0.82;
@@ -1182,38 +1514,141 @@ function placeTrees() {
     if (R() > p) continue;
     const h = heightAt(x, z);
     if (h < 0.7 || slopeAt(x, z) > 0.2 || pathDist(x, z) < 3 || edgeDist(x, z) > 188 || dc < 18) continue;
-    let ok = true;
-    gNear(x, z, 4, (o) => { if (Math.hypot(o.x - x, o.z - z) < (o.kind === "tree" ? 2.6 : o.r + 1.5)) ok = false; });
-    if (!ok) continue;
+    const sr = R();
+    let size = sr < 0.008 && dc > 45 && edgeDist(x, z) < 172 ? "titan" : sr < 0.035 ? "big" : null;
+    if (size && !fits(x, z, SPACE[size])) size = null;
+    if (!fits(x, z, SPACE[size])) continue;
     const sp = speciesAt(x, z, h, f, R);
     const vs = VARIANTS.map((v, i) => i).filter((i) => VARIANTS[i].sp === sp), vi = vs[Math.floor(R() * vs.length)];
-    const s = sp === "oak" ? 0.8 + R() * 0.5 : sp === "pine" ? 0.8 + R() * 0.45 : 0.8 + R() * 0.35;
-    const t = { kind: "tree", x, z, y: h - 0.2, sp, v: vi, s, rot: R() * TAU, state: "standing", shake: 0, shakeT: 0, shakeAxis: new THREE.Vector3(1, 0, 0), growT: 1, idx: 0, stump: null, regrowAt: 0 };
-    t.maxHp = Math.round(SPECIES[sp].hp * Math.pow(s, 1.5)); t.hp = t.maxHp;
-    t.r = VARIANTS[vi].trunkR * s * 1.1;
+    const baseS = sp === "oak" ? 0.8 + R() * 0.5 : sp === "pine" ? 0.8 + R() * 0.45 : 0.8 + R() * 0.35;
+    const t = {
+      kind: "tree", x, z, y: h - 0.1, sp, v: vi, baseS, rot: R() * TAU, state: "standing", shake: 0, shakeT: 0, shakeAxis: new THREE.Vector3(1, 0, 0), growT: 1, idx: 0, near: -1, stump: null, regrowAt: 0,
+      mut: { size, gold: false, crystal: false, wet: false, frost: false, shock: false }, wetT: 0, frostT: 0, fx: null,
+      leafTint: new THREE.Color().setRGB(1, 1, 1), barkTint: new THREE.Color(),
+    };
+    rollMaterialMut(t, R);
+    const lf = 0.8 + R() * 0.34, hs = (R() - 0.5) * 2;
+    t.leafTint.setRGB(lf * (1 + hs * 0.07), lf, lf * (1 - hs * 0.12));
+    const bf = 0.85 + R() * 0.25; t.barkTint.setRGB(bf, bf * (0.97 + R() * 0.05), bf * 0.97);
+    setupTree(t);
     trees.push(t); gAdd(t);
   }
+  // one big tree near the cabin, so the first mutation goal can be found without a long search
+  const near = trees.filter((t) => { const d = cabinDist(t.x, t.z); return d > 26 && d < 60 && !t.mut.size && !t.mut.gold && !t.mut.crystal; });
+  if (near.length > 3) { const t = near[Math.floor(near.length * 0.61)]; t.mut.size = "big"; setupTree(t); }
   VARIANTS.forEach((v, vi) => {
     v.count = 0;
     for (const list of groupByChunk(trees.filter((t) => t.v === vi), (t) => [t.x, t.z])) {
-      const tIM = new THREE.InstancedMesh(v.trunk, MAT.bark[v.sp], list.length), lIM = new THREE.InstancedMesh(v.leaves, MAT.leaf[v.sp], list.length);
+      const n = list.length;
+      const tIM = new THREE.InstancedMesh(treeGeo(v.lod1.trunk, n), MAT.bark[v.sp], n), lIM = new THREE.InstancedMesh(treeGeo(v.lod1.leaves, n), MAT.leaf[v.sp], n);
       lIM.customDepthMaterial = MAT.leaf[v.sp].userData.depth;
-      list.forEach((t, i) => { t.idx = i; t.tIM = tIM; t.lIM = lIM; setTreeMatrix(t); });
+      list.forEach((t, i) => {
+        t.idx = i; t.tIM = tIM; t.lIM = lIM;
+        treeMatrix(t, _m); tIM.setMatrixAt(i, _m); lIM.setMatrixAt(i, _m);
+        tIM.setColorAt(i, t.barkTint); lIM.setColorAt(i, t.leafTint);
+      });
+      // bounds are taken while every tree stands at full size; hidden instances later collapse inside them
       for (const m of [tIM, lIM]) { m.castShadow = m.receiveShadow = true; m.computeBoundingSphere(); scene.add(m); }
-      v.count += list.length;
+      v.count += n;
+    }
+    v.nearT = new THREE.InstancedMesh(treeGeo(v.lod0.trunk, NEAR_CAP), MAT.bark[v.sp], NEAR_CAP);
+    v.nearL = new THREE.InstancedMesh(treeGeo(v.lod0.leaves, NEAR_CAP), MAT.leaf[v.sp], NEAR_CAP);
+    v.nearL.customDepthMaterial = MAT.leaf[v.sp].userData.depth;
+    v.slots = new Array(NEAR_CAP).fill(null); v.used = 0;
+    for (const m of [v.nearT, v.nearL]) {
+      for (let i = 0; i < NEAR_CAP; i++) { m.setMatrixAt(i, ZERO_M); m.setColorAt(i, WHITE); }
+      m.count = 0; m.castShadow = m.receiveShadow = true; m.frustumCulled = false; scene.add(m);
     }
   });
+  for (const t of trees) { writeMut(t); setTreeMatrix(t); refreshMutFx(t); }
 }
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _s = new THREE.Vector3();
-function setTreeMatrix(t) {
-  let sc = t.s;
-  if (t.state === "growing") sc *= lerp(0.08, 1, 1 - Math.pow(1 - t.growT, 3));
-  else if (t.state !== "standing") sc = 0.0001;
+const ZERO_M = new THREE.Matrix4().makeScale(0, 0, 0), WHITE = new THREE.Color(1, 1, 1);
+const treeScale = (t) => (t.state === "growing" ? t.s * lerp(0.08, 1, 1 - Math.pow(1 - t.growT, 3)) : t.state === "standing" ? t.s : 0);
+function treeMatrix(t, out, shake = true) {
+  const sc = treeScale(t);
   _q.setFromAxisAngle(UP, t.rot);
-  if (t.shake > 0.001) { _q2.setFromAxisAngle(t.shakeAxis, Math.sin(t.shakeT * 34) * t.shake * 0.03); _q.premultiply(_q2); }
-  _m.compose(_v.set(t.x, t.y, t.z), _q, _s.set(sc, sc, sc));
-  t.tIM.setMatrixAt(t.idx, _m); t.lIM.setMatrixAt(t.idx, _m);
-  t.tIM.instanceMatrix.needsUpdate = true; t.lIM.instanceMatrix.needsUpdate = true;
+  if (shake && t.shake > 0.001) { _q2.setFromAxisAngle(t.shakeAxis, Math.sin(t.shakeT * 34) * t.shake * 0.03 / Math.sqrt(t.s)); _q.premultiply(_q2); }
+  return out.compose(_v.set(t.x, t.y, t.z), _q, _s.set(sc, sc, sc));
+}
+function setTreeMatrix(t) {
+  const M = treeMatrix(t, _m), leafM = t.mut.crystal ? ZERO_M : M, v = VARIANTS[t.v];
+  if (t.near >= 0) {
+    v.nearT.setMatrixAt(t.near, M); v.nearL.setMatrixAt(t.near, leafM);
+    v.nearT.instanceMatrix.needsUpdate = v.nearL.instanceMatrix.needsUpdate = true;
+    t.tIM.setMatrixAt(t.idx, ZERO_M); t.lIM.setMatrixAt(t.idx, ZERO_M);
+  } else { t.tIM.setMatrixAt(t.idx, M); t.lIM.setMatrixAt(t.idx, leafM); }
+  t.tIM.instanceMatrix.needsUpdate = t.lIM.instanceMatrix.needsUpdate = true;
+  if (t.fx) placeMutFx(t);
+}
+function mutValues(m) { return [m.gold ? 1 : 0, m.crystal ? 1 : 0, m.wet ? 1 : 0, m.frost ? 1 : 0, m.shock ? 1 : 0, m.size === "titan" ? 1 : 0, m.size === "big" ? 1 : 0]; }
+function writeMutAt(IM, i, mv) {
+  const A = IM.geometry.attributes.aMut, B = IM.geometry.attributes.aMut2;
+  A.setXYZW(i, mv[0], mv[1], mv[2], mv[3]); B.setXYZW(i, mv[4], mv[5], mv[6], 0);
+  A.needsUpdate = B.needsUpdate = true;
+}
+function writeMut(t) {
+  const mv = mutValues(t.mut), v = VARIANTS[t.v];
+  writeMutAt(t.tIM, t.idx, mv); writeMutAt(t.lIM, t.idx, mv);
+  if (t.near >= 0) { writeMutAt(v.nearT, t.near, mv); writeMutAt(v.nearL, t.near, mv); }
+}
+function setTreeMut(t) { writeMut(t); setTreeMatrix(t); refreshMutFx(t); }
+// Keep the closest trees of every variant in the full-detail meshes, with a little hysteresis against flicker.
+// Used slots stay packed at the front so each near mesh only draws as many instances as it holds.
+function nearAssign(v, t) {
+  const slot = v.used++;
+  v.slots[slot] = t; t.near = slot;
+  v.nearT.setColorAt(slot, t.barkTint); v.nearL.setColorAt(slot, t.leafTint);
+  v.nearT.instanceColor.needsUpdate = v.nearL.instanceColor.needsUpdate = true;
+  v.nearT.count = v.nearL.count = v.used;
+  writeMut(t); setTreeMatrix(t);
+}
+function nearRelease(v, t) {
+  const slot = t.near, last = v.used - 1;
+  t.near = -1;
+  if (slot !== last) {
+    const u = v.slots[last];
+    v.slots[slot] = u; u.near = slot;
+    v.nearT.setColorAt(slot, u.barkTint); v.nearL.setColorAt(slot, u.leafTint);
+    v.nearT.instanceColor.needsUpdate = v.nearL.instanceColor.needsUpdate = true;
+    writeMut(u); setTreeMatrix(u);
+  }
+  v.slots[last] = null; v.used--;
+  v.nearT.setMatrixAt(last, ZERO_M); v.nearL.setMatrixAt(last, ZERO_M);
+  v.nearT.instanceMatrix.needsUpdate = v.nearL.instanceMatrix.needsUpdate = true;
+  v.nearT.count = v.nearL.count = v.used;
+  setTreeMatrix(t);
+}
+let lodTimer = 0;
+function updateLOD(dt, force) {
+  lodTimer -= dt; if (lodTimer > 0 && !force) return; lodTimer = 0.25;
+  const cx = camera.position.x, cz = camera.position.z, want = VARIANTS.map(() => []);
+  gNear(cx, cz, NEAR_OUT, (t) => {
+    if (t.kind !== "tree" || (t.state !== "standing" && t.state !== "growing")) return;
+    const d = Math.hypot(t.x - cx, t.z - cz);
+    if (d < (t.near >= 0 ? NEAR_OUT : NEAR_IN)) want[t.v].push([d, t]);
+  });
+  VARIANTS.forEach((v, vi) => {
+    const keep = new Set(want[vi].sort((a, b) => a[0] - b[0]).slice(0, NEAR_CAP).map((e) => e[1]));
+    for (const t of v.slots.slice(0, v.used)) if (!keep.has(t)) nearRelease(v, t);
+    for (const t of keep) if (t.near < 0 && v.used < NEAR_CAP) nearAssign(v, t);
+  });
+}
+// Darken the ground under each crown (baked into the terrain colours).
+function bakeTreeShade() {
+  const col = terrainMesh.geometry.attributes.color;
+  for (const t of trees) {
+    const v = VARIANTS[t.v], R = Math.max(1.8, v.crownR * t.s * (t.sp === "oak" ? 1.05 : 0.9)), strength = t.sp === "birch" ? 0.22 : 0.34;
+    const i0 = clamp(Math.floor((t.x - R + HALF) / CELL), 0, SEG), i1 = clamp(Math.ceil((t.x + R + HALF) / CELL), 0, SEG);
+    const j0 = clamp(Math.floor((t.z - R + HALF) / CELL), 0, SEG), j1 = clamp(Math.ceil((t.z + R + HALF) / CELL), 0, SEG);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const d = Math.hypot(-HALF + i * CELL - t.x, -HALF + j * CELL - t.z) / R;
+      if (d >= 1) continue;
+      const k = j * NV + i, f = Math.max(0.55, 1 - strength * (1 - d * d));
+      for (let c = 0; c < 3; c++) { col.array[k * 3 + c] *= f; TCOL[k * 3 + c] *= f; }
+    }
+  }
+  col.needsUpdate = true;
 }
 
 /* ============================================================
@@ -1269,15 +1704,17 @@ function buildGrassChunk(cx, cz) {
   return im;
 }
 let grassTimer = 0;
-function updateGrass(force) {
-  const px = player.pos.x, pz = player.pos.y, R = QUALITY.grassR + GCH;
-  const c0 = Math.floor((px - R) / GCH), c1 = Math.floor((px + R) / GCH), d0 = Math.floor((pz - R) / GCH), d1 = Math.floor((pz + R) / GCH);
-  let built = 0;
-  for (let cz = d0; cz <= d1; cz++) for (let cx = c0; cx <= c1; cx++) {
-    const key = cx + "," + cz, d = Math.hypot((cx + 0.5) * GCH - px, (cz + 0.5) * GCH - pz);
-    if (d > R) continue;
-    if (!grassChunks.has(key) && (force || built < 2)) { grassChunks.set(key, buildGrassChunk(cx, cz)); built++; }
+// The whole meadow is planted while loading; while playing, patches are only shown or hidden by distance
+// (the grass shader already shrinks blades smoothly toward that edge, so nothing pops in).
+async function buildAllGrass(progress) {
+  const n0 = Math.floor(-176 / GCH), n1 = Math.floor(176 / GCH);
+  for (let cz = n0; cz <= n1; cz++) {
+    for (let cx = n0; cx <= n1; cx++) grassChunks.set(cx + "," + cz, buildGrassChunk(cx, cz));
+    if (progress) await progress((cz - n0) / (n1 - n0));
   }
+}
+function updateGrass() {
+  const R = QUALITY.grassR + GCH;
   for (const [key, im] of grassChunks) {
     if (!im) continue;
     const [cx, cz] = key.split(",").map(Number);
@@ -1327,7 +1764,7 @@ function buildGroundCover() {
     (R) => 0.7 + R() * 0.7, { shadow: true, depth: bushMat.userData.depth, colorFn: (x, z, R) => new THREE.Color().setHSL(0.24 + R() * 0.06, 0.25, 0.42 + R() * 0.12) });
   // rocks
   const rt = rockTextures();
-  const rockMat = new THREE.MeshStandardMaterial({ map: rt.map, normalMap: rt.normal, roughness: 0.92, vertexColors: true });
+  const rockMat = groundFx(new THREE.MeshStandardMaterial({ map: rt.map, normalMap: rt.normal, roughness: 0.92, vertexColors: true }));
   const rockGeo = (k, detail) => {
     const g = new THREE.IcosahedronGeometry(1, detail), P = g.attributes.position;
     for (let i = 0; i < P.count; i++) {
@@ -1387,7 +1824,7 @@ function buildCabin() {
   const plankMat = new THREE.MeshStandardMaterial({ map: plank, roughness: 0.9 });
   const stoneMat = new THREE.MeshStandardMaterial({ map: stone, roughness: 0.95 });
   shingle.repeat.set(4, 2);
-  const roofMat = new THREE.MeshStandardMaterial({ map: shingle, roughness: 0.95 });
+  const roofMat = groundFx(new THREE.MeshStandardMaterial({ map: shingle, roughness: 0.95 }));
   const darkMat = new THREE.MeshStandardMaterial({ color: 0x17110c, roughness: 1 });
   const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
     const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.castShadow = m.receiveShadow = true; g.add(m); return m;
@@ -1498,7 +1935,6 @@ const AXES = [
   { name: "장인의 도끼", dmg: 3.8, cost: 650, speed: 0.66, head: 0x3b3f45, metal: 0.85, rough: 0.35, handle: 0x2e1d12, trim: 0xb08d57 },
   { name: "황금 도끼", dmg: 5.5, cost: 1600, speed: 0.6, head: 0xf0c24a, metal: 1, rough: 0.2, handle: 0x3a2414, trim: 0xf0c24a, glow: true },
 ];
-const BAGS = [{ cap: 6 }, { cap: 10, cost: 90 }, { cap: 16, cost: 280 }, { cap: 24, cost: 750 }];
 const BOOTS = [{ spd: 1 }, { spd: 1.15, cost: 120 }, { spd: 1.3, cost: 380 }];
 
 const char = {};
@@ -1568,20 +2004,9 @@ function buildLumberjack() {
   const armL = arm(1), armR = arm(-1);
   const grip = grp(armR.hand, 0, -0.05, 0);
   const axe = grp(grip);
-  // backpack frame and log bundle
-  const pack = grp(torso, 0, 0.3, -0.2);
-  for (const sx of [-0.15, 0.15]) {
-    pack.add(mesh(new THREE.BoxGeometry(0.035, 0.58, 0.035), M.frame, sx, 0.02, 0));
-    const strap = mesh(new THREE.BoxGeometry(0.05, 0.42, 0.015), M.strap, sx * 0.8, 0.12, 0.33); strap.rotation.x = -0.12; pack.add(strap);
-  }
-  pack.add(mesh(new THREE.BoxGeometry(0.34, 0.035, 0.08), M.frame, 0, -0.25, -0.02));
-  const packLogs = [];
-  const PL = [[0, -0.18, -0.08], [-0.13, -0.18, -0.06], [0.13, -0.18, -0.06], [-0.065, -0.06, -0.08], [0.065, -0.06, -0.08], [0, 0.06, -0.08], [-0.13, 0.06, -0.06], [0.13, 0.06, -0.06], [0, 0.18, -0.08]];
-  for (const [x, y, z] of PL) {
-    const lg = mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.62, 10), [MAT.logBark.pine, MAT.endGrain, MAT.endGrain], x, y, z - 0.03);
-    lg.rotation.z = Math.PI / 2; lg.visible = false; pack.add(lg); packLogs.push(lg);
-  }
-  Object.assign(char, { root, body, hips, torso, head, legL, legR, armL, armR, grip, axe, packLogs, M });
+  // where a lifted tree rests: on top of the right shoulder
+  const carry = grp(torso, -0.2, 0.66, 0.02);
+  Object.assign(char, { root, body, hips, torso, head, legL, legR, armL, armR, grip, axe, carry, M });
   root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(root);
 }
@@ -1606,14 +2031,6 @@ function buildAxeMesh(level) {
   if (A.double) { const b2 = mk(blade, head, hy); b2.rotation.y = Math.PI; }
   if (A.trim) mk(new THREE.CylinderGeometry(0.03, 0.03, 0.05, 10), new THREE.MeshStandardMaterial({ color: A.trim, metalness: 1, roughness: 0.3 }), hy - 0.06);
   char.axeHeadY = hy;
-}
-function setPackLogs() {
-  const list = state.carried, n = Math.min(list.length, char.packLogs.length);
-  const step = list.length > char.packLogs.length ? list.length / char.packLogs.length : 1;
-  char.packLogs.forEach((m, i) => {
-    m.visible = i < n;
-    if (i < n) { const sp = list[Math.floor(i * step)]; m.material = [MAT.logBark[sp], MAT.endGrain, MAT.endGrain]; }
-  });
 }
 
 /* ---------- character animation ---------- */
@@ -1656,10 +2073,18 @@ function animateCharacter(dt, time) {
     lsx: sl * (0.5 + 0.35 * r) * w + breathe * 0.02, lsy: 0, lsz: 0.1 + 0.05 * (1 - w), lex: -(0.2 + 0.7 * r) * w - 0.12,
     ha: 0, hb: 0, hr: 0, crouch: 0, spread: 0,
   });
+  char.carryW = lerp(char.carryW || 0, carried ? 1 : 0, 1 - Math.exp(-dt * 8));
   const chopping = player.chop && char.chopW > 0.001;
   if (chopping) chopPose(player.chop.t, cPose);
   const cw = chopping ? char.chopW : 0;
   for (const key of POSE_KEYS) fPose[key] = chopping ? lerp(basePose[key], cPose[key], cw) : basePose[key];
+  // both hands up on the trunk resting across the right shoulder
+  const kw = char.carryW;
+  if (kw > 0.001) {
+    const C = { rsx: -2.55, rsy: 0.25, rsz: -0.35, rex: -1.35, lsx: -2.2, lsy: -0.75, lsz: 0.1, lex: -1.25, tX: 0.12 + 0.05 * w, crouch: 0.03 };
+    for (const k in C) fPose[k] = lerp(fPose[k], C[k], kw);
+  }
+  char.axe.visible = kw < 0.5;
   const legA = (0.55 + 0.25 * r) * w * (1 - cw), kneeA = (0.9 + 0.55 * r) * w * (1 - cw);
   char.legL.g.rotation.set(-sl * legA - 0.12 * cw, 0, 0.08 * fPose.spread);
   char.legR.g.rotation.set(sl * legA + 0.18 * cw, 0, -0.08 * fPose.spread);
@@ -1688,7 +2113,7 @@ function animateCharacter(dt, time) {
    ============================================================ */
 const parts = {};
 function buildParticles() {
-  const chipMat = new THREE.MeshStandardMaterial({ color: 0xd9b27a, roughness: 0.8 });
+  const chipMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 });
   parts.chips = { im: new THREE.InstancedMesh(new THREE.BoxGeometry(0.07, 0.018, 0.045), chipMat, 240), list: [] };
   const leafP = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.8 });
   parts.leaves = { im: new THREE.InstancedMesh(new THREE.PlaneGeometry(0.13, 0.09), leafP, 320), list: [] };
@@ -1702,9 +2127,9 @@ function buildParticles() {
   geo.setAttribute("aSize", new THREE.BufferAttribute(new Float32Array(N), 1));
   geo.setAttribute("aAlpha", new THREE.BufferAttribute(new Float32Array(N), 1));
   geo.setAttribute("aColor", new THREE.BufferAttribute(new Float32Array(N * 3), 3));
-  const mkPointsMat = (blending) => new THREE.ShaderMaterial({
+  const mkPointsMat = (blending, map = softDot()) => new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, blending,
-    uniforms: { uTex: { value: softDot() }, uScale: { value: 400 } },
+    uniforms: { uTex: { value: map }, uScale: { value: 400 } },
     vertexShader: `attribute float aSize; attribute float aAlpha; attribute vec3 aColor; uniform float uScale; varying float vA; varying vec3 vC;
       void main() { vA = aAlpha; vC = aColor; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv; gl_PointSize = aSize * uScale / max(-mv.z, 0.1); }`,
     fragmentShader: `uniform sampler2D uTex; varying float vA; varying vec3 vC;
@@ -1715,6 +2140,13 @@ function buildParticles() {
   });
   parts.puff = { pts: new THREE.Points(geo, mkPointsMat(THREE.NormalBlending)), list: [], N };
   parts.puff.pts.frustumCulled = false; scene.add(parts.puff.pts);
+  const SN = 700, sg = new THREE.BufferGeometry();
+  sg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(SN * 3), 3));
+  sg.setAttribute("aSize", new THREE.BufferAttribute(new Float32Array(SN), 1));
+  sg.setAttribute("aAlpha", new THREE.BufferAttribute(new Float32Array(SN), 1));
+  sg.setAttribute("aColor", new THREE.BufferAttribute(new Float32Array(SN * 3), 3));
+  parts.spark = { pts: new THREE.Points(sg, mkPointsMat(THREE.AdditiveBlending, starTexture())), list: [], N: SN };
+  parts.spark.pts.frustumCulled = false; scene.add(parts.spark.pts);
   const fg = new THREE.BufferGeometry(), FN = 70;
   fg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(FN * 3), 3));
   fg.setAttribute("aSize", new THREE.BufferAttribute(new Float32Array(FN).fill(0.16), 1));
@@ -1723,16 +2155,18 @@ function buildParticles() {
   parts.flies = { pts: new THREE.Points(fg, mkPointsMat(THREE.AdditiveBlending)), list: Array.from({ length: FN }, () => ({ x: 0, y: 0, z: 0, ph: Math.random() * TAU, init: false })) };
   parts.flies.pts.frustumCulled = false; scene.add(parts.flies.pts);
 }
-function emitChips(p, n, dir) {
+function emitChips(p, n, dir, color = 0xd9b27a) {
+  const c = new THREE.Color(color);
   for (let i = 0; i < n; i++) {
     if (parts.chips.list.length >= parts.chips.im.count) parts.chips.list.shift();
     const v = new THREE.Vector3(dir.x * (1.5 + Math.random() * 2.5) + (Math.random() - 0.5) * 2, 1.5 + Math.random() * 3, dir.z * (1.5 + Math.random() * 2.5) + (Math.random() - 0.5) * 2);
-    parts.chips.list.push({ p: p.clone(), v, r: new THREE.Euler(Math.random() * 6, Math.random() * 6, 0), w: (Math.random() - 0.5) * 20, life: 2.5 + Math.random(), s: 0.6 + Math.random() * 0.8 });
+    parts.chips.list.push({ p: p.clone(), v, c, r: new THREE.Euler(Math.random() * 6, Math.random() * 6, 0), w: (Math.random() - 0.5) * 20, life: 2.5 + Math.random(), s: 0.6 + Math.random() * 0.8 });
   }
 }
 const LEAF_COLORS = { pine: [0x2f4d2a, 0x3c5f33, 0x6b5a33], birch: [0x8fb84a, 0xb5c44a, 0xd9c35a], oak: [0x4f7d31, 0x3f6b2a, 0x8a8a3a] };
-function emitLeaves(p, n, sp, spread = 2) {
-  const cols = LEAF_COLORS[sp];
+const GOLD_LEAVES = [0xffd04a, 0xffb52e, 0xfff0a0];
+function emitLeaves(p, n, sp, spread = 2, palette = null) {
+  const cols = palette || LEAF_COLORS[sp];
   for (let i = 0; i < n; i++) {
     if (parts.leaves.list.length >= parts.leaves.im.count) parts.leaves.list.shift();
     parts.leaves.list.push({
@@ -1750,7 +2184,23 @@ function emitPuff(p, n, { color = [0.55, 0.5, 0.42], size = 1.2, spread = 0.5, u
     parts.puff.list.push({ p: p.clone().add(new THREE.Vector3((Math.random() - 0.5) * spread, 0, (Math.random() - 0.5) * spread)), v, life, max: life, size: size * (0.7 + Math.random() * 0.6), alpha, grow, c: color });
   }
 }
+// Sparkles twinkle in the air around a tree: they swell and fade over their short life.
+function emitSparkle(p, color, size = 0.35, life = 0.9) {
+  const S = parts.spark;
+  if (S.list.length >= S.N) S.list.shift();
+  S.list.push({ p: p.clone(), v: new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.15 + Math.random() * 0.3, (Math.random() - 0.5) * 0.3), life: life * (0.7 + Math.random() * 0.6), max: life, size: size * (0.6 + Math.random() * 0.8), c: color });
+}
 function updateParticles(dt) {
+  const S = parts.spark, SA = S.pts.geometry.attributes;
+  for (let i = S.list.length - 1; i >= 0; i--) { const q = S.list[i]; q.life -= dt; if (q.life <= 0) S.list.splice(i, 1); else q.p.addScaledVector(q.v, dt); }
+  for (let i = 0; i < S.N; i++) {
+    const q = S.list[i];
+    if (q) {
+      const k = Math.sin(Math.PI * clamp(1 - q.life / q.max, 0, 1));
+      SA.position.setXYZ(i, q.p.x, q.p.y, q.p.z); SA.aSize.setX(i, q.size * (0.3 + 0.9 * k)); SA.aAlpha.setX(i, k); SA.aColor.setXYZ(i, q.c[0], q.c[1], q.c[2]);
+    } else SA.aAlpha.setX(i, 0);
+  }
+  SA.position.needsUpdate = SA.aSize.needsUpdate = SA.aAlpha.needsUpdate = SA.aColor.needsUpdate = true;
   const ch = parts.chips;
   for (let i = ch.list.length - 1; i >= 0; i--) {
     const c = ch.list[i]; c.life -= dt;
@@ -1762,10 +2212,10 @@ function updateParticles(dt) {
   ch.im.count = 240;
   for (let i = 0; i < ch.im.count; i++) {
     const c = ch.list[i];
-    if (c) { const s = c.s * Math.min(1, c.life * 2); _m.compose(c.p, _q.setFromEuler(c.r), _s.set(s, s, s)); } else _m.makeScale(0, 0, 0);
+    if (c) { const s = c.s * Math.min(1, c.life * 2); _m.compose(c.p, _q.setFromEuler(c.r), _s.set(s, s, s)); ch.im.setColorAt(i, c.c); } else _m.makeScale(0, 0, 0);
     ch.im.setMatrixAt(i, _m);
   }
-  ch.im.instanceMatrix.needsUpdate = true;
+  ch.im.instanceMatrix.needsUpdate = true; ch.im.instanceColor.needsUpdate = true;
   const lv = parts.leaves;
   for (let i = lv.list.length - 1; i >= 0; i--) {
     const l = lv.list[i]; l.life -= dt;
@@ -1851,6 +2301,330 @@ function updateBirds(time) {
 }
 
 /* ============================================================
+   MUTATION EFFECTS: crystal crowns, icicles, puddles, golden glow, lightning arcs
+   ============================================================ */
+const mfx = { crystal: {}, icicleFree: [], puddleFree: [], auras: [], arcTimer: 0 };
+const _m2 = new THREE.Matrix4(), _m3 = new THREE.Matrix4(), _v4 = new THREE.Vector3(), _s2 = new THREE.Vector3(), _q3 = new THREE.Quaternion();
+const ICE_CAP = 2400, PUDDLE_CAP = 400;
+function buildMutFx() {
+  mfx.crystalMat = new THREE.MeshStandardMaterial({ color: 0x9fe6ff, emissive: 0x2e9cff, emissiveIntensity: 0.55, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.86, flatShading: true });
+  const iceMat = new THREE.MeshStandardMaterial({ color: 0xdff4ff, emissive: 0x4a8cc0, emissiveIntensity: 0.3, roughness: 0.06, metalness: 0.1, transparent: true, opacity: 0.9 });
+  const pm = new THREE.MeshStandardMaterial({ color: 0x18232c, roughness: 0.03, transparent: true, opacity: 0.82, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+  envUsers.push(mfx.crystalMat, iceMat, pm);
+  const ig = new THREE.ConeGeometry(0.05, 0.5, 5, 1); ig.rotateX(Math.PI); ig.translate(0, -0.25, 0);
+  mfx.icicles = new THREE.InstancedMesh(ig, iceMat, ICE_CAP);
+  for (let i = 0; i < ICE_CAP; i++) { mfx.icicles.setMatrixAt(i, ZERO_M); mfx.icicleFree.push(ICE_CAP - 1 - i); }
+  const pg = new THREE.CircleGeometry(1, 28); pg.rotateX(-Math.PI / 2);
+  const P = pg.attributes.position;
+  for (let i = 1; i < P.count; i++) { const x = P.getX(i), z = P.getZ(i), k = 1 + nA(x * 1.4, z * 1.4) * 0.3; P.setXYZ(i, x * k, 0, z * k); }
+  mfx.puddles = new THREE.InstancedMesh(pg, pm, PUDDLE_CAP);
+  for (let i = 0; i < PUDDLE_CAP; i++) { mfx.puddles.setMatrixAt(i, ZERO_M); mfx.puddleFree.push(PUDDLE_CAP - 1 - i); }
+  mfx.puddles.receiveShadow = true;
+  for (const m of [mfx.icicles, mfx.puddles]) { m.frustumCulled = false; scene.add(m); }
+  mfx.auraTex = softDot();
+  const ag = new THREE.BufferGeometry();
+  ag.setAttribute("position", new THREE.BufferAttribute(new Float32Array(4 * 8 * 9 * 6 * 3), 3)); ag.setDrawRange(0, 0);
+  mfx.arcs = new THREE.Mesh(ag, new THREE.MeshBasicMaterial({ color: 0xb8d4ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+  mfx.arcs.frustumCulled = false; scene.add(mfx.arcs);
+}
+// Crystal crowns: clusters of faceted shards growing where the tree's leaf sprays would be.
+function crystalGeo(vi) {
+  if (mfx.crystal[vi]) return mfx.crystal[vi];
+  const v = VARIANTS[vi], gb = new GB(), R = mulberry32(900 + vi);
+  const shard = (p, d, len, rad) => {
+    const q = new THREE.Quaternion().setFromUnitVectors(UP, d);
+    const body = new THREE.CylinderGeometry(rad, rad * 0.8, len * 0.72, 6, 1); body.translate(0, len * 0.36, 0);
+    const tip = new THREE.CylinderGeometry(0, rad, len * 0.28, 6, 1); tip.translate(0, len * 0.86, 0);
+    for (const g of [body, tip]) gb.addGeo(g, M4(p, q), () => 0.8 + R() * 0.4);
+  };
+  // a ring of crystals breaking out of the ground around the trunk
+  for (let k = 0; k < 9; k++) {
+    const a = (k / 9) * TAU + R() * 0.5, r = v.trunkR * (1.3 + R() * 1.4);
+    shard(new THREE.Vector3(Math.cos(a) * r, -0.1, Math.sin(a) * r), new THREE.Vector3(Math.cos(a) * 0.5, 1, Math.sin(a) * 0.5).normalize(), 0.5 + R() * 0.9, 0.07 + R() * 0.08);
+  }
+  const list = v.anchors.filter((a, i) => i % Math.max(1, Math.floor(v.anchors.length / 70)) === 0);
+  for (const a of list) {
+    const n = 2 + Math.floor(R() * 2);
+    for (let k = 0; k < n; k++) {
+      const d = a.d.clone().lerp(UP, 0.35 + R() * 0.3).add(randDir(R).multiplyScalar(0.45)).normalize();
+      shard(a.p, d, 0.45 + R() * 0.9, 0.05 + R() * 0.08);
+    }
+  }
+  mfx.crystal[vi] = gb.build();
+  return mfx.crystal[vi];
+}
+function refreshMutFx(t) {
+  if (!mfx.icicles) return;
+  const alive = t.state === "standing" || t.state === "growing", m = t.mut;
+  const fx = t.fx || (t.fx = { ice: null, puddle: -1, crystal: null, aura: null });
+  if (alive && m.frost && !fx.ice) {
+    const v = VARIANTS[t.v], n = Math.min(28, v.hangs.length, mfx.icicleFree.length);
+    fx.ice = [];
+    for (let k = 0; k < n; k++) fx.ice.push({ slot: mfx.icicleFree.pop(), h: v.hangs[Math.floor((k * v.hangs.length) / n)], len: 0.6 + Math.random() * 1.4 });
+  } else if ((!alive || !m.frost) && fx.ice) {
+    for (const e of fx.ice) { mfx.icicles.setMatrixAt(e.slot, ZERO_M); mfx.icicleFree.push(e.slot); }
+    fx.ice = null; mfx.icicles.instanceMatrix.needsUpdate = true;
+  }
+  if (alive && m.wet && fx.puddle < 0 && mfx.puddleFree.length) fx.puddle = mfx.puddleFree.pop();
+  else if ((!alive || !m.wet) && fx.puddle >= 0) { mfx.puddles.setMatrixAt(fx.puddle, ZERO_M); mfx.puddleFree.push(fx.puddle); fx.puddle = -1; mfx.puddles.instanceMatrix.needsUpdate = true; }
+  if (alive && m.crystal && !fx.crystal) {
+    fx.crystal = new THREE.Mesh(crystalGeo(t.v), mfx.crystalMat);
+    fx.crystal.matrixAutoUpdate = false; fx.crystal.castShadow = true; scene.add(fx.crystal);
+  } else if ((!alive || !m.crystal) && fx.crystal) { scene.remove(fx.crystal); fx.crystal = null; }
+  const auraCol = m.crystal ? 0x6fd8ff : m.gold ? 0xffc040 : null;
+  if (alive && auraCol !== null) {
+    if (!fx.aura) {
+      fx.aura = new THREE.Sprite(new THREE.SpriteMaterial({ map: mfx.auraTex, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
+      fx.aura.renderOrder = 2; scene.add(fx.aura); mfx.auras.push(t);
+    }
+    fx.aura.material.color.set(auraCol);
+  } else if (fx.aura) { scene.remove(fx.aura); fx.aura.material.dispose(); fx.aura = null; mfx.auras.splice(mfx.auras.indexOf(t), 1); }
+  placeMutFx(t);
+}
+function placeMutFx(t) {
+  const fx = t.fx, v = VARIANTS[t.v], sc = treeScale(t);
+  if (!fx || !(fx.ice || fx.crystal || fx.aura || fx.puddle >= 0)) return;
+  treeMatrix(t, _m2);
+  if (fx.ice) {
+    for (const e of fx.ice) {
+      _v4.copy(e.h.p).applyMatrix4(_m2);
+      mfx.icicles.setMatrixAt(e.slot, _m3.compose(_v4, _q3.identity(), _s2.set(0.6 + sc * 0.5, e.len * Math.max(0.5, sc * 0.8), 0.6 + sc * 0.5)));
+    }
+    mfx.icicles.instanceMatrix.needsUpdate = true;
+  }
+  if (fx.puddle >= 0) {
+    const n = _v4.set(gridSample(TNRM, t.x, t.z, 0), gridSample(TNRM, t.x, t.z, 1), gridSample(TNRM, t.x, t.z, 2)).normalize();
+    const r = sc > 0 ? t.r * 3.2 + 1.1 : 0;
+    mfx.puddles.setMatrixAt(fx.puddle, _m3.compose(_v.set(t.x + 0.3, heightAt(t.x + 0.3, t.z) + 0.03, t.z), _q3.setFromUnitVectors(UP, n), _s2.set(r, 1, r * 0.8)));
+    mfx.puddles.instanceMatrix.needsUpdate = true;
+  }
+  if (fx.crystal) { fx.crystal.matrix.copy(_m2); fx.crystal.matrixWorldNeedsUpdate = true; }
+  if (fx.aura) { fx.aura.position.set(t.x, t.y + v.crownY * sc, t.z); fx.aura.scale.setScalar(Math.max(0.01, v.crownR * sc * 3.4)); }
+}
+// Golden and crystal trees glow from afar; the halo fades as you walk up to them.
+function updateAuras(time) {
+  for (const t of mfx.auras) {
+    const a = t.fx.aura, d = camera.position.distanceTo(a.position);
+    a.material.opacity = (0.2 + 0.08 * Math.sin(time * 2 + t.x)) * (0.2 + 0.8 * smooth(8, 32, d)) * (1 + env.night * 0.8);
+  }
+}
+// Electric arcs crawling over lightning-struck trees near the camera: thin camera-facing ribbons.
+function updateArcs(dt) {
+  mfx.arcTimer -= dt; if (mfx.arcTimer > 0) return; mfx.arcTimer = 0.06;
+  const cam = camera.position, list = [], arr = mfx.arcs.geometry.attributes.position.array;
+  gNear(cam.x, cam.z, 55, (t) => { if (t.kind === "tree" && t.mut.shock && t.state === "standing") list.push(t); });
+  list.sort((a, b) => Math.hypot(a.x - cam.x, a.z - cam.z) - Math.hypot(b.x - cam.x, b.z - cam.z));
+  let n = 0;
+  const side = new THREE.Vector3(), seg = new THREE.Vector3(), toCam = new THREE.Vector3();
+  const put = (p) => { arr[n++] = p.x; arr[n++] = p.y; arr[n++] = p.z; };
+  for (const t of list.slice(0, 4)) {
+    // only now and then a short crackle of static jumps over the scar
+    if (!(t.arcT > 0)) { if (Math.random() < 0.03) { t.arcT = 0.2; SFX.zap(); } else continue; }
+    t.arcT -= 0.06;
+    const v = VARIANTS[t.v], H = v.height * t.s, r = t.r * 0.85;
+    treeMatrix(t, _m2, false);
+    for (let a = 0; a < 2; a++) {
+      const y0 = t.y + 0.3 + Math.random() * H * 0.45, a0 = Math.random() * TAU;
+      const p0 = new THREE.Vector3(t.x + Math.cos(a0) * r, y0, t.z + Math.sin(a0) * r);
+      let p1;
+      const a1 = a0 + (Math.random() - 0.5) * 1.6; p1 = new THREE.Vector3(t.x + Math.cos(a1) * r, y0 + 0.4 + Math.random() * 1.4, t.z + Math.sin(a1) * r);
+      const L = p0.distanceTo(p1), w = 0.015 + Math.random() * 0.015;
+      let prev = p0;
+      for (let k = 1; k <= 9; k++) {
+        const q = p0.clone().lerp(p1, k / 9);
+        if (k < 9) q.add(randDir(Math.random).multiplyScalar(L * 0.09));
+        seg.subVectors(q, prev); toCam.subVectors(cam, prev);
+        side.crossVectors(seg, toCam).normalize().multiplyScalar(w);
+        const a1 = prev.clone().sub(side), b1 = prev.clone().add(side), c1 = q.clone().add(side), d1 = q.clone().sub(side);
+        put(a1); put(b1); put(c1); put(a1); put(c1); put(d1);
+        prev = q;
+      }
+    }
+  }
+  mfx.arcs.geometry.attributes.position.needsUpdate = true;
+  mfx.arcs.geometry.setDrawRange(0, n / 3);
+  mfx.arcs.material.opacity = 0.75 + Math.random() * 0.25;
+}
+
+/* ============================================================
+   WEATHER: rain wets trees, storms throw lightning, snow frosts them
+   ============================================================ */
+const WEATHER = {
+  clear: { name: "맑음", icon: "☀" },
+  rain: { name: "비", icon: "☂", msg: "비가 내립니다 — 서 있는 나무가 하나둘 젖어요 (젖은 ×2)" },
+  storm: { name: "뇌우", icon: "⚡", msg: "뇌우가 몰려옵니다 — 번개에 맞은 나무는 ×10!" },
+  snow: { name: "눈", icon: "❄", msg: "눈이 내립니다 — 나무에 서리가 껴요 (서리 ×3, 젖은 나무는 금방 얼어요)" },
+  blizzard: { name: "눈보라", icon: "❄", msg: "눈보라가 몰아칩니다 — 숲이 온통 눈에 파묻히고 나무가 빠르게 얼어붙어요 (서리 ×3)" },
+};
+const weather = { type: "clear", timer: 360, rain: 0, snow: 0, storm: 0, blizz: 0, flash: 0, nextBolt: 4, mutTimer: 1, fxTimer: 0, drift: new THREE.Vector3(), rainDrift: new THREE.Vector3() };
+const wfx = {};
+function buildWeather() {
+  const box = new THREE.Vector3(44, 26, 44), cam = new THREE.Vector3(), R = mulberry32(77);
+  const N = 2400, pos = new Float32Array(N * 6), end = new Float32Array(N * 2);
+  for (let i = 0; i < N; i++) { const x = R(), y = R(), z = R(); pos.set([x, y, z, x, y, z], i * 6); end[i * 2 + 1] = 1; }
+  const rg = new THREE.BufferGeometry();
+  rg.setAttribute("position", new THREE.BufferAttribute(pos, 3)); rg.setAttribute("aEnd", new THREE.BufferAttribute(end, 1));
+  wfx.rain = new THREE.LineSegments(rg, new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false,
+    uniforms: { uCam: { value: cam }, uBox: { value: box }, uAmt: { value: 0 }, uDrift: { value: weather.rainDrift }, uWind: { value: new THREE.Vector2(0.22, 0.08) } },
+    vertexShader: `uniform float uAmt; uniform vec3 uCam, uBox, uDrift; uniform vec2 uWind; attribute float aEnd; varying float vA;
+      void main() {
+        vec3 fall = normalize(vec3(uWind.x, -1.0, uWind.y));
+        vec3 o = uCam - uBox * 0.5;
+        vec3 p = mod(position * uBox + uDrift - o, uBox) + o + fall * aEnd * 0.65;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mv;
+        float d = length(mv.xyz);
+        vA = uAmt * (1.0 - aEnd * 0.75) * smoothstep(0.8, 2.5, d) * (1.0 - smoothstep(14.0, 22.0, d));
+      }`,
+    fragmentShader: `varying float vA;
+      void main() { gl_FragColor = vec4(0.75, 0.8, 0.88, vA * 0.5);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+      }`,
+  }));
+  const SN = 5000, sp = new Float32Array(SN * 3);
+  for (let i = 0; i < SN * 3; i++) sp[i] = R();
+  const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.BufferAttribute(sp, 3));
+  wfx.snow = new THREE.Points(sg, new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false,
+    uniforms: { uTime: U.time, uCam: { value: cam }, uBox: { value: box }, uAmt: { value: 0 }, uScale: { value: 400 }, uDrift: { value: weather.drift }, uDensity: { value: 0.4 } },
+    vertexShader: `uniform float uTime, uAmt, uScale, uDensity; uniform vec3 uCam, uBox, uDrift; varying float vA;
+      void main() {
+        vec3 o = uCam - uBox * 0.5;
+        vec3 p = position * uBox + uDrift + vec3(sin(uTime * 0.7 + position.y * 40.0) * 0.8, 0.0, cos(uTime * 0.6 + position.x * 30.0) * 0.8);
+        p = mod(p - o, uBox) + o;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = 0.08 * uScale / max(-mv.z, 0.5);
+        float d = length(mv.xyz);
+        vA = uAmt * step(fract(position.z * 91.7 + position.x * 13.3), uDensity) * smoothstep(0.5, 2.0, d) * (1.0 - smoothstep(14.0, 22.0, d));
+      }`,
+    fragmentShader: `varying float vA;
+      void main() { float a = smoothstep(0.5, 0.1, length(gl_PointCoord - 0.5)) * vA; if (a < 0.01) discard; gl_FragColor = vec4(0.95, 0.97, 1.0, a);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+      }`,
+  }));
+  for (const o of [wfx.rain, wfx.snow]) { o.frustumCulled = false; o.visible = false; scene.add(o); }
+  wfx.cam = cam;
+  wfx.boltMat = new THREE.MeshBasicMaterial({ color: 0xeef3ff, toneMapped: false });
+  wfx.glowMat = new THREE.MeshBasicMaterial({ color: 0x8fb0ff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+  wfx.light = new THREE.PointLight(0xc8d8ff, 0, 120, 1.6);
+  scene.add(wfx.light);
+}
+function setWeather(type, dur) {
+  const prev = weather.type;
+  weather.type = type;
+  weather.timer = dur ?? (type === "clear" ? 300 + Math.random() * 240 : 60 + Math.random() * 45);
+  if (mode === "play" && (type !== "clear" || prev !== "clear")) toast(type === "clear" ? "날씨가 갰습니다. 젖은·서리 나무는 3분 뒤 원래대로 돌아가요." : WEATHER[type].msg);
+}
+function updateWeather(dt) {
+  weather.timer -= dt;
+  if (weather.timer <= 0) {
+    if (weather.type !== "clear") setWeather("clear");
+    else { const r = Math.random(); if (r < 0.35) setWeather("clear", 240 + Math.random() * 180); else setWeather(r < 0.6 ? "rain" : r < 0.75 ? "storm" : r < 0.92 ? "snow" : "blizzard"); }
+  }
+  const wet = weather.type === "rain" || weather.type === "storm", snowy = weather.type === "snow" || weather.type === "blizzard", k = 1 - Math.exp(-dt / 6);
+  weather.rain = lerp(weather.rain, wet ? 1 : 0, k);
+  weather.snow = lerp(weather.snow, snowy ? 1 : 0, k);
+  weather.storm = lerp(weather.storm, weather.type === "storm" ? 1 : 0, k);
+  weather.blizz = lerp(weather.blizz, weather.type === "blizzard" ? 1 : 0, k);
+  // snow settles on the ground (a blizzard buries everything fast) and melts slowly afterwards
+  const cover = weather.type === "blizzard" ? [1, 1 / 20] : weather.type === "snow" ? [0.85, 1 / 60] : [0, -1 / 140];
+  U.snow.value = cover[1] > 0 ? Math.min(cover[0], U.snow.value + dt * cover[1]) : Math.max(0, U.snow.value + dt * cover[1]);
+  U.wetGround.value = clamp(U.wetGround.value + dt * (weather.rain > 0.5 ? 1 / 20 : -1 / 90), 0, 1);
+  U.wind.value = 1 + 0.6 * weather.rain + 1.6 * weather.storm + 2.2 * weather.blizz;
+  const gust = 1 + 0.4 * Math.sin(U.time.value * 0.9) * weather.blizz;
+  weather.drift.x += dt * (0.4 + 9 * weather.blizz * gust); weather.drift.z += dt * 2.5 * weather.blizz;
+  weather.drift.y -= dt * (1.3 + 1.5 * weather.blizz);
+  weather.rainDrift.add(_v4.set(0.22, -1, 0.08).normalize().multiplyScalar(17 * dt));
+  weather.mutTimer -= dt;
+  if (weather.mutTimer <= 0) { weather.mutTimer = 1; applyWeatherMutations(); }
+  if (weather.type === "storm" && weather.storm > 0.6) {
+    weather.nextBolt -= dt;
+    if (weather.nextBolt <= 0) { weather.nextBolt = 14 + Math.random() * 16; lightning(); }
+  }
+  weather.flash = Math.max(0, weather.flash - dt * 4);
+  // rain splashes and drips around the woodcutter
+  if (weather.rain > 0.3 && Math.random() < dt * 14 * weather.rain) {
+    const a = Math.random() * TAU, d = 1 + Math.random() * 9, x = player.pos.x + Math.cos(a) * d, z = player.pos.y + Math.sin(a) * d;
+    emitPuff(new THREE.Vector3(x, Math.max(heightAt(x, z), 0) + 0.04, z), 1, { color: [0.85, 0.9, 1], size: 0.18, spread: 0.05, up: 0.6, life: 0.35, alpha: 0.5, grow: 0.5 });
+  }
+}
+function updateWeatherFx(dt) {
+  wfx.cam.copy(camera.position);
+  wfx.rain.material.uniforms.uAmt.value = weather.rain; wfx.rain.visible = weather.rain > 0.02;
+  wfx.snow.material.uniforms.uAmt.value = weather.snow; wfx.snow.visible = weather.snow > 0.02;
+  wfx.snow.material.uniforms.uDensity.value = 0.38 + 0.62 * weather.blizz;
+  if (wfx.bolt) {
+    wfx.boltT -= dt;
+    wfx.bolt.visible = wfx.boltT > 0.22 || (wfx.boltT > 0 && Math.sin(wfx.boltT * 80) > 0);
+    wfx.light.intensity = Math.max(0, wfx.boltT) * 9000;
+    if (wfx.boltT <= -0.05) { scene.remove(wfx.bolt); wfx.bolt.traverse((o) => o.geometry && o.geometry.dispose()); wfx.bolt = null; wfx.light.intensity = 0; }
+  }
+}
+// Weather marks trees near the player once a second; wet and frost wear off 3 minutes after the weather ends.
+function applyWeatherMutations() {
+  const now = U.time.value, raining = weather.rain > 0.6, snowing = weather.snow > 0.6, bl = weather.blizz > 0.6;
+  gNear(player.pos.x, player.pos.y, 90, (t) => {
+    if (t.kind !== "tree" || t.state !== "standing") return;
+    const m = t.mut;
+    let changed = false;
+    if (raining) {
+      if (m.wet) t.wetT = now + 180;
+      else if (!m.frost && Math.random() < 0.005) { m.wet = true; t.wetT = now + 180; changed = true; }
+    }
+    if (snowing) {
+      if (m.frost) t.frostT = now + 180;
+      else if (Math.random() < (m.wet ? (bl ? 0.06 : 0.025) : bl ? 0.01 : 0.003)) { m.frost = true; m.wet = false; t.frostT = now + 180; changed = true; }
+    }
+    if (m.wet && !raining && now > t.wetT) { m.wet = false; changed = true; }
+    if (m.frost && !snowing && now > t.frostT) { m.frost = false; changed = true; }
+    if (changed) setTreeMut(t);
+  });
+}
+function lightning() {
+  const cands = [], fwd = camera.getWorldDirection(new THREE.Vector3());
+  gNear(player.pos.x, player.pos.y, 70, (t) => {
+    if (t.kind !== "tree" || t.state !== "standing") return;
+    const dx = t.x - player.pos.x, dz = t.z - player.pos.y, d = Math.hypot(dx, dz);
+    if (d > 12 && d < 70) cands.push({ t, score: (dx * fwd.x + dz * fwd.z) / d + (t.mut.shock ? -1 : 0) + Math.random() * 0.6 + (t.mut.size ? 0.4 : 0) });
+  });
+  let tgt = null, x, z, y;
+  if (cands.length && Math.random() < 0.55) {
+    cands.sort((a, b) => b.score - a.score);
+    tgt = cands[0].t; x = tgt.x; z = tgt.z; y = tgt.y + VARIANTS[tgt.v].height * tgt.s * 0.92;
+  } else {
+    const a = Math.random() * TAU, d = 25 + Math.random() * 45;
+    x = player.pos.x + Math.cos(a) * d; z = player.pos.y + Math.sin(a) * d; y = Math.max(heightAt(x, z), 0);
+  }
+  if (wfx.bolt) { scene.remove(wfx.bolt); wfx.bolt.traverse((o) => o.geometry && o.geometry.dispose()); }
+  const g = new THREE.Group(), path = (x0, y0, z0, x1, y1, z1, n, jit) => {
+    const pts = [];
+    for (let i = 0; i <= n; i++) { const k = i / n, j = i && i < n ? jit * (1 - k * 0.5) : 0; pts.push(new THREE.Vector3(lerp(x0, x1, k) + (Math.random() - 0.5) * j, lerp(y0, y1, k), lerp(z0, z1, k) + (Math.random() - 0.5) * j)); }
+    return new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.02);
+  };
+  const main = path(x + (Math.random() - 0.5) * 24, y + 95, z + (Math.random() - 0.5) * 24, x, y, z, 18, 7);
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(main, 90, 0.14, 5), wfx.boltMat), new THREE.Mesh(new THREE.TubeGeometry(main, 90, 0.7, 6), wfx.glowMat));
+  for (let b = 0; b < 2; b++) {
+    const p0 = main.getPoint(0.25 + Math.random() * 0.4), br = path(p0.x, p0.y, p0.z, p0.x + (Math.random() - 0.5) * 30, p0.y - 18 - Math.random() * 15, p0.z + (Math.random() - 0.5) * 30, 8, 5);
+    g.add(new THREE.Mesh(new THREE.TubeGeometry(br, 40, 0.07, 4), wfx.boltMat));
+  }
+  scene.add(g); wfx.bolt = g; wfx.boltT = 0.35;
+  wfx.light.position.set(x, y + 3, z);
+  weather.flash = 1;
+  const dist = Math.hypot(x - player.pos.x, z - player.pos.y);
+  SFX.thunder(dist); cam.shake = Math.max(cam.shake, clamp(0.35 - dist / 200, 0.05, 0.3));
+  emitPuff(new THREE.Vector3(x, y, z), 14, { color: [0.6, 0.75, 1], size: 0.6, spread: 1.2, up: 2.5, life: 0.8, alpha: 0.9, grow: 0.4 });
+  if (tgt) {
+    tgt.shake = 2; tgt.shakeT = 0; tgt.shakeAxis.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+    emitLeaves(new THREE.Vector3(tgt.x, y - 2, tgt.z), 25, tgt.sp, VARIANTS[tgt.v].crownR * tgt.s);
+    if (!tgt.mut.shock) { tgt.mut.shock = true; setTreeMut(tgt); toast(`번개가 ${SPECIES[tgt.sp].name}에 떨어졌어요! 번개 맞은 나무 ×10 (미니맵의 보라 점)`); }
+  }
+}
+
+/* ============================================================
    AUDIO (synthesized)
    ============================================================ */
 const sfx = { ctx: null, master: null, muted: false, noise: null, wind: null, nextBird: 3, nextCricket: 0 };
@@ -1869,6 +2643,11 @@ function initAudio() {
   const g = ctx.createGain(); g.gain.value = 0.11;
   src.connect(lp); lp.connect(g); g.connect(sfx.master); src.start();
   sfx.wind = { lp, g };
+  const rsrc = ctx.createBufferSource(); rsrc.buffer = buf; rsrc.loop = true; rsrc.playbackRate.value = 1.3;
+  const rbp = ctx.createBiquadFilter(); rbp.type = "bandpass"; rbp.frequency.value = 2600; rbp.Q.value = 0.4;
+  const rg = ctx.createGain(); rg.gain.value = 0;
+  rsrc.connect(rbp); rbp.connect(rg); rg.connect(sfx.master); rsrc.start();
+  sfx.rain = rg;
 }
 function tone({ type = "sine", f0 = 440, f1 = null, t = 0, dur = 0.2, vol = 0.3, attack = 0.005 }) {
   const c = sfx.ctx; if (!c) return;
@@ -1880,7 +2659,7 @@ function tone({ type = "sine", f0 = 440, f1 = null, t = 0, dur = 0.2, vol = 0.3,
 function noiseHit({ t = 0, dur = 0.1, vol = 0.3, type = "bandpass", f = 1000, f1 = null, q = 1, attack = 0.003 }) {
   const c = sfx.ctx; if (!c) return;
   const now = c.currentTime + t, s = c.createBufferSource(), fl = c.createBiquadFilter(), g = c.createGain();
-  s.buffer = sfx.noise; s.playbackRate.value = 1 + Math.random() * 0.2;
+  s.buffer = sfx.noise; s.playbackRate.value = 1 + Math.random() * 0.2; s.loop = dur > 0.4;
   fl.type = type; fl.frequency.setValueAtTime(f, now); if (f1) fl.frequency.exponentialRampToValueAtTime(f1, now + dur); fl.Q.value = q;
   g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(vol, now + attack); g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
   s.connect(fl); fl.connect(g); g.connect(sfx.master); s.start(now, Math.random() * 1.5); s.stop(now + dur + 0.05);
@@ -1892,10 +2671,10 @@ const SFX = {
     tone({ type: "triangle", f0: 310 + Math.random() * 40, f1: 260, dur: 0.12, vol: 0.16 });
   },
   whoosh() { noiseHit({ dur: 0.22, vol: 0.12, f: 500, f1: 1600, q: 0.8, attack: 0.08 }); },
-  creak() {
+  creak(pitch = 1) {
     const c = sfx.ctx; if (!c) return;
     const now = c.currentTime, o = c.createOscillator(), fl = c.createBiquadFilter(), g = c.createGain(), lfo = c.createOscillator(), lg = c.createGain();
-    o.type = "sawtooth"; o.frequency.value = 70; lfo.frequency.value = 9; lg.gain.value = 18; lfo.connect(lg); lg.connect(o.frequency);
+    o.type = "sawtooth"; o.frequency.value = 70 * pitch; lfo.frequency.value = 9; lg.gain.value = 18; lfo.connect(lg); lg.connect(o.frequency);
     fl.type = "bandpass"; fl.frequency.value = 650; fl.Q.value = 4;
     g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(0.2, now + 0.3); g.gain.exponentialRampToValueAtTime(0.0001, now + 1.4);
     o.connect(fl); fl.connect(g); g.connect(sfx.master); o.start(now); lfo.start(now); o.stop(now + 1.5); lfo.stop(now + 1.5);
@@ -1912,17 +2691,32 @@ const SFX = {
   deny() { tone({ type: "square", f0: 160, dur: 0.15, vol: 0.06 }); },
   step(surface) {
     if (surface === "water") noiseHit({ dur: 0.18, vol: 0.12, f: 1300, f1: 600, q: 0.8 });
+    else if (surface === "snow") { noiseHit({ dur: 0.12, vol: 0.1, type: "lowpass", f: 1400, f1: 500, q: 0.7, attack: 0.02 }); noiseHit({ t: 0.03, dur: 0.05, vol: 0.05, f: 3000, q: 2 }); }
     else noiseHit({ dur: 0.06, vol: surface === "wood" ? 0.12 : 0.07, f: surface === "wood" ? 500 : surface === "path" ? 700 : 1100, q: 1.2 });
   },
   quest() { [659, 784, 988, 1318].forEach((f, i) => tone({ type: "sine", f0: f, t: i * 0.09, dur: 0.35, vol: 0.14 })); },
+  glass() {
+    noiseHit({ dur: 0.08, vol: 0.35, type: "highpass", f: 3500, q: 0.8 });
+    for (let i = 0; i < 4; i++) tone({ type: "sine", f0: 2200 + Math.random() * 2400, t: i * 0.03, dur: 0.35, vol: 0.06 });
+    tone({ type: "sine", f0: 160, f1: 70, dur: 0.12, vol: 0.3 });
+  },
+  zap() { for (let i = 0; i < 3; i++) noiseHit({ t: i * 0.04, dur: 0.05, vol: 0.18, type: "highpass", f: 4000, q: 1 }); tone({ type: "sawtooth", f0: 900, f1: 200, dur: 0.12, vol: 0.05 }); },
+  sparkle() { tone({ type: "sine", f0: 2600 + Math.random() * 1600, dur: 0.25, vol: 0.03 }); },
+  thunder(dist) {
+    const t = Math.min(1.2, dist / 340), near = clamp(1.2 - dist / 120, 0.35, 1);
+    noiseHit({ t, dur: 0.3, vol: 0.7 * near, type: "highpass", f: 1200, q: 0.6, attack: 0.002 });
+    noiseHit({ t: t + 0.05, dur: 3.5, vol: 0.9 * near, type: "lowpass", f: 420, f1: 50, q: 0.5, attack: 0.06 });
+    tone({ type: "sine", f0: 58, f1: 28, t, dur: 2.4, vol: 0.5 * near });
+  },
 };
 function updateAmbience(dt) {
   if (!sfx.ctx || sfx.muted) return;
   const t = U.time.value;
-  sfx.wind.g.gain.value = 0.07 + 0.05 * Math.sin(t * 0.13) + 0.03 * Math.sin(t * 0.41);
-  sfx.wind.lp.frequency.value = 300 + 160 * Math.sin(t * 0.21);
+  sfx.wind.g.gain.value = 0.07 + 0.05 * Math.sin(t * 0.13) + 0.03 * Math.sin(t * 0.41) + weather.storm * 0.12 + weather.snow * 0.04 + weather.blizz * (0.3 + 0.12 * Math.sin(t * 0.9));
+  sfx.wind.lp.frequency.value = 300 + 160 * Math.sin(t * 0.21) + weather.storm * 250 + weather.blizz * (700 + 400 * Math.sin(t * 0.7));
+  sfx.rain.gain.value = weather.rain * (0.16 + weather.storm * 0.1);
   sfx.nextBird -= dt;
-  if (sfx.nextBird <= 0 && env.day > 0.3) {
+  if (sfx.nextBird <= 0 && env.day > 0.3 && weather.rain < 0.3 && weather.snow < 0.3) {
     const base = 2200 + Math.random() * 1600, n = 2 + Math.floor(Math.random() * 4), vol = 0.025 + Math.random() * 0.04;
     for (let i = 0; i < n; i++) tone({ type: "sine", f0: base * (1 + Math.random() * 0.2), f1: base * (0.7 + Math.random() * 0.6), t: i * (0.09 + Math.random() * 0.05), dur: 0.07 + Math.random() * 0.06, vol });
     sfx.nextBird = 1.5 + Math.random() * 5;
@@ -1938,33 +2732,61 @@ function updateAmbience(dt) {
    GAME STATE
    ============================================================ */
 const SAVE_KEY = "woodcutter-wild-v1";
-const state = { coins: 0, axe: 0, bag: 0, boots: 0, carried: [], quest: 0, hour: 7.5, stats: { trees: 0, pine: 0, birch: 0, oak: 0, logsSold: 0, earned: 0 } };
+const MUT_STATS = () => ({ big: 0, titan: 0, gold: 0, crystal: 0, wet: 0, frost: 0, shock: 0 });
+const state = {
+  coins: 0, axe: 0, str: 0, boots: 0, carrying: null, qdone: [], hour: 7.5,
+  stats: { trees: 0, pine: 0, birch: 0, oak: 0, logsSold: 0, sold: 0, earned: 0, mutTrees: 0, mut: MUT_STATS() },
+};
 function save() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) { /* storage unavailable */ }
 }
+// Quest order of the first release, used to carry old saves (which stored a quest index) over to quest ids.
+const OLD_QUEST_ORDER = ["t1", "sell1", "axe1", "birch5", "oak3", "str1", "t40", "sold30", "axe4"];
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
-    if (s && typeof s === "object") { Object.assign(state, s, { stats: Object.assign(state.stats, s.stats || {}) }); return true; }
+    if (!s || typeof s !== "object") return false;
+    const stats = Object.assign(state.stats, s.stats || {});
+    stats.mut = Object.assign(MUT_STATS(), (s.stats && s.stats.mut) || {});
+    Object.assign(state, s, { stats });
+    if (!Array.isArray(s.qdone)) state.qdone = OLD_QUEST_ORDER.slice(0, s.quest || 0);
+    delete state.quest;
+    // first release carried logs in a backpack: pay them out, and turn backpack levels into strength
+    if (Array.isArray(s.carried)) state.coins += s.carried.length * 5;
+    if (typeof s.str !== "number") state.str = clamp(s.bag || 0, 0, STRENGTH.length - 1);
+    delete state.carried; delete state.bag;
+    const c = state.carrying;
+    if (c && !(SPECIES[c.sp] && VARIANTS[c.v] && Array.isArray(c.tags) && c.mut && Array.isArray(c.leafTint))) state.carrying = null;
+    return true;
   } catch (e) { /* storage unavailable */ }
   return false;
 }
+const mutCount = (s, k) => s.stats.mut[k] || 0;
 const QUESTS = [
-  { text: "나무를 한 그루 베어 보세요", prog: (s) => [s.stats.trees, 1], reward: 15 },
-  { text: "통나무를 오두막 장작더미에 팔기", prog: (s) => [s.stats.logsSold, 1], reward: 20 },
-  { text: "오두막 상점에서 도끼 강화하기", prog: (s) => [s.axe, 1], reward: 30 },
-  { text: "자작나무 5그루 베기", prog: (s) => [s.stats.birch, 5], reward: 50 },
-  { text: "참나무 3그루 베기", prog: (s) => [s.stats.oak, 3], reward: 80 },
-  { text: "배낭 키우기", prog: (s) => [s.bag, 1], reward: 60 },
-  { text: "나무 40그루 베기", prog: (s) => [s.stats.trees, 40], reward: 150 },
-  { text: "통나무 150개 팔기", prog: (s) => [s.stats.logsSold, 150], reward: 250 },
-  { text: "황금 도끼 손에 넣기", prog: (s) => [s.axe, 4], reward: 500 },
+  { id: "t1", text: "나무를 한 그루 베어 보세요", prog: (s) => [s.stats.trees, 1], reward: 15 },
+  { id: "sell1", text: "쓰러뜨린 나무를 들고(E) 장작더미에 팔기", prog: (s) => [s.stats.sold + (s.stats.logsSold ? 1 : 0), 1], reward: 20 },
+  { id: "axe1", text: "오두막 상점에서 도끼 강화하기", prog: (s) => [s.axe, 1], reward: 30 },
+  { id: "mut1", text: "변이 나무 베기 (미니맵의 색 점)", prog: (s) => [s.stats.mutTrees, 1], reward: 40 },
+  { id: "birch5", text: "자작나무 5그루 베기", prog: (s) => [s.stats.birch, 5], reward: 50 },
+  { id: "oak3", text: "참나무 3그루 베기", prog: (s) => [s.stats.oak, 3], reward: 80 },
+  { id: "big1", text: "거대 나무 베기", prog: (s) => [mutCount(s, "big"), 1], reward: 60 },
+  { id: "str1", text: "상점에서 힘 기르기", prog: (s) => [s.str, 1], reward: 60 },
+  { id: "wet1", text: "비 오는 날 젖은 나무 베기", prog: (s) => [mutCount(s, "wet"), 1], reward: 70 },
+  { id: "gold1", text: "황금 나무 베기", prog: (s) => [mutCount(s, "gold"), 1], reward: 100 },
+  { id: "t40", text: "나무 40그루 베기", prog: (s) => [s.stats.trees, 40], reward: 150 },
+  { id: "frost1", text: "눈 오는 날 서리 나무 베기", prog: (s) => [mutCount(s, "frost"), 1], reward: 120 },
+  { id: "shock1", text: "번개 맞은 나무 베기", prog: (s) => [mutCount(s, "shock"), 1], reward: 150 },
+  { id: "sold30", text: "나무 30그루 팔기", prog: (s) => [s.stats.sold, 30], reward: 250 },
+  { id: "titan1", text: "타이탄 쓰러뜨리기", prog: (s) => [mutCount(s, "titan"), 1], reward: 300 },
+  { id: "crystal1", text: "수정 나무 베기", prog: (s) => [mutCount(s, "crystal"), 1], reward: 250 },
+  { id: "axe4", text: "황금 도끼 손에 넣기", prog: (s) => [s.axe, 4], reward: 500 },
 ];
+const currentQuest = () => QUESTS.find((q) => !state.qdone.includes(q.id));
 function checkQuest() {
-  while (state.quest < QUESTS.length) {
-    const q = QUESTS[state.quest], [a, b] = q.prog(state);
+  for (let q = currentQuest(); q; q = currentQuest()) {
+    const [a, b] = q.prog(state);
     if (a < b) break;
-    state.coins += q.reward; state.quest++;
+    state.coins += q.reward; state.qdone.push(q.id);
     toast(`목표 달성! ${q.text}  +${q.reward} 코인`); SFX.quest();
     save();
   }
@@ -1978,9 +2800,8 @@ const player = {
 let mode = "loading", paused = false;
 const cam = { yaw: Math.PI, pitch: 0.38, dist: 7.5, lastInput: -1e9, shake: 0 };
 const keys = {};
-const logs = [];
 const falling = [];
-let target = null, sell = { active: false, timer: 0, count: 0, gained: 0 }, msgCooldown = 0, envTimer = 0;
+let target = null, msgCooldown = 0, envTimer = 0;
 const joy = { active: false, x: 0, y: 0, id: null, mag: 0 };
 
 /* ---------- player movement ---------- */
@@ -2030,10 +2851,12 @@ function updatePlayer(dt) {
   const mx = fx * iz + rx * ix, mz = fz * iz + rz * ix;
   const wantRun = (keys.ShiftLeft || keys.ShiftRight || (joy.active && joy.mag > 0.92)) && mag > 0.1;
   player.running = wantRun && player.stamina > 0 && player.staminaLock <= 0;
-  let speed = (player.running ? 6.4 : 3.5) * BOOTS[state.boots].spd * mag * (1 - Math.min(0.15, state.carried.length * 0.006));
+  let speed = (player.running ? 6.4 : 3.5) * BOOTS[state.boots].spd * mag;
+  if (carried) speed *= Math.max(0.32, 1 - carried.d.weight * STRENGTH[state.str].slow);
   const h0 = heightAt(player.pos.x, player.pos.y);
   player.inWater = h0 < -0.15;
   if (player.inWater) speed *= 0.55;
+  speed *= 1 - 0.2 * U.snow.value;
   if (player.chop) { speed = 0; if (mag > 0.2) player.chopQueued = false; }
   const k = 1 - Math.exp(-dt * 10);
   player.vel.x = lerp(player.vel.x, mx * speed, k); player.vel.y = lerp(player.vel.y, mz * speed, k);
@@ -2052,7 +2875,7 @@ function updatePlayer(dt) {
   const prev = player.walkPhase;
   player.walkPhase += (spd * dt * Math.PI) / (player.running ? 1.15 : 0.78);
   if (Math.floor(prev / Math.PI) !== Math.floor(player.walkPhase / Math.PI) && spd > 0.5) {
-    const surf = player.inWater ? "water" : platformHeight(player.pos.x, player.pos.y) > -Infinity ? "wood" : pathDist(player.pos.x, player.pos.y) < 1.4 ? "path" : "grass";
+    const surf = player.inWater ? "water" : platformHeight(player.pos.x, player.pos.y) > -Infinity ? "wood" : U.snow.value > 0.4 ? "snow" : pathDist(player.pos.x, player.pos.y) < 1.4 ? "path" : "grass";
     SFX.step(surf);
     if (surf === "water") emitPuff(new THREE.Vector3(player.pos.x, 0.05, player.pos.y), 4, { color: [0.85, 0.92, 1], size: 0.5, spread: 0.3, up: 1.2, life: 0.6, alpha: 0.6 });
     else if (player.running) emitPuff(new THREE.Vector3(player.pos.x, player.y + 0.05, player.pos.y), 1, { size: 0.5, spread: 0.2, up: 0.3, life: 0.8, alpha: 0.25 });
@@ -2094,6 +2917,7 @@ function findTarget() {
 function tryChop() {
   if (mode !== "play") return;
   initAudio();
+  if (carried) { if (msgCooldown <= 0) { toast("나무를 메고 있어서 도끼질을 할 수 없어요. Q로 내려놓거나 장작더미로 가져가세요."); msgCooldown = 3; } return; }
   if (player.chop) { player.chopQueued = true; return; }
   const t = findTarget();
   player.chop = { t: 0, tree: t, face: t ? Math.atan2(t.x - player.pos.x, t.z - player.pos.y) : null };
@@ -2102,6 +2926,13 @@ function axeHeadWorld(out) {
   char.root.updateMatrixWorld(true);
   return out.set(0, char.axeHeadY || 0.7, 0.12).applyMatrix4(char.axe.matrixWorld);
 }
+const MUT_FX = {
+  gold: { color: [1.0, 0.82, 0.32], chip: 0xffd36a },
+  crystal: { color: [0.62, 0.9, 1.0], chip: 0x9fe8ff },
+  shock: { color: [0.55, 0.7, 1.0], chip: 0x3a3330 },
+  frost: { color: [0.9, 0.96, 1.0], chip: 0xe8f4ff },
+  wet: { color: [0.7, 0.85, 1.0], chip: 0x8a6a45 },
+};
 function hitTree(t) {
   if (!t || t.state !== "standing") { SFX.whoosh(); return; }
   const dx = player.pos.x - t.x, dz = player.pos.y - t.z, d = Math.hypot(dx, dz);
@@ -2111,29 +2942,100 @@ function hitTree(t) {
   t.hp -= dmg;
   const hp = axeHeadWorld(new THREE.Vector3());
   const p = new THREE.Vector3(t.x + ux * t.r, clamp(hp.y, t.y + 0.5, t.y + 1.5), t.z + uz * t.r);
-  emitChips(p, 7 + state.axe * 2, new THREE.Vector3(ux, 0, uz));
+  const look = ["crystal", "gold", "shock", "frost", "wet"].find((k) => t.mut[k]);
+  emitChips(p, 7 + state.axe * 2, new THREE.Vector3(ux, 0, uz), look ? MUT_FX[look].chip : 0xd9b27a);
   emitPuff(p, 3, { color: [0.78, 0.66, 0.48], size: 0.35, spread: 0.15, up: 0.4, life: 0.7, alpha: 0.45 });
+  if (look) emitPuff(p, 6, { color: MUT_FX[look].color, size: 0.3, spread: 0.35, up: 1.2, life: 0.9, alpha: 0.8, grow: 0.3 });
+  if (t.mut.gold || t.mut.crystal) for (let k = 0; k < 10; k++) emitSparkle(p.clone().add(randDir(Math.random).multiplyScalar(0.8)), t.mut.gold ? [1.6, 1.15, 0.45] : [0.7, 1.3, 1.8], 0.45, 0.7);
   const v = VARIANTS[t.v];
   emitLeaves(new THREE.Vector3(t.x, t.y + v.height * t.s * 0.7, t.z), 3 + Math.floor(Math.random() * 3), t.sp, v.crownR * t.s);
+  if (U.snow.value > 0.3) emitPuff(new THREE.Vector3(t.x, t.y + v.crownY * t.s, t.z), Math.round(8 * U.snow.value), { color: [0.95, 0.97, 1], size: 1.2, spread: v.crownR * t.s * 0.6, up: -0.6, life: 1.6, alpha: 0.5, grow: 0.8 });
   t.shake = 1; t.shakeT = 0; t.shakeAxis.set(uz, 0, -ux).normalize();
-  SFX.chop(t.sp === "oak");
+  if (t.mut.crystal) SFX.glass(); else SFX.chop(t.sp === "oak" || !!t.mut.size);
+  if (t.mut.gold) SFX.coin(Math.floor(Math.random() * 4));
+  if (t.mut.shock) SFX.zap();
   cam.shake = Math.max(cam.shake, 0.05);
   if (t.hp <= 0) fellTree(t, -ux, -uz);
 }
+// A felled tree is drawn as its own one-instance mesh so it keeps its tint and mutation look while it falls.
+// Logs keep the mutations of their tree; the strongest look decides how they are drawn.
+const LOG_LOOK = {
+  gold: { color: [1.7, 1.2, 0.35], rough: 0.35, emissive: 0x6a4400, ei: 0.55 },
+  crystal: { color: [0.75, 1.15, 1.45], rough: 0.15, emissive: 0x2a7aa0, ei: 0.75 },
+  shock: { color: [0.32, 0.3, 0.3], rough: 0.8, emissive: 0x2a3cff, ei: 0.3 },
+  frost: { color: [1.45, 1.55, 1.75], rough: 0.5 },
+  wet: { color: [0.6, 0.6, 0.6], rough: 0.2 },
+};
+const logMatCache = {};
+function logMats(sp, tags) {
+  const look = ["crystal", "gold", "shock", "frost", "wet"].find((k) => tags.includes(k)) || "plain", key = sp + look;
+  if (!logMatCache[key]) {
+    if (look === "plain") logMatCache[key] = [MAT.logBark[sp], MAT.endGrain, MAT.endGrain];
+    else {
+      const L = LOG_LOOK[look], bark = MAT.logBark[sp].clone(), end = MAT.endGrain.clone();
+      for (const m of [bark, end]) { m.color.setRGB(...L.color); m.roughness = L.rough; if (L.emissive) { m.emissive.set(L.emissive); m.emissiveIntensity = L.ei; } }
+      logMatCache[key] = [bark, end, end];
+    }
+  }
+  return logMatCache[key];
+}
+// A felled tree is one object from the moment it falls: it lies on the ground, gets lifted onto the
+// woodcutter's shoulder whole, and is thrown onto the woodpile when sold.
+const STRENGTH = [
+  { name: "보통 힘", lift: 3, slow: 0.22 },
+  { name: "단련된 어깨", lift: 6, slow: 0.16, cost: 90 },
+  { name: "황소 같은 힘", lift: 12, slow: 0.11, cost: 280 },
+  { name: "전설의 장사", lift: 99, slow: 0.07, cost: 750 },
+];
+const WEIGHT = { pine: 1.0, birch: 0.6, oak: 1.6 };
+function treeLogs(t) {
+  const base = t.sp === "oak" ? Math.round(3.4 + t.baseS * 1.6) : t.sp === "pine" ? Math.round(2 + t.baseS * 1.5) : Math.round(1.5 + t.baseS);
+  return base * (t.mut.size ? MUTS[t.mut.size].logs : 1);
+}
+// everything needed to draw and price a felled tree, independent of the stump it left behind
+function treeSnapshot(t) {
+  const tags = treeTags(t), sizeW = t.mut.size === "titan" ? 7 : t.mut.size === "big" ? 2.5 : 1;
+  return {
+    sp: t.sp, v: t.v, s: t.s, rot: t.rot, tags, mut: { ...t.mut },
+    value: Math.round(SPECIES[t.sp].price * treeLogs(t) * 1.5 * tagMult(tags)),
+    weight: Math.round(WEIGHT[t.sp] * t.baseS * t.baseS * sizeW * 10) / 10,
+    leafTint: t.leafTint.toArray(), barkTint: t.barkTint.toArray(),
+  };
+}
+const treeLabel = (d) => `${d.tags.map((k) => MUTS[k].name).join(" · ")}${d.tags.length ? " " : ""}${SPECIES[d.sp].name}`;
+function partInstance(d, src, mat, tint) {
+  const im = new THREE.InstancedMesh(treeGeo(src, 1), mat, 1);
+  im.setMatrixAt(0, new THREE.Matrix4());
+  im.setColorAt(0, new THREE.Color().fromArray(tint));
+  writeMutAt(im, 0, mutValues(d.mut));
+  im.castShadow = im.receiveShadow = true; im.frustumCulled = false;
+  return im;
+}
+// The whole tree as one movable object: holder (position, orientation, scale) → spin (the tree's own turn) → meshes.
+function makeHolder(d) {
+  const v = VARIANTS[d.v], holder = new THREE.Group(), spin = new THREE.Group();
+  spin.rotation.y = d.rot; holder.scale.setScalar(d.s); holder.add(spin);
+  spin.add(partInstance(d, v.lod0.trunk, MAT.bark[d.sp], d.barkTint));
+  if (d.mut.crystal) spin.add(new THREE.Mesh(crystalGeo(d.v), mfx.crystalMat));
+  else { const lm = partInstance(d, v.lod0.leaves, MAT.leaf[d.sp], d.leafTint); lm.customDepthMaterial = MAT.leaf[d.sp].userData.depth; spin.add(lm); }
+  holder.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return holder;
+}
+function disposeHolder(h) { scene.remove(h); h.parent && h.parent.remove(h); h.traverse((o) => { if (o.isInstancedMesh) o.dispose(); }); }
+const felled = [];
 function fellTree(t, dirX, dirZ) {
-  t.state = "falling"; t.shake = 0; setTreeMatrix(t);
-  const v = VARIANTS[t.v], g = new THREE.Group(), inner = new THREE.Group();
-  g.position.set(t.x, t.y, t.z); inner.rotation.y = t.rot; inner.scale.setScalar(t.s); g.add(inner);
-  const tm = new THREE.Mesh(v.trunk, MAT.bark[t.sp]), lm = new THREE.Mesh(v.leaves, MAT.leaf[t.sp]);
-  lm.customDepthMaterial = MAT.leaf[t.sp].userData.depth;
-  for (const m of [tm, lm]) { m.castShadow = m.receiveShadow = true; inner.add(m); }
-  scene.add(g);
-  const stump = new THREE.Mesh(MAT.stumpGeo, [MAT.logBark[t.sp], MAT.endGrain, MAT.endGrain]);
+  t.state = "falling"; t.shake = 0; setTreeMatrix(t); refreshMutFx(t);
+  const v = VARIANTS[t.v], d = treeSnapshot(t), holder = makeHolder(d);
+  holder.position.set(t.x, t.y, t.z);
+  scene.add(holder);
+  const stump = new THREE.Mesh(MAT.stumpGeo, logMats(t.sp, d.tags));
   stump.scale.set(t.r * 0.95, 0.55, t.r * 0.95); stump.position.set(t.x, t.y + 0.27, t.z); stump.castShadow = stump.receiveShadow = true;
   scene.add(stump); t.stump = stump;
-  falling.push({ t, g, axis: new THREE.Vector3(dirZ, 0, -dirX).normalize(), dir: new THREE.Vector3(dirX, 0, dirZ), theta: 0.05, omega: 0.12, phase: "fall", timer: 0, bounces: 0, L: v.height * t.s });
+  falling.push({ t, d, holder, axis: new THREE.Vector3(dirZ, 0, -dirX).normalize(), dir: new THREE.Vector3(dirX, 0, dirZ), theta: 0.05, omega: 0.12, phase: "fall", timer: 0, bounces: 0, L: v.height * t.s });
   state.stats.trees++; state.stats[t.sp]++;
-  toast("쓰러진다!", true); SFX.creak();
+  if (d.tags.length) { state.stats.mutTrees++; for (const k of d.tags) state.stats.mut[k] = (state.stats.mut[k] || 0) + 1; }
+  toast(d.tags.includes("titan") ? "타이탄이 쓰러진다!!" : "쓰러진다!", true); SFX.creak(t.mut.size ? 0.7 : 1);
+  if (d.tags.length) toast(`${treeLabel(d)} — 값 ×${fmtMult(tagMult(d.tags))}`);
   checkQuest(); save();
 }
 function updateFalling(dt) {
@@ -2145,96 +3047,115 @@ function updateFalling(dt) {
       const py = t.y + Math.cos(f.theta) * reach, ground = heightAt(px, pz) + v.crownR * t.s * 0.25;
       if (py <= ground || f.theta > Math.PI / 2 + 0.2) {
         if (f.bounces === 0) {
-          const d = Math.hypot(px - player.pos.x, pz - player.pos.y);
-          SFX.crash(clamp(1.4 - d / 30, 0.3, 1)); cam.shake = Math.max(cam.shake, clamp(0.5 - d / 60, 0.1, 0.45));
+          const dd = Math.hypot(px - player.pos.x, pz - player.pos.y), big = t.mut.size === "titan" ? 2.2 : t.mut.size === "big" ? 1.4 : 1;
+          SFX.crash(clamp((1.4 - dd / 30) * big, 0.3, 1.6)); cam.shake = Math.max(cam.shake, clamp((0.5 - dd / 60) * big, 0.1, 0.9));
           for (let k = 0; k < 6; k++) {
             const s = 0.15 + (k / 6) * 0.85, q = new THREE.Vector3(t.x + f.dir.x * f.L * s, 0, t.z + f.dir.z * f.L * s); q.y = heightAt(q.x, q.z) + 0.2;
-            emitPuff(q, 3, { size: 1.6, spread: 0.9, up: 0.6, life: 2.2, alpha: 0.35, color: [0.62, 0.57, 0.46] });
+            emitPuff(q, Math.round(3 * big), { size: 1.6 * big, spread: 0.9 * big, up: 0.6, life: 2.2, alpha: 0.35, color: [0.62, 0.57, 0.46] });
           }
-          emitLeaves(new THREE.Vector3(px, py + 1, pz), 26, t.sp, v.crownR * t.s * 1.5);
+          emitLeaves(new THREE.Vector3(px, py + 1, pz), Math.round(26 * big), t.sp, v.crownR * t.s * 1.5);
+          if (U.snow.value > 0.3) emitPuff(new THREE.Vector3(px, py + 1, pz), 16, { color: [0.95, 0.97, 1], size: 2.2, spread: v.crownR * t.s, up: 0.8, life: 2.4, alpha: 0.5, grow: 1 });
         }
         f.omega = -Math.abs(f.omega) * 0.22; f.bounces++;
         if (f.bounces > 2 || Math.abs(f.omega) < 0.3) { f.phase = "down"; f.omega = 0; }
       }
-      f.g.quaternion.setFromAxisAngle(f.axis, f.theta);
+      f.holder.quaternion.setFromAxisAngle(f.axis, f.theta);
     } else {
       f.timer += dt;
-      if (f.timer > 1.3) {
-        scene.remove(f.g);
-        const n = t.sp === "oak" ? Math.round(3.4 + t.s * 1.6) : t.sp === "pine" ? Math.round(2 + t.s * 1.5) : Math.round(1.5 + t.s);
-        for (let k = 0; k < n; k++) {
-          const s = 1.3 + k * 1.35 * Math.max(0.8, t.s), lat = (Math.random() - 0.5) * 0.6;
-          spawnLog(t.sp, t.x + f.dir.x * s - f.dir.z * lat, t.z + f.dir.z * s + f.dir.x * lat, Math.atan2(f.dir.z, -f.dir.x) + (Math.random() - 0.5) * 0.5, 0.4 + k * 0.1);
-        }
-        emitLeaves(new THREE.Vector3(t.x + f.dir.x * f.L * 0.7, t.y + 1, t.z + f.dir.z * f.L * 0.7), 20, t.sp, v.crownR * t.s);
-        emitPuff(new THREE.Vector3(t.x + f.dir.x * f.L * 0.6, t.y + 0.6, t.z + f.dir.z * f.L * 0.6), 6, { size: 1.8, spread: 1.4, up: 0.4, life: 1.8, alpha: 0.3, color: [0.5, 0.56, 0.38] });
+      if (f.timer > 0.8) {
         t.state = "stump"; t.regrowAt = U.time.value + 150 + Math.random() * 90;
+        felled.push({ holder: f.holder, d: f.d, base: new THREE.Vector3(t.x, t.y, t.z), dir: f.dir.clone(), len: f.L, state: "ground", t: 0 });
+        while (felled.filter((o) => o.state === "ground").length > 30) { const k = felled.findIndex((o) => o.state === "ground"); disposeHolder(felled[k].holder); felled.splice(k, 1); }
         falling.splice(i, 1);
       }
     }
   }
 }
-function spawnLog(sp, x, z, yaw, drop) {
-  const m = new THREE.Mesh(MAT.logGeo[sp], [MAT.logBark[sp], MAT.endGrain, MAT.endGrain]);
-  m.castShadow = m.receiveShadow = true;
-  m.rotation.set(0, yaw, Math.PI / 2, "YXZ");
-  const r = SPECIES[sp].logR, g = heightAt(x, z);
-  m.position.set(x, Math.max(g, -0.3) + r + drop, z);
-  scene.add(m);
-  logs.push({ m, sp, x, z, vy: 0, r, state: "ground", t: 0 });
-  if (logs.length > 160) { const old = logs.shift(); scene.remove(old.m); }
+// distance from a point to the lower part of a lying trunk (where you would grab it)
+function grabDist(o, x, z) {
+  const ax = o.base.x, az = o.base.z, bx = ax + o.dir.x * o.len * 0.6, bz = az + o.dir.z * o.len * 0.6, dx = bx - ax, dz = bz - az;
+  const k = clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1), 0, 1);
+  return Math.hypot(x - ax - dx * k, z - az - dz * k);
 }
-function updateLogs(dt) {
-  const cap = BAGS[state.bag].cap;
-  let fullNear = false;
-  for (let i = logs.length - 1; i >= 0; i--) {
-    const L = logs[i];
-    if (L.state === "ground") {
-      const g = Math.max(heightAt(L.x, L.z), -0.25) + L.r;
-      if (L.m.position.y > g) { L.vy -= 9.8 * dt; L.m.position.y = Math.max(g, L.m.position.y + L.vy * dt); if (L.m.position.y === g) L.vy = 0; }
-      const d = Math.hypot(L.x - player.pos.x, L.z - player.pos.y);
-      if (d < 1.6 && mode === "play") {
-        if (state.carried.length < cap) { L.state = "fly"; L.from = L.m.position.clone(); L.t = 0; state.carried.push(L.sp); SFX.pickup(); setPackLogs(); updateHUD(); }
-        else fullNear = true;
+function nearestFelled() {
+  let best = null, bd = 2.6;
+  for (const o of felled) if (o.state === "ground") { const d = grabDist(o, player.pos.x, player.pos.y); if (d < bd) { bd = d; best = o; } }
+  return best;
+}
+// carried pose: trunk on the right shoulder, crown ahead and slightly raised, balanced a third of the way up
+const CARRY_TILT = 0.22, _cq = new THREE.Quaternion(), _cq2 = new THREE.Quaternion();
+function carryTarget(o, outPos, outQuat) {
+  const v = VARIANTS[o.d.v], b = v.height * o.d.s * 0.36, axis = _v4.set(0, Math.sin(CARRY_TILT), Math.cos(CARRY_TILT));
+  outPos.copy(axis).multiplyScalar(-b);
+  outQuat.setFromAxisAngle(_v2.set(1, 0, 0), Math.PI / 2 - CARRY_TILT);
+}
+let carried = null;
+function liftTree(o) {
+  const str = STRENGTH[state.str];
+  if (o.d.weight > str.lift) {
+    const need = STRENGTH.findIndex((x) => x.lift >= o.d.weight);
+    toast(`너무 무거워요 (무게 ${o.d.weight}). 상점에서 힘을 ${need + 1}단계까지 길러야 들 수 있어요.`); SFX.deny(); return;
+  }
+  char.carry.attach(o.holder);
+  o.state = "lift"; o.t = 0; o.fromPos = o.holder.position.clone(); o.fromQuat = o.holder.quaternion.clone();
+  carried = o; state.carrying = o.d;
+  SFX.creak(1.4); SFX.pickup();
+  updateHUD(); save();
+}
+function dropTree() {
+  const o = carried; if (!o) return;
+  scene.attach(o.holder);
+  const fwd = _v2.set(Math.sin(player.yaw), 0, Math.cos(player.yaw)).clone(), bx = player.pos.x + fwd.x * 0.6, bz = player.pos.y + fwd.z * 0.6;
+  o.base.set(bx, heightAt(bx, bz) + 0.1, bz); o.dir.copy(fwd);
+  o.state = "drop"; o.t = 0; o.fromPos = o.holder.position.clone(); o.fromQuat = o.holder.quaternion.clone();
+  o.toPos = o.base.clone(); o.toQuat = new THREE.Quaternion().setFromUnitVectors(UP, fwd);
+  carried = null; state.carrying = null;
+  SFX.crash(0.35); updateHUD(); save();
+}
+function updateFelled(dt) {
+  const ease = (k) => k * k * (3 - 2 * k);
+  for (let i = felled.length - 1; i >= 0; i--) {
+    const o = felled[i];
+    if (o.state === "lift") {
+      o.t = Math.min(1, o.t + dt / 0.55);
+      carryTarget(o, _v3, _cq);
+      o.holder.position.lerpVectors(o.fromPos, _v3, ease(o.t)); o.holder.quaternion.slerpQuaternions(o.fromQuat, _cq, ease(o.t));
+      if (o.t >= 1) o.state = "carried";
+    } else if (o.state === "drop") {
+      o.t = Math.min(1, o.t + dt / 0.4);
+      o.holder.position.lerpVectors(o.fromPos, o.toPos, ease(o.t)); o.holder.quaternion.slerpQuaternions(o.fromQuat, o.toQuat, ease(o.t));
+      if (o.t >= 1) { o.state = "ground"; emitPuff(o.base, 6, { size: 1.2, spread: 1, up: 0.4, life: 1.4, alpha: 0.3, color: [0.6, 0.55, 0.45] }); }
+    } else if (o.state === "throw") {
+      o.t = Math.min(1, o.t + dt / 0.9);
+      const k = ease(o.t);
+      o.holder.position.lerpVectors(o.fromPos, o.toPos, k); o.holder.position.y += Math.sin(k * Math.PI) * 4;
+      o.holder.scale.setScalar(o.d.s * (1 - k * 0.85));
+      if (o.t >= 1) {
+        disposeHolder(o.holder); felled.splice(i, 1);
+        emitPuff(o.toPos, 10, { size: 1.4, spread: 1.2, up: 0.8, life: 1.4, alpha: 0.4, color: [0.65, 0.58, 0.45] });
+        for (let k2 = 0; k2 < 12; k2++) emitSparkle(o.toPos.clone().add(randDir(Math.random).multiplyScalar(1.2)), [1.6, 1.2, 0.5], 0.4, 0.8);
       }
-    } else if (L.state === "fly") {
-      L.t += dt * 4;
-      const to = new THREE.Vector3(player.pos.x, player.y + 1.4, player.pos.y), k = Math.min(1, L.t);
-      L.m.position.lerpVectors(L.from, to, k); L.m.position.y += Math.sin(k * Math.PI) * 0.8;
-      L.m.scale.setScalar(1 - k * 0.6);
-      if (L.t >= 1) { scene.remove(L.m); logs.splice(i, 1); save(); }
-    } else if (L.state === "sell") {
-      L.t += dt * 2.6;
-      const k = Math.min(1, L.t);
-      L.m.position.lerpVectors(L.from, L.to, k); L.m.position.y += Math.sin(k * Math.PI) * 1.4;
-      L.m.rotation.x += dt * 8;
-      if (L.t >= 1) { scene.remove(L.m); logs.splice(i, 1); }
     }
   }
-  if (fullNear && msgCooldown <= 0) { toast(`배낭이 가득 찼어요 (${cap}개). 오두막 장작더미로 가져가세요.`); msgCooldown = 6; }
 }
-function updateSelling(dt) {
+function sellCarried() {
+  const o = carried, d = o.d;
+  scene.attach(o.holder);
+  const [wx, wz] = fromCabinLocal(5.2, 0);
+  o.state = "throw"; o.t = 0; o.fromPos = o.holder.position.clone(); o.toPos = new THREE.Vector3(wx, CLEAR_H + 1.6, wz);
+  carried = null; state.carrying = null;
+  state.coins += d.value; state.stats.sold++; state.stats.earned += d.value;
+  setWoodpile(woodpileCount());
+  for (let k = 0; k < 5; k++) setTimeout(() => SFX.coin(k), k * 70);
+  floater(`${treeLabel(d)} +${d.value.toLocaleString("ko-KR")}`, new THREE.Vector3(player.pos.x, player.y + 2.4, player.pos.y));
+  toast(`${treeLabel(d)} 판매  +${d.value.toLocaleString("ko-KR")} 코인`);
+  updateHUD(); checkQuest(); save();
+}
+const woodpileCount = () => 10 + Math.floor((state.stats.logsSold || 0) / 2) + state.stats.sold * 2;
+function updateSelling() {
+  if (!carried || carried.state !== "carried" || mode !== "play") return;
   const [lx, lz] = toCabinLocal(player.pos.x, player.pos.y);
-  const inZone = Math.hypot(lx - SELL_LOCAL[0], lz - SELL_LOCAL[1]) < 1.9;
-  if (inZone && state.carried.length && !sell.active && mode === "play") { sell.active = true; sell.timer = 0; sell.count = 0; sell.gained = 0; }
-  if (!sell.active) return;
-  sell.timer -= dt;
-  if (sell.timer <= 0 && state.carried.length) {
-    const sp = state.carried.pop(), price = SPECIES[sp].price;
-    state.coins += price; state.stats.logsSold++; state.stats.earned += price; sell.gained += price; sell.count++;
-    const m = new THREE.Mesh(MAT.logGeo[sp], [MAT.logBark[sp], MAT.endGrain, MAT.endGrain]); m.rotation.set(0, 0, Math.PI / 2);
-    m.castShadow = true; scene.add(m);
-    const [wx, wz] = fromCabinLocal(5.2, (Math.random() - 0.5) * 3.6);
-    logs.push({ m, sp, state: "sell", t: 0, from: new THREE.Vector3(player.pos.x, player.y + 1.4, player.pos.y), to: new THREE.Vector3(wx, CLEAR_H + 1.2, wz), r: 0.2 });
-    SFX.coin(sell.count); setPackLogs(); setWoodpile(10 + Math.floor(state.stats.logsSold / 2)); updateHUD();
-    floater(`+${price}`, new THREE.Vector3(player.pos.x, player.y + 2.2, player.pos.y));
-    sell.timer = 0.09;
-  }
-  if (!state.carried.length && sell.timer <= 0) {
-    sell.active = false;
-    toast(`통나무 ${sell.count}개 판매  +${sell.gained} 코인`);
-    checkQuest(); save();
-  }
+  if (Math.hypot(lx - SELL_LOCAL[0], lz - SELL_LOCAL[1]) < 2.2) sellCarried();
 }
 function updateTrees(dt) {
   const now = U.time.value;
@@ -2242,6 +3163,10 @@ function updateTrees(dt) {
     if (t.shake > 0.001) { t.shakeT += dt; t.shake *= Math.exp(-dt * 4.5); setTreeMatrix(t); if (t.shake <= 0.001) { t.shake = 0; setTreeMatrix(t); } }
     else if (t.state === "stump" && now > t.regrowAt && Math.hypot(t.x - player.pos.x, t.z - player.pos.y) > 16) {
       scene.remove(t.stump); t.stump = null; t.state = "growing"; t.growT = 0;
+      // a new tree grows in the same spot: weather marks are gone, gold/crystal are rolled again
+      Object.assign(t.mut, { wet: false, frost: false, shock: false });
+      rollMaterialMut(t, Math.random);
+      setTreeMut(t);
     } else if (t.state === "growing") {
       t.growT = Math.min(1, t.growT + dt / 8);
       if (t.growT >= 1) { t.state = "standing"; t.hp = t.maxHp; }
@@ -2253,6 +3178,7 @@ function updateTrees(dt) {
 /* ---------- camera ---------- */
 const camRay = new THREE.Raycaster(), _v3 = new THREE.Vector3();
 function updateCamera(dt, time) {
+  if (DEBUG.cam) { camera.position.set(DEBUG.cam.x, DEBUG.cam.y, DEBUG.cam.z); camera.lookAt(DEBUG.cam.lx, DEBUG.cam.ly, DEBUG.cam.lz); return; }
   if (mode === "title" || mode === "loading") {
     const a = time * 0.05 + 0.6, tx = CABIN.x + 2, tz = CABIN.z + 2;
     camera.position.set(tx + Math.sin(a) * 24, CLEAR_H + 8 + Math.sin(time * 0.1) * 1.5, tz + Math.cos(a) * 24);
@@ -2261,8 +3187,10 @@ function updateCamera(dt, time) {
   }
   const tgt = _v.set(player.pos.x, player.y + 1.55, player.pos.y);
   if (time - cam.lastInput > 2.5 && player.speedNow > 1 && !player.chop) cam.yaw = angLerp(cam.yaw, player.yaw + Math.PI, dt * 0.9);
-  const cp = Math.cos(cam.pitch);
-  const want = _v2.set(tgt.x + Math.sin(cam.yaw) * cp * cam.dist, tgt.y + Math.sin(cam.pitch) * cam.dist, tgt.z + Math.cos(cam.yaw) * cp * cam.dist);
+  cam.carry = lerp(cam.carry || 0, carried ? 1 : 0, 1 - Math.exp(-dt * 2.5));
+  const pitch = cam.pitch + cam.carry * 0.16, dist = cam.dist + cam.carry * (4 + Math.min(6, carried ? carried.len * 0.15 : 0));
+  const cp = Math.cos(pitch);
+  const want = _v2.set(tgt.x + Math.sin(cam.yaw) * cp * dist, tgt.y + Math.sin(pitch) * dist, tgt.z + Math.cos(cam.yaw) * cp * dist);
   want.y = Math.max(want.y, Math.max(heightAt(want.x, want.z), 0) + 0.6);
   if (cabinDist(tgt.x, tgt.z) < 30) {
     const dir = _v3.subVectors(want, tgt), len = dir.length();
@@ -2282,14 +3210,13 @@ function updateCamera(dt, time) {
    HUD
    ============================================================ */
 function updateHUD() {
-  const cap = BAGS[state.bag].cap;
-  $("#logCount").textContent = state.carried.length;
-  $("#logCap").textContent = cap;
-  $("#logRow").classList.toggle("full", state.carried.length >= cap);
+  const c = state.carrying;
+  $("#carryVal").textContent = c ? `${treeLabel(c)} · ${c.value.toLocaleString("ko-KR")}` : "없음";
   $("#coins").textContent = state.coins.toLocaleString("ko-KR");
-  $("#axeName").textContent = `${AXES[state.axe].name} · 배낭 ${cap} · 장화 ${Math.round(BOOTS[state.boots].spd * 100)}%`;
-  if (state.quest < QUESTS.length) {
-    const q = QUESTS[state.quest], [a, b] = q.prog(state);
+  $("#axeName").textContent = `${AXES[state.axe].name} · ${STRENGTH[state.str].name} · 장화 ${Math.round(BOOTS[state.boots].spd * 100)}%`;
+  const q = currentQuest();
+  if (q) {
+    const [a, b] = q.prog(state);
     $("#questText").textContent = `${q.text} (${Math.min(a, b)}/${b})`;
     $("#questBar i").style.width = (Math.min(1, a / b) * 100) + "%";
   } else {
@@ -2327,6 +3254,26 @@ function nearShop() {
   const [lx, lz] = toCabinLocal(player.pos.x, player.pos.y);
   return Math.hypot(lx - SHOP_LOCAL[0], lz - SHOP_LOCAL[1]) < 2.2;
 }
+// Floating name tags over rare mutated trees nearby.
+function updateMutLabels() {
+  if (!mfx.labelEls) mfx.labelEls = Array.from({ length: 4 }, () => { const d = document.createElement("div"); d.className = "mutLabel"; $("#mutLabels").appendChild(d); return d; });
+  const list = [];
+  if (mode === "play") gNear(player.pos.x, player.pos.y, 45, (t) => { if (t.kind === "tree" && t.state === "standing" && t !== target && (t.mut.gold || t.mut.crystal || t.mut.shock || t.mut.size === "titan")) list.push(t); });
+  list.sort((a, b) => Math.hypot(a.x - player.pos.x, a.z - player.pos.y) - Math.hypot(b.x - player.pos.x, b.z - player.pos.y));
+  mfx.labelEls.forEach((el, i) => {
+    const t = list[i];
+    const s = t && screenPos(_v4.set(t.x, t.y + VARIANTS[t.v].height * t.s + 0.6, t.z));
+    if (!t || !s.ok) { el.style.display = "none"; return; }
+    el.style.display = "";
+    el.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -100%)`;
+    const tags = treeTags(t), key = t.sp + tags.join();
+    if (el.dataset.key !== key) {
+      const main = tags.find((k) => ["gold", "crystal", "shock"].includes(k)) || tags[0];
+      el.dataset.key = key; el.style.color = MUTS[main].color;
+      el.textContent = `${tags.map((k) => MUTS[k].name).join(" · ")} ${SPECIES[t.sp].name} ×${fmtMult(tagMult(tags))}`;
+    }
+  });
+}
 let hudTimer = 0;
 function updateWorldHUD(dt) {
   hudTimer -= dt;
@@ -2336,9 +3283,14 @@ function updateWorldHUD(dt) {
     const s = screenPos(new THREE.Vector3(target.x, target.y + 2.6, target.z));
     hpEl.classList.toggle("hidden", !s.ok);
     hpEl.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -100%)`;
-    hpEl.querySelector(".name").textContent = SPECIES[target.sp].name;
+    const tags = treeTags(target), key = target.sp + tags.join();
+    if (hpEl.dataset.key !== key) {
+      hpEl.dataset.key = key;
+      hpEl.querySelector(".name").innerHTML = tags.map((k) => `<span style="color:${MUTS[k].color}">${MUTS[k].name}</span> `).join("") + SPECIES[target.sp].name + (tags.length ? ` <b class="mult">×${fmtMult(tagMult(tags))}</b>` : "");
+    }
     hpEl.querySelector("i").style.width = (clamp(target.hp / target.maxHp, 0, 1) * 100) + "%";
   } else hpEl.classList.add("hidden");
+  updateMutLabels();
   if (hudTimer > 0) return;
   hudTimer = 0.1;
   const st = $("#stamina");
@@ -2346,13 +3298,17 @@ function updateWorldHUD(dt) {
   st.firstElementChild.style.width = player.stamina + "%";
   if (mode !== "play") { setPrompt(""); return; }
   const touch = isTouch;
-  if (nearShop()) setPrompt(touch ? "<b>상점</b> 버튼으로 오두막 상점 열기" : "<kbd>E</kbd> 오두막 상점 열기");
-  else if (sell.active) setPrompt("통나무를 파는 중…");
+  const key = (k, label) => (touch ? `<b>${label}</b> 버튼` : `<kbd>${k}</kbd>`), fo = !carried && nearestFelled();
+  let use = "들기";
+  if (nearShop()) { setPrompt(`${key("E", "상점")} 오두막 상점 열기`); use = "상점"; }
+  else if (carried) { setPrompt(`${treeLabel(carried.d)} 운반 중 — 장작더미(노란 원)로 가면 팔려요 · ${key("Q", "내려놓기")} 내려놓기`); use = "내려놓기"; }
+  else if (fo) setPrompt(fo.d.weight > STRENGTH[state.str].lift ? `${treeLabel(fo.d)} — 너무 무거워요 (무게 ${fo.d.weight}, 들 수 있는 무게 ${STRENGTH[state.str].lift})` : `${key("E", "들기")} ${treeLabel(fo.d)} 통째로 들기 · 판매가 ${fo.d.value.toLocaleString("ko-KR")}`);
   else if (target) setPrompt(touch ? "<b>도끼질</b> 버튼으로 나무 베기" : "<kbd>Space</kbd> / 클릭 — 나무 베기");
-  else if (state.carried.length >= BAGS[state.bag].cap) setPrompt("배낭이 가득 찼어요 — 미니맵의 오두막(노란 점)으로 가세요");
   else setPrompt("");
+  if (touch && $("#bUse").textContent !== use) $("#bUse").textContent = use;
   const h = Math.floor(state.hour) % 24, m = Math.floor((state.hour % 1) * 60);
-  $("#clock").textContent = `${env.night > 0.5 ? "밤" : env.day > 0.5 ? "낮" : h < 12 ? "새벽" : "저녁"} ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  const W = WEATHER[weather.type];
+  $("#clock").textContent = `${env.night > 0.5 ? "밤" : env.day > 0.5 ? "낮" : h < 12 ? "새벽" : "저녁"} ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")} · ${W.icon} ${W.name}`;
 }
 
 /* ---------- minimap ---------- */
@@ -2384,12 +3340,24 @@ function drawMinimap(dt) {
   g.imageSmoothingEnabled = true;
   g.drawImage(mapBase, -HALF, -HALF);
   g.fillStyle = "rgba(24,46,20,0.85)";
+  const marked = [];
   gNear(player.pos.x, player.pos.y, 70, (o) => {
     if (o.kind !== "tree" || (o.state !== "standing" && o.state !== "growing")) return;
     g.beginPath(); g.arc(o.x, o.z, 0.9 + o.s * 0.5, 0, TAU); g.fill();
+    const m = o.mut;
+    if (m.size === "titan" || m.gold || m.crystal || m.shock || m.frost || m.wet) marked.push(o);
   });
+  // mutation markers: weather marks small, rare mutations bright, titans ringed
+  g.lineWidth = 0.6; g.strokeStyle = "rgba(0,0,0,0.7)";
+  for (const pass of [0, 1]) for (const o of marked) {
+    const m = o.mut, rare = m.gold || m.crystal || m.shock;
+    if (pass === 0 && !rare && (m.frost || m.wet)) { g.fillStyle = m.frost ? MUTS.frost.color : MUTS.wet.color; g.beginPath(); g.arc(o.x, o.z, 1.3, 0, TAU); g.fill(); }
+    if (pass === 1 && rare) { g.fillStyle = MUTS[m.gold ? "gold" : m.crystal ? "crystal" : "shock"].color; g.beginPath(); g.arc(o.x, o.z, 2.3, 0, TAU); g.fill(); g.stroke(); }
+    if (pass === 1 && m.size === "titan") { g.strokeStyle = MUTS.titan.color; g.lineWidth = 1.1; g.beginPath(); g.arc(o.x, o.z, 4.2, 0, TAU); g.stroke(); g.strokeStyle = "rgba(0,0,0,0.7)"; g.lineWidth = 0.6; }
+  }
   g.fillStyle = "#f0b860";
-  for (const L of logs) if (L.state === "ground") g.fillRect(L.x - 0.6, L.z - 0.6, 1.2, 1.2);
+  g.strokeStyle = "#f0b860"; g.lineWidth = 1.4;
+  for (const o of felled) if (o.state === "ground") { g.beginPath(); g.moveTo(o.base.x, o.base.z); g.lineTo(o.base.x + o.dir.x * o.len * 0.8, o.base.z + o.dir.z * o.len * 0.8); g.stroke(); }
   g.save(); g.translate(CABIN.x, CABIN.z); g.rotate(-CABIN.rot);
   g.fillStyle = "#6d4a2c"; g.fillRect(-4, -3, 8, 6); g.strokeStyle = "#ffd27a"; g.lineWidth = 0.8; g.strokeRect(-4, -3, 8, 6);
   g.fillStyle = "#ffc35a"; g.beginPath(); g.arc(SELL_LOCAL[0], SELL_LOCAL[1], 1.8, 0, TAU); g.fill();
@@ -2405,6 +3373,17 @@ function drawMinimap(dt) {
     g.fillStyle = "#ffc35a"; g.beginPath(); g.arc(x, y, 7, 0, TAU); g.fill();
     g.fillStyle = "#2a1b08"; g.font = "bold 10px sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("집", x, y + 0.5);
   }
+  let rare = null, rd = 1e9;
+  for (const t of trees) {
+    if (t.state !== "standing" || !(t.mut.gold || t.mut.crystal || t.mut.size === "titan")) continue;
+    const d = Math.hypot(t.x - player.pos.x, t.z - player.pos.y);
+    if (d < rd) { rd = d; rare = t; }
+  }
+  if (rare && rd * zoom > R - 6 && rd < 240) {
+    const a = Math.atan2(rare.z - player.pos.y, rare.x - player.pos.x) + cam.yaw, x = R + Math.cos(a) * (R - 10), y = R + Math.sin(a) * (R - 10);
+    g.fillStyle = MUTS[rare.mut.gold ? "gold" : rare.mut.crystal ? "crystal" : "titan"].color; g.strokeStyle = "#000"; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(x + Math.cos(a) * 7, y + Math.sin(a) * 7); g.lineTo(x + Math.cos(a + 2.4) * 6, y + Math.sin(a + 2.4) * 6); g.lineTo(x + Math.cos(a - 2.4) * 6, y + Math.sin(a - 2.4) * 6); g.closePath(); g.fill(); g.stroke();
+  }
   const na = cam.yaw, nx = R + Math.sin(na) * (R - 13), ny = R - Math.cos(na) * (R - 13);
   g.fillStyle = "rgba(0,0,0,0.55)"; g.beginPath(); g.arc(nx, ny, 10, 0, TAU); g.fill();
   g.fillStyle = "#ffdf9a"; g.font = "bold 13px sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("N", nx, ny + 1);
@@ -2413,7 +3392,7 @@ function drawMinimap(dt) {
 /* ---------- shop ---------- */
 const SHOP_ITEMS = [
   { key: "axe", title: "도끼", list: AXES, desc: (lv) => `${AXES[lv].name} · 위력 ${AXES[lv].dmg}배 · 휘두르기 ${Math.round((0.78 / AXES[lv].speed) * 100)}%` },
-  { key: "bag", title: "배낭", list: BAGS, desc: (lv) => `통나무 ${BAGS[lv].cap}개까지 운반` },
+  { key: "str", title: "힘", list: STRENGTH, desc: (lv) => `${STRENGTH[lv].name} · ${STRENGTH[lv].lift >= 99 ? "어떤 나무든" : `무게 ${STRENGTH[lv].lift}까지`} 들기 · 메고 걷는 속도 ↑` },
   { key: "boots", title: "장화", list: BOOTS, desc: (lv) => `이동 속도 ${Math.round(BOOTS[lv].spd * 100)}%` },
 ];
 function renderShop() {
@@ -2431,7 +3410,8 @@ function renderShop() {
     card.appendChild(b); box.appendChild(card);
   });
   const s = state.stats;
-  $("#shopStats").innerHTML = `벤 나무 ${s.trees}그루 (소나무 ${s.pine} · 자작나무 ${s.birch} · 참나무 ${s.oak})<br>판 통나무 ${s.logsSold}개 · 번 코인 ${s.earned.toLocaleString("ko-KR")}`;
+  const mutLine = MUT_ORDER.filter((k) => s.mut[k]).map((k) => `${MUTS[k].name} ${s.mut[k]}`).join(" · ");
+  $("#shopStats").innerHTML = `벤 나무 ${s.trees}그루 (소나무 ${s.pine} · 자작나무 ${s.birch} · 참나무 ${s.oak})<br>변이 나무 ${s.mutTrees}그루${mutLine ? ` (${mutLine})` : ""}<br>판 나무 ${s.sold}그루 · 번 코인 ${s.earned.toLocaleString("ko-KR")}`;
 }
 function buy(key) {
   const it = SHOP_ITEMS.find((x) => x.key === key), next = it.list[state[key] + 1];
@@ -2443,7 +3423,13 @@ function buy(key) {
 }
 function openShop() { initAudio(); mode = "shop"; renderShop(); $("#shop").classList.remove("hidden"); player.chopHeld = false; }
 function closeShop() { $("#shop").classList.add("hidden"); mode = "play"; canvas.focus(); }
-function interact() { if (mode === "play" && nearShop()) openShop(); }
+function interact() {
+  if (mode !== "play") return;
+  if (nearShop()) { openShop(); return; }
+  if (carried) { if (carried.state === "carried") dropTree(); return; }
+  const o = nearestFelled();
+  if (o) liftTree(o);
+}
 function setPaused(p) {
   paused = p; mode = p ? "pause" : "play";
   $("#pause").classList.toggle("hidden", !p);
@@ -2465,7 +3451,7 @@ addEventListener("keydown", (e) => {
   if (mode === "title") { if (e.code === "Enter" || e.code === "Space") startGame(); return; }
   if (mode === "shop") {
     if (e.code === "Escape" || e.code === "KeyE") closeShop();
-    const n = { Digit1: "axe", Digit2: "bag", Digit3: "boots", Numpad1: "axe", Numpad2: "bag", Numpad3: "boots" }[e.code];
+    const n = { Digit1: "axe", Digit2: "str", Digit3: "boots", Numpad1: "axe", Numpad2: "str", Numpad3: "boots" }[e.code];
     if (n) buy(n);
     return;
   }
@@ -2475,6 +3461,7 @@ addEventListener("keydown", (e) => {
   initAudio();
   if ((e.code === "Space" || e.code === "KeyJ") && !e.repeat) { player.chopHeld = true; tryChop(); }
   if (e.code === "KeyE" && !e.repeat) interact();
+  if (e.code === "KeyQ" && !e.repeat && carried && carried.state === "carried") dropTree();
   if (e.code === "Escape" || e.code === "KeyP") setPaused(true);
   if (e.code === "KeyM") setMuted(!sfx.muted);
 });
@@ -2527,7 +3514,11 @@ const chopBtn = $("#bChop");
 chopBtn.addEventListener("pointerdown", (e) => { chopBtn.setPointerCapture(e.pointerId); chopBtn.classList.add("on"); player.chopHeld = true; tryChop(); });
 const chopUp = () => { chopBtn.classList.remove("on"); player.chopHeld = false; };
 chopBtn.addEventListener("pointerup", chopUp); chopBtn.addEventListener("pointercancel", chopUp);
-$("#bUse").addEventListener("pointerdown", () => { initAudio(); if (nearShop()) openShop(); else toast("오두막 현관 앞에서 상점을 열 수 있어요."); });
+$("#bUse").addEventListener("pointerdown", () => {
+  initAudio();
+  if (nearShop() || carried || nearestFelled()) interact();
+  else toast("쓰러뜨린 나무 옆에서 들 수 있고, 오두막 현관 앞에서 상점을 열 수 있어요.");
+});
 $("#pauseBtn").addEventListener("click", () => { if (mode === "play") setPaused(true); });
 $("#resumeBtn").addEventListener("click", () => setPaused(false));
 $("#muteBtn").addEventListener("click", () => setMuted(!sfx.muted));
@@ -2545,7 +3536,26 @@ addEventListener("resize", () => {
 });
 function updatePointScale() {
   const s = (innerHeight * renderer.getPixelRatio()) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
-  parts.puff.pts.material.uniforms.uScale.value = s; parts.flies.pts.material.uniforms.uScale.value = s;
+  parts.puff.pts.material.uniforms.uScale.value = s; parts.flies.pts.material.uniforms.uScale.value = s; parts.spark.pts.material.uniforms.uScale.value = s;
+  if (wfx.snow) wfx.snow.material.uniforms.uScale.value = s;
+}
+// Sparkles, sparks and drips around mutated trees near the player.
+let mutFxTimer = 0;
+function updateMutationAmbience(dt) {
+  mutFxTimer -= dt; if (mutFxTimer > 0) return; mutFxTimer = 0.2;
+  let sparkled = false;
+  gNear(player.pos.x, player.pos.y, 32, (t) => {
+    if (t.kind !== "tree" || t.state !== "standing") return;
+    const m = t.mut, v = VARIANTS[t.v], H = v.height * t.s, cr = v.crownR * t.s;
+    const crown = () => new THREE.Vector3(t.x + (Math.random() - 0.5) * cr * 1.4, t.y + H * (0.45 + Math.random() * 0.45), t.z + (Math.random() - 0.5) * cr * 1.4);
+    // a point in the air just outside the crown, where sparkles hang
+    const halo = () => { const d = randDir(Math.random), r = cr * (0.75 + Math.random() * 0.5); return new THREE.Vector3(t.x + d.x * r, t.y + v.crownY * t.s + d.y * r * 0.8, t.z + d.z * r); };
+    if (m.gold) { for (let k = 0; k < 3; k++) emitSparkle(halo(), [1.6, 1.15, 0.45], 0.4); if (Math.random() < 0.25) emitLeaves(crown(), 1, t.sp, 0.5, GOLD_LEAVES); if (!sparkled && Math.random() < 0.25) { SFX.sparkle(); sparkled = true; } }
+    if (m.crystal) for (let k = 0; k < 2; k++) emitSparkle(halo(), [0.7, 1.3, 1.8], 0.38);
+    if (m.frost) { if (Math.random() < 0.7) emitSparkle(halo(), [1.3, 1.45, 1.7], 0.28, 1.2); if (Math.random() < 0.4) emitPuff(new THREE.Vector3(t.x + (Math.random() - 0.5) * 3, t.y + 0.2, t.z + (Math.random() - 0.5) * 3), 1, { color: [0.9, 0.95, 1], size: 1.6, spread: 0.6, up: 0.05, life: 2.5, alpha: 0.22, grow: 1 }); }
+    if (m.shock && Math.random() < 0.45) emitPuff(new THREE.Vector3(t.x + (Math.random() - 0.5) * t.r, t.y + 0.5 + Math.random() * H * 0.4, t.z + (Math.random() - 0.5) * t.r), 1, { color: [0.36, 0.35, 0.34], size: 0.5, spread: 0.1, up: 0.5, life: 3, alpha: 0.28, grow: 2.2 });
+    if (m.wet && Math.random() < 0.35) emitPuff(crown(), 1, { color: [0.75, 0.85, 1], size: 0.12, spread: 0.02, up: 0, life: 0.9, alpha: 0.7, grow: 0, vel: new THREE.Vector3(0, -4, 0) });
+  });
 }
 
 /* ============================================================
@@ -2564,8 +3574,9 @@ function startGame() {
   if (isTouch) $("#touch").classList.remove("hidden");
   const tgt = new THREE.Vector3(player.pos.x, player.y + 1.55, player.pos.y);
   camera.position.copy(tgt).add(new THREE.Vector3(Math.sin(cam.yaw) * cam.dist, 3, Math.cos(cam.yaw) * cam.dist));
-  updateHUD(); updateGrass(true);
+  updateHUD(); updateGrass();
   toast(state.stats.trees ? "다시 숲으로! 오늘도 힘차게 베어 봅시다." : "숲에 온 걸 환영해요. 가까운 나무 앞에서 Space(또는 클릭)로 도끼질!");
+  setTimeout(() => toast("숲 곳곳에 황금·수정·거대·타이탄 나무가 있어요. 미니맵의 색 점과 테두리 화살표를 따라가 보세요."), 3500);
   canvas.focus();
 }
 const DEBUG = { speed: 1 };
@@ -2594,11 +3605,13 @@ function frame(now) {
     updatePlayer(dt);
     updateFalling(dt);
     updateTrees(dt);
-    updateLogs(dt);
-    updateSelling(dt);
+    updateFelled(dt);
+    updateSelling();
     updateParticles(dt);
     updateAmbience(dt);
-    grassTimer -= dt; if (grassTimer <= 0) { grassTimer = 0.25; updateGrass(false); }
+    grassTimer -= dt; if (grassTimer <= 0) { grassTimer = 0.25; updateGrass(); }
+    if (mode === "play") updateWeather(dt);
+    updateMutationAmbience(dt);
     if (Math.random() < dt * 3) emitPuff(cabin.chimneyTop.clone().applyMatrix4(cabin.group.matrixWorld), 1, { color: [0.62, 0.62, 0.64], size: 1.1, spread: 0.15, up: 0.9, life: 4.5, alpha: 0.32, grow: 2.2, vel: new THREE.Vector3(0.35, 0.4, 0.1) });
   }
   updateSky(state.hour);
@@ -2610,6 +3623,13 @@ function frame(now) {
   updateBirds(U.time.value);
   animateCharacter(dt, U.time.value);
   updateCamera(dt, U.time.value);
+  camera.updateMatrixWorld();
+  U.sunView.value.copy(lightDir).transformDirection(camera.matrixWorldInverse);
+  if (mode === "title") U.focus.value.copy(camera.position); else U.focus.value.set(player.pos.x, player.y + 1.2, player.pos.y);
+  updateWeatherFx(dt);
+  updateLOD(dt);
+  updateAuras(U.time.value);
+  updateArcs(dt);
   sky.position.copy(camera.position);
   const sp = player.pos;
   sun.position.set(sp.x + lightDir.x * 120, player.y + lightDir.y * 120, sp.y + lightDir.z * 120);
@@ -2627,26 +3647,34 @@ async function init() {
   buildTreeAssets();
   await step(58, "숲을 심는 중…");
   buildCabin();
+  buildMutFx();
   placeTrees();
+  bakeTreeShade();
   await step(72, "풀과 바위를 흩뿌리는 중…");
   buildGroundCover();
   await step(86, "나무꾼을 깨우는 중…");
   buildLumberjack();
-  buildParticles(); updatePointScale(); buildBirds();
+  buildParticles(); buildWeather(); updatePointScale(); buildBirds();
   const hadSave = load();
-  buildAxeMesh(state.axe); setPackLogs(); setWoodpile(10 + Math.floor(state.stats.logsSold / 2));
+  buildAxeMesh(state.axe); setWoodpile(woodpileCount());
   spawnPlayer();
+  if (state.carrying) {
+    const o = { holder: makeHolder(state.carrying), d: state.carrying, base: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, 1), len: VARIANTS[state.carrying.v].height * state.carrying.s, state: "carried", t: 1 };
+    char.carry.add(o.holder); carryTarget(o, o.holder.position, o.holder.quaternion);
+    felled.push(o); carried = o;
+  }
   buildMapBase();
-  updateGrass(true);
+  await buildAllGrass((f) => step(Math.round(90 + f * 9), "풀밭을 가꾸는 중…"));
+  updateGrass();
   await step(100, "준비 완료!");
-  if (isTouch) $("#controls").innerHTML = "<span>왼쪽 조이스틱</span><span>이동 (끝까지 밀면 달리기)</span><span>도끼질 버튼</span><span>나무 베기 (누르고 있으면 계속)</span><span>화면 드래그</span><span>카메라 회전</span><span>상점 버튼</span><span>오두막 현관 앞에서 상점 열기</span>";
+  if (isTouch) $("#controls").innerHTML = "<span>왼쪽 조이스틱</span><span>이동 (끝까지 밀면 달리기)</span><span>도끼질 버튼</span><span>나무 베기 (누르고 있으면 계속)</span><span>화면 드래그</span><span>카메라 회전</span><span>들기 버튼</span><span>쓰러진 나무 들기 · 내려놓기 · 상점</span>";
   if (hadSave && state.stats.trees > 0) $("#saveInfo").textContent = `이어하기 — 코인 ${state.coins.toLocaleString("ko-KR")} · 벤 나무 ${state.stats.trees}그루 · ${AXES[state.axe].name}`;
   $("#loading").classList.add("hidden");
   $("#title").classList.remove("hidden");
   mode = "title";
   $("#startBtn").focus();
 }
-window.__woodcutter = { state, player, trees, cam, logs, get mode() { return mode; }, setHour: (h) => { state.hour = h; }, tryChop, teleport: (x, z) => { player.pos.set(x, z); }, char, camera, scene, grassChunks, DEBUG, VARIANTS, fromCabinLocal, setPackLogs2: () => setPackLogs(), findTarget, buildAxeMesh, setPackLogs, info: () => ({ ...renderer.info.render }) };
+window.__woodcutter = { state, player, trees, cam, felled, interact, get carried() { return carried; }, get mode() { return mode; }, setHour: (h) => { state.hour = h; }, tryChop, teleport: (x, z) => { player.pos.set(x, z); }, char, camera, scene, grassChunks, DEBUG, VARIANTS, fromCabinLocal, findTarget, buildAxeMesh, info: () => ({ ...renderer.info.render }), weather, setWeather, lightning, setTreeMut, U, fellTree, falling, setupTree };
 requestAnimationFrame(frame);
 init().catch((err) => { console.error(err); $("#loadMsg").textContent = "숲을 만드는 중 오류가 났습니다: " + err.message; });
 </script>
