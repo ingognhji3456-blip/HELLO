@@ -1960,7 +1960,8 @@ function buildLumberjack() {
     boot.add(mesh(new THREE.CapsuleGeometry(0.088, 0.08, 4, 12), M.boot, 0, 0.03, 0));
     const foot = mesh(new THREE.CapsuleGeometry(0.075, 0.15, 4, 12), M.boot, 0, -0.045, 0.05); foot.rotation.x = Math.PI / 2; foot.scale.set(1.05, 1, 0.75); boot.add(foot);
     boot.add(mesh(new THREE.BoxGeometry(0.16, 0.03, 0.31), M.sole, 0, -0.1, 0.05));
-    return { g, knee };
+    g.rotation.order = "ZXY";
+    return { g, knee, boot, side };
   };
   const legL = leg(1), legR = leg(-1);
   const torso = grp(hips, 0, 0.06, 0);
@@ -2060,20 +2061,134 @@ function axeQuat(a, b, r, out) {
   return out.setFromRotationMatrix(_mb.makeBasis(_ax, _ah, _ae));
 }
 const basePose = {}, cPose = {}, fPose = {}, _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _qc = new THREE.Quaternion(), _qd = new THREE.Quaternion();
+/* ---------- locomotion: planted feet, two-bone leg IK, pelvis/shoulder counter-rotation, arm swing ---------- */
+const LEG_L1 = 0.44, LEG_L2 = 0.42, ANKLE_H = 0.115, TOE = 0.2, HEEL = 0.1;
+const gait = { phase: 0, w: 0, runW: 0, drop: 0, feet: null };
+const groundY = (x, z) => Math.max(heightAt(x, z), platformHeight(x, z));
+// world point from the woodcutter's local frame (x = his left, z = forward)
+function localToWorld(lx, lz, out) {
+  const c = Math.cos(player.yaw), s = Math.sin(player.yaw);
+  out.x = player.pos.x + c * lx + s * lz; out.z = player.pos.y - s * lx + c * lz; out.y = groundY(out.x, out.z);
+  return out;
+}
+// where each foot belongs when standing: a relaxed stance, wider and staggered while chopping
+function footRest(side, out) {
+  if (player.chop) return localToWorld(side * 0.18, side > 0 ? 0.2 : -0.06, out);
+  return localToWorld(side * (carried ? 0.15 : 0.12), 0.02, out);
+}
+function footSound(f) {
+  const x = f.pos.x, z = f.pos.z, surf = heightAt(x, z) < -0.15 ? "water" : platformHeight(x, z) > -Infinity ? "wood" : U.snow.value > 0.4 ? "snow" : pathDist(x, z) < 1.4 ? "path" : "grass";
+  SFX.step(surf);
+  if (surf === "water") emitPuff(new THREE.Vector3(x, 0.05, z), 4, { color: [0.85, 0.92, 1], size: 0.5, spread: 0.3, up: 1.2, life: 0.6, alpha: 0.6 });
+  else if (gait.runW > 0.5) emitPuff(new THREE.Vector3(x, f.pos.y + 0.05, z), 1, { size: 0.5, spread: 0.2, up: 0.3, life: 0.8, alpha: U.snow.value > 0.4 ? 0.4 : 0.22, color: U.snow.value > 0.4 ? [0.95, 0.97, 1] : [0.55, 0.5, 0.42] });
+}
+function updateGait(dt) {
+  if (!gait.feet) gait.feet = [1, -1].map((side) => { const f = { side, pos: new THREE.Vector3(), from: new THREE.Vector3(), to: new THREE.Vector3(), cur: new THREE.Vector3(), swing: false, idle: -1, pitch: 0 }; footRest(side, f.pos); f.cur.copy(f.pos); return f; });
+  const mv = player.mv, sp = Math.min(mv.length(), 8), moving = sp > 0.3 && !player.chop;
+  gait.w = lerp(gait.w, moving ? clamp(sp / 2.2, 0.35, 1) : 0, 1 - Math.exp(-dt * 7));
+  gait.runW = lerp(gait.runW, player.running && sp > 3.4 ? 1 : 0, 1 - Math.exp(-dt * 5));
+  // step length is bounded by what the legs can reach: a walk quickens its cadence rather than overstriding
+  const r = gait.runW, stepLen = lerp(clamp(0.28 + 0.19 * sp, 0.35, 0.7), clamp(0.5 + 0.17 * sp, 0.8, 1.45), r) * (carried ? 0.82 : 1);
+  const duty = lerp(0.62, 0.32, r), T = (2 * stepLen) / Math.max(sp, 0.6);
+  const toeOff = lerp(1.0, 1.1, r), strike = lerp(-0.3, -0.08, r), heelUp = lerp(0.45, 0.5, r);
+  if (moving && !gait.moving) {
+    // first step: the foot further behind lifts off, the other one is taken as the one under the hip
+    const L = gait.feet[0].pos, R = gait.feet[1].pos;
+    const leftBehind = (L.x - R.x) * mv.x + (L.z - R.z) * mv.y < 0;
+    gait.phase = leftBehind ? 0.5 + duty * 0.45 : duty * 0.45;
+  }
+  gait.moving = moving;
+  if (moving) gait.phase = (gait.phase + (sp * dt) / (2 * stepLen)) % 1;
+  const lift = lerp(0.08, 0.25, r) * (carried ? 0.7 : 1);
+  const c = Math.cos(player.yaw), s = Math.sin(player.yaw);
+  for (const f of gait.feet) {
+    const i = f.side > 0 ? 0 : 1, other = gait.feet[1 - i];
+    // anything that left a foot far behind (teleport, respawn) just snaps it back under the body
+    if (Math.hypot(f.pos.x - player.pos.x, f.pos.z - player.pos.y) > 2.2) { footRest(f.side, f.pos); f.swing = false; f.idle = -1; }
+    if (moving) {
+      if (f.idle >= 0) { f.idle = -1; f.pos.copy(f.cur); f.pos.y = groundY(f.pos.x, f.pos.z); }
+      const ph = (gait.phase + i * 0.5) % 1;
+      if (ph < duty) {
+        if (f.swing) { f.swing = false; f.pos.copy(f.to); footSound(f); }
+        f.pos.y = groundY(f.pos.x, f.pos.z);
+        const u = ph / duty;
+        // heel strike -> flat foot -> heel lifts and the foot rolls over the toes
+        f.pitch = u < 0.15 ? lerp(strike, 0, u / 0.15) : u > heelUp ? toeOff * Math.pow((u - heelUp) / (1 - heelUp), 1.5) : 0;
+        f.cur.copy(f.pos);
+      } else {
+        // aim each step so the foot passes under the hip a little before the middle of its next stance
+        const tl = (1 - ph) * T + duty * T * 0.42;
+        f.to.set(player.pos.x + mv.x * tl + c * f.side * 0.11, 0, player.pos.y + mv.y * tl - s * f.side * 0.11);
+        f.to.y = groundY(f.to.x, f.to.z);
+        const kp = (ph - duty) / (1 - duty);
+        if (!f.swing) { f.swing = true; f.from.copy(f.cur); f.k0 = kp; f.p0 = f.pitch; }
+        const k = clamp((kp - f.k0) / Math.max(1e-3, 1 - f.k0), 0, 1), e = k * k * (3 - 2 * k);
+        f.cur.lerpVectors(f.from, f.to, e);
+        // the foot clears the ground most just after toe-off, then skims forward to the heel strike
+        f.cur.y = lerp(f.from.y, f.to.y, e) + Math.sin(Math.PI * Math.pow(k, 0.6)) * lift;
+        const kp2 = Math.min(1, k * 1.3);
+        f.pitch = lerp(f.p0, strike, kp2 * kp2 * (3 - 2 * kp2));
+      }
+    } else {
+      // standing: after stopping or turning, step each foot back to its place, one at a time
+      // a foot caught mid-stride finishes its step to the standing spot instead of dropping
+      if (f.swing) { f.swing = false; f.idle = 0; f.from.copy(f.cur); }
+      const rest = footRest(f.side, _v2);
+      if (f.idle < 0 && other.idle < 0 && Math.hypot(rest.x - f.pos.x, rest.z - f.pos.z) > (player.chop ? 0.08 : 0.13)) { f.idle = 0; f.from.copy(f.pos); }
+      if (f.idle >= 0) {
+        f.to.copy(rest);
+        f.idle = Math.min(1, f.idle + dt / 0.26);
+        const e = f.idle * f.idle * (3 - 2 * f.idle);
+        f.cur.lerpVectors(f.from, f.to, e); f.cur.y = lerp(f.from.y, f.to.y, e) + Math.sin(Math.PI * f.idle) * 0.08;
+        f.pitch = lerp(f.pitch, Math.sin(Math.PI * f.idle) * 0.2, 1 - Math.exp(-dt * 20));
+        if (f.idle >= 1) { f.idle = -1; f.pos.copy(f.to); footSound(f); }
+      } else { f.pos.y = groundY(f.pos.x, f.pos.z); f.cur.copy(f.pos); f.pitch = lerp(f.pitch, 0, 1 - Math.exp(-dt * 10)); }
+    }
+  }
+  return { duty };
+}
+const _hipsInv = new THREE.Matrix4(), _ik = new THREE.Vector3(), _hipW = new THREE.Vector3();
+// Two-bone IK in the hips' frame: hip roll, then hip pitch with the knee bending forward; the boot stays level.
+function ankleOffset(p) {
+  const cp = Math.cos(p), sp = Math.sin(p);
+  return p >= 0 ? [ANKLE_H * cp + TOE * sp, TOE * (1 - cp) + ANKLE_H * sp] : [ANKLE_H * cp - HEEL * sp, -HEEL * (1 - cp) + ANKLE_H * sp];
+}
+function solveLeg(leg, f) {
+  const [ay, az] = ankleOffset(f.pitch);
+  _ik.set(f.cur.x + Math.sin(player.yaw) * az, f.cur.y + ay, f.cur.z + Math.cos(player.yaw) * az).applyMatrix4(_hipsInv).sub(leg.g.position);
+  let D = _ik.length();
+  const Lmax = LEG_L1 + LEG_L2 - 0.002;
+  if (D > Lmax) { _ik.multiplyScalar(Lmax / D); D = Lmax; }
+  if (D < 0.25) { _ik.setLength(0.25); D = 0.25; }
+  const roll = Math.atan2(_ik.x, -_ik.y), rho = Math.hypot(_ik.x, _ik.y);
+  const line = Math.atan2(-_ik.z, rho);
+  const knee = Math.PI - Math.acos(clamp((LEG_L1 * LEG_L1 + LEG_L2 * LEG_L2 - D * D) / (2 * LEG_L1 * LEG_L2), -1, 1));
+  const a1 = Math.acos(clamp((LEG_L1 * LEG_L1 + D * D - LEG_L2 * LEG_L2) / (2 * LEG_L1 * D), -1, 1));
+  leg.g.rotation.set(line - a1, 0, roll);
+  leg.knee.rotation.x = knee;
+  leg.boot.rotation.x = f.pitch - (line - a1) - knee;
+}
 function animateCharacter(dt, time) {
-  const sp = player.speedNow, run = player.running && sp > 0.5;
-  char.walkW = lerp(char.walkW || 0, clamp(sp / 3, 0, 1), 1 - Math.exp(-dt * 10));
-  char.runW = lerp(char.runW || 0, run ? 1 : 0, 1 - Math.exp(-dt * 6));
+  const { duty } = updateGait(dt);
   char.chopW = lerp(char.chopW || 0, player.chop ? 1 : 0, 1 - Math.exp(-dt * 18));
-  const w = char.walkW, r = char.runW, p = player.walkPhase, sl = Math.sin(p), cl = Math.cos(p);
-  const breathe = Math.sin(time * 1.9) * (1 - w);
-  Object.assign(basePose, {
-    tY: sl * 0.08 * w, tX: 0.05 * w + 0.16 * r + breathe * 0.015,
-    rsx: -0.32 + sl * 0.06 * w, rsy: 0, rsz: -0.14, rex: -2.05,
-    lsx: sl * (0.5 + 0.35 * r) * w + breathe * 0.02, lsy: 0, lsz: 0.1 + 0.05 * (1 - w), lex: -(0.2 + 0.7 * r) * w - 0.12,
-    ha: 0, hb: 0, hr: 0, crouch: 0, spread: 0,
-  });
   char.carryW = lerp(char.carryW || 0, carried ? 1 : 0, 1 - Math.exp(-dt * 8));
+  const w = gait.w, r = gait.runW, ph = gait.phase, still = 1 - w, TWO = TAU;
+  // pelvis: rises over each stance leg, dips at heel strike (running: dips at mid-stance), sways over the
+  // supporting foot, rotates the swinging hip forward and drops on the swing side
+  const bob = lerp(-0.022 * Math.cos(2 * TWO * ph), -0.05 * Math.cos(2 * TWO * (ph - duty * 0.5)), r) * w;
+  const sway = (Math.sin(TWO * ph) * 0.026 * (1 - 0.6 * r)) * w + Math.sin(time * 0.45) * 0.012 * still;
+  const pYaw = -Math.cos(TWO * ph) * (0.1 + 0.05 * r) * w, pRoll = Math.sin(TWO * ph) * 0.045 * (1 - 0.5 * r) * w;
+  const breathe = Math.sin(time * 1.7) * still;
+  const armPh = TWO * (ph - 0.04), armA = (0.3 + 0.45 * r) * w * (1 - char.carryW);
+  Object.assign(basePose, {
+    // shoulders counter-rotate against the pelvis; lean into a run or under a load
+    tY: -pYaw * 1.3, tX: 0.04 * w + 0.17 * r + 0.012 * breathe,
+    rsx: -0.32 + Math.cos(armPh) * 0.05 * w, rsy: 0, rsz: -0.14, rex: -2.05,
+    // left arm swings opposite the left leg, bending more on the way forward
+    lsx: Math.cos(armPh) * armA + 0.02 * breathe, lsy: 0, lsz: 0.08 + 0.05 * still,
+    lex: -(0.16 + 1.25 * r) - 0.3 * Math.max(0, -Math.cos(armPh)) * w * (1 - r * 0.5),
+    ha: 0, hb: 0, hr: 0, crouch: 0.025 * w + 0.045 * r, spread: 0,
+  });
   const chopping = player.chop && char.chopW > 0.001;
   if (chopping) chopPose(player.chop.t, cPose);
   const cw = chopping ? char.chopW : 0;
@@ -2081,25 +2196,39 @@ function animateCharacter(dt, time) {
   // both hands up on the trunk resting across the right shoulder
   const kw = char.carryW;
   if (kw > 0.001) {
-    const C = { rsx: -2.55, rsy: 0.25, rsz: -0.35, rex: -1.35, lsx: -2.2, lsy: -0.75, lsz: 0.1, lex: -1.25, tX: 0.12 + 0.05 * w, crouch: 0.03 };
+    const C = { rsx: -2.55, rsy: 0.25, rsz: -0.35, rex: -1.35, lsx: -2.2, lsy: -0.75, lsz: 0.1, lex: -1.25, tX: 0.14 + 0.06 * w, crouch: 0.04 + 0.025 * w };
     for (const k in C) fPose[k] = lerp(fPose[k], C[k], kw);
   }
   char.axe.visible = kw < 0.5;
-  const legA = (0.55 + 0.25 * r) * w * (1 - cw), kneeA = (0.9 + 0.55 * r) * w * (1 - cw);
-  char.legL.g.rotation.set(-sl * legA - 0.12 * cw, 0, 0.08 * fPose.spread);
-  char.legR.g.rotation.set(sl * legA + 0.18 * cw, 0, -0.08 * fPose.spread);
-  char.legL.knee.rotation.x = Math.max(0, cl) * kneeA + 0.05 + 0.25 * cw;
-  char.legR.knee.rotation.x = Math.max(0, -cl) * kneeA + 0.05 + 0.18 * cw;
-  char.body.position.y = -Math.abs(sl) * (0.035 + 0.03 * r) * w - fPose.crouch;
-  char.torso.rotation.set(fPose.tX, fPose.tY, 0);
-  char.hips.rotation.y = -fPose.tY * 0.25;
+  char.root.position.set(player.pos.x, player.y, player.pos.y);
+  char.root.rotation.y = player.yaw;
+  char.body.position.set(sway * (1 - cw), bob - fPose.crouch - gait.drop, 0);
+  char.hips.rotation.set(0, pYaw * (1 - cw) - fPose.tY * 0.25 * cw, pRoll * (1 - cw));
+  char.torso.rotation.set(fPose.tX, fPose.tY, -pRoll * 0.7);
   char.armR.sh.rotation.set(fPose.rsx, fPose.rsy, fPose.rsz);
   char.armR.el.rotation.x = fPose.rex;
   char.armL.sh.rotation.set(fPose.lsx, fPose.lsy, fPose.lsz);
   char.armL.el.rotation.x = fPose.lex;
-  char.head.rotation.set(-fPose.tX * 0.5, -fPose.tY * 0.4, 0);
-  char.root.position.set(player.pos.x, player.y, player.pos.y);
-  char.root.rotation.y = player.yaw;
+  // the head stays steady and looks where he is going; standing still he glances around now and then
+  const glance = Math.sin(time * 0.31) * Math.sin(time * 0.13) * 0.45 * still * (1 - cw);
+  char.head.rotation.set(-fPose.tX * 0.6 + bob * 1.5, -(pYaw + fPose.tY) * 0.85 + glance, pRoll * 0.4);
+  // lower the body if a foot could not otherwise be reached (slopes, long strides), then solve the legs
+  char.root.updateMatrixWorld(true);
+  let need = 0;
+  const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
+  for (const leg of [char.legL, char.legR]) {
+    const f = gait.feet[leg.side > 0 ? 0 : 1], [ay, az] = ankleOffset(f.pitch);
+    _hipW.copy(leg.g.position).applyMatrix4(char.hips.matrixWorld);
+    const hd = Math.hypot(f.cur.x + sy * az - _hipW.x, f.cur.z + cy * az - _hipW.z), Lmax = LEG_L1 + LEG_L2 - 0.006;
+    const maxY = f.cur.y + ay + Math.sqrt(Math.max(0, Lmax * Lmax - hd * hd));
+    need = Math.max(need, _hipW.y + gait.drop - maxY);
+  }
+  // sink at once when a foot would otherwise hang in the air (long strides, slopes), come back up quickly
+  gait.drop = Math.min(0.35, Math.max(need, lerp(gait.drop, need, 1 - Math.exp(-dt * 14))));
+  char.body.position.y = bob - fPose.crouch - gait.drop;
+  char.root.updateMatrixWorld(true);
+  _hipsInv.copy(char.hips.matrixWorld).invert();
+  solveLeg(char.legL, gait.feet[0]); solveLeg(char.legR, gait.feet[1]);
   // aim the axe: blend carry and swing orientations in torso space, then express them in the hand's frame
   axeQuat(AXE_CARRY[0], AXE_CARRY[1], AXE_CARRY[2], _qb);
   if (chopping) _qb.slerp(axeQuat(cPose.ha, cPose.hb, cPose.hr, _qc), cw);
@@ -2794,8 +2923,8 @@ function checkQuest() {
 }
 
 const player = {
-  pos: new THREE.Vector2(), y: 0, vel: new THREE.Vector2(), yaw: 0, speedNow: 0, running: false, walkPhase: 0, stamina: 100, staminaLock: 0,
-  chop: null, chopHeld: false, chopQueued: false, lastStepPhase: 0, inWater: false,
+  pos: new THREE.Vector2(), y: 0, vel: new THREE.Vector2(), mv: new THREE.Vector2(), yaw: 0, speedNow: 0, running: false, stamina: 100, staminaLock: 0,
+  chop: null, chopHeld: false, chopQueued: false, inWater: false,
 };
 let mode = "loading", paused = false;
 const cam = { yaw: Math.PI, pitch: 0.38, dist: 7.5, lastInput: -1e9, shake: 0 };
@@ -2851,35 +2980,29 @@ function updatePlayer(dt) {
   const mx = fx * iz + rx * ix, mz = fz * iz + rz * ix;
   const wantRun = (keys.ShiftLeft || keys.ShiftRight || (joy.active && joy.mag > 0.92)) && mag > 0.1;
   player.running = wantRun && player.stamina > 0 && player.staminaLock <= 0;
-  let speed = (player.running ? 6.4 : 3.5) * BOOTS[state.boots].spd * mag;
+  let speed = (player.running ? 5.8 : 2.4) * BOOTS[state.boots].spd * mag;
   if (carried) speed *= Math.max(0.32, 1 - carried.d.weight * STRENGTH[state.str].slow);
   const h0 = heightAt(player.pos.x, player.pos.y);
   player.inWater = h0 < -0.15;
   if (player.inWater) speed *= 0.55;
   speed *= 1 - 0.2 * U.snow.value;
   if (player.chop) { speed = 0; if (mag > 0.2) player.chopQueued = false; }
-  const k = 1 - Math.exp(-dt * 10);
+  const k = 1 - Math.exp(-dt * 6);
   player.vel.x = lerp(player.vel.x, mx * speed, k); player.vel.y = lerp(player.vel.y, mz * speed, k);
+  const px0 = player.pos.x, pz0 = player.pos.y;
   const nx = player.pos.x + player.vel.x * dt, nz = player.pos.y + player.vel.y * dt;
   const base = Math.max(h0, 0);
   if (!blocked(nx, nz, base)) { player.pos.x = nx; player.pos.y = nz; }
   else if (!blocked(nx, player.pos.y, base)) player.pos.x = nx;
   else if (!blocked(player.pos.x, nz, base)) player.pos.y = nz;
   collide(player.pos, 0.36);
+  if (dt > 0) { const km = 1 - Math.exp(-dt * 14); player.mv.x = lerp(player.mv.x, (player.pos.x - px0) / dt, km); player.mv.y = lerp(player.mv.y, (player.pos.y - pz0) / dt, km); }
   const spd = Math.hypot(player.vel.x, player.vel.y);
   player.speedNow = spd;
-  if (mag > 0.1 && speed > 0) player.yaw = angLerp(player.yaw, Math.atan2(mx, mz), 1 - Math.exp(-dt * 12));
+  if (mag > 0.1 && speed > 0) player.yaw = angLerp(player.yaw, Math.atan2(mx, mz), 1 - Math.exp(-dt * 9));
   if (player.chop && player.chop.face != null) player.yaw = angLerp(player.yaw, player.chop.face, 1 - Math.exp(-dt * 20));
   const gy = Math.max(heightAt(player.pos.x, player.pos.y), platformHeight(player.pos.x, player.pos.y));
   player.y = lerp(player.y, gy, 1 - Math.exp(-dt * 20));
-  const prev = player.walkPhase;
-  player.walkPhase += (spd * dt * Math.PI) / (player.running ? 1.15 : 0.78);
-  if (Math.floor(prev / Math.PI) !== Math.floor(player.walkPhase / Math.PI) && spd > 0.5) {
-    const surf = player.inWater ? "water" : platformHeight(player.pos.x, player.pos.y) > -Infinity ? "wood" : U.snow.value > 0.4 ? "snow" : pathDist(player.pos.x, player.pos.y) < 1.4 ? "path" : "grass";
-    SFX.step(surf);
-    if (surf === "water") emitPuff(new THREE.Vector3(player.pos.x, 0.05, player.pos.y), 4, { color: [0.85, 0.92, 1], size: 0.5, spread: 0.3, up: 1.2, life: 0.6, alpha: 0.6 });
-    else if (player.running) emitPuff(new THREE.Vector3(player.pos.x, player.y + 0.05, player.pos.y), 1, { size: 0.5, spread: 0.2, up: 0.3, life: 0.8, alpha: 0.25 });
-  }
   if (player.running && spd > 1) { player.stamina -= dt * 16; if (player.stamina <= 0) { player.stamina = 0; player.staminaLock = 1.5; } }
   else { player.stamina = Math.min(100, player.stamina + dt * 22); player.staminaLock -= dt; }
   // chopping
@@ -3579,7 +3702,7 @@ function startGame() {
   setTimeout(() => toast("숲 곳곳에 황금·수정·거대·타이탄 나무가 있어요. 미니맵의 색 점과 테두리 화살표를 따라가 보세요."), 3500);
   canvas.focus();
 }
-const DEBUG = { speed: 1 };
+const DEBUG = { speed: 1, tick: (dt) => tick(dt) };
 // Adaptive resolution: drop the pixel ratio when frames run slow, raise it again when there is headroom.
 const perf = { t: 0, n: 0, pr: QUALITY.pixelRatio };
 function adaptResolution(raw) {
@@ -3597,6 +3720,10 @@ function frame(now) {
   const raw = Math.min(0.25, (now - last) / 1000), dt = Math.min(0.05, raw) * DEBUG.speed; last = now;
   if (mode === "loading") return;
   adaptResolution(raw);
+  tick(dt);
+  renderer.render(scene, camera);
+}
+function tick(dt) {
   if (!paused && mode !== "shop") {
     U.time.value += dt;
     if (mode === "play") state.hour = (state.hour + dt * (24 / 480)) % 24;
@@ -3621,7 +3748,7 @@ function frame(now) {
   cabin.ring.material.opacity = 0.35 + 0.25 * Math.sin(U.time.value * 3);
   envTimer -= dt; if (envTimer <= 0) { envTimer = 3; refreshEnv(); }
   updateBirds(U.time.value);
-  animateCharacter(dt, U.time.value);
+  animateCharacter(paused || mode === "shop" ? 0 : dt, U.time.value);
   updateCamera(dt, U.time.value);
   camera.updateMatrixWorld();
   U.sunView.value.copy(lightDir).transformDirection(camera.matrixWorldInverse);
@@ -3635,7 +3762,6 @@ function frame(now) {
   sun.position.set(sp.x + lightDir.x * 120, player.y + lightDir.y * 120, sp.y + lightDir.z * 120);
   sun.target.position.set(sp.x, player.y, sp.y);
   if (mode === "play" || mode === "pause" || mode === "shop") { updateWorldHUD(dt); drawMinimap(dt); }
-  renderer.render(scene, camera);
 }
 
 async function init() {
@@ -3674,7 +3800,7 @@ async function init() {
   mode = "title";
   $("#startBtn").focus();
 }
-window.__woodcutter = { state, player, trees, cam, felled, interact, get carried() { return carried; }, get mode() { return mode; }, setHour: (h) => { state.hour = h; }, tryChop, teleport: (x, z) => { player.pos.set(x, z); }, char, camera, scene, grassChunks, DEBUG, VARIANTS, fromCabinLocal, findTarget, buildAxeMesh, info: () => ({ ...renderer.info.render }), weather, setWeather, lightning, setTreeMut, U, fellTree, falling, setupTree };
+window.__woodcutter = { state, player, gait, trees, cam, felled, interact, get carried() { return carried; }, get mode() { return mode; }, setHour: (h) => { state.hour = h; }, tryChop, teleport: (x, z) => { player.pos.set(x, z); }, char, camera, scene, grassChunks, DEBUG, VARIANTS, fromCabinLocal, findTarget, buildAxeMesh, info: () => ({ ...renderer.info.render }), weather, setWeather, lightning, setTreeMut, U, fellTree, falling, setupTree };
 requestAnimationFrame(frame);
 init().catch((err) => { console.error(err); $("#loadMsg").textContent = "숲을 만드는 중 오류가 났습니다: " + err.message; });
 </script>
