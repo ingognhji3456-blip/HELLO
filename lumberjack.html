@@ -778,8 +778,9 @@ function rawHeight(x, z) {
     h = lerp(2.2 + (h - 2.2) * 0.25, h, smooth(1.0, 2.4, t));
     h = lerp(-L.depth + (L.depth + 0.7) * smooth(0.15, 1.05, t), h, smooth(0.95, 1.5, t));
   }
-  const m = smooth(148, 205, edgeDist(x, z));
-  h += m * m * 75 + m * (fbm(nB, x * 0.018, z * 0.018, 4) * 0.5 + 0.5) * 30;
+  const m = smooth(150, 212, edgeDist(x, z) + nB(x * 0.01 + 50, z * 0.01 - 50) * 14);
+  const rd = 1 - Math.abs(fbm(nA, x * 0.011 + 17, z * 0.011 - 9, 4));
+  h += m * m * (35 + rd * rd * 75) + m * fbm(nC, x * 0.03, z * 0.03, 3) * 6;
   return h;
 }
 const CLEAR_H = Math.max(3, rawHeight(CABIN.x, CABIN.z));
@@ -815,7 +816,7 @@ function buildTerrain() {
   const K = {
     meadow: C("#6f8c38"), lush: C("#50762a"), dry: C("#9c9752"), forest: C("#4f4b2d"), moss: C("#3f5c27"),
     path: C("#8b7352"), rock: C("#7e7a71"), rockD: C("#58544d"), sand: C("#a49369"), mud: C("#5d5439"),
-    deep: C("#2c3224"), snow: C("#e8eef2"),
+    deep: C("#2c3224"), snow: C("#e8eef2"), alpine: C("#3a4829"),
   };
   const col = new THREE.Color(), tmp = new THREE.Color();
   const pos = new Float32Array(NV * NV * 3), nrm = new Float32Array(NV * NV * 3), uv = new Float32Array(NV * NV * 2), clr = new Float32Array(NV * NV * 3);
@@ -834,8 +835,10 @@ function buildTerrain() {
     col.lerp(K.path, (1 - smooth(1.0, 2.4, pd)) * 0.9);
     col.lerp(K.sand, 1 - smooth(0.3, 1.4, h));
     if (h < 0.3) col.copy(K.sand).lerp(K.mud, smooth(0.3, -0.8, h)).lerp(K.deep, smooth(-0.8, -3.5, h));
-    col.lerp(tmp.copy(K.rock).lerp(K.rockD, clamp(0.5 + n2, 0, 1)), smooth(0.3, 0.5, slope + n2 * 0.08));
-    col.lerp(K.snow, smooth(40, 54, h + n1 * 6) * (1 - smooth(0.55, 0.75, slope)));
+    const mm = smooth(150, 178, edgeDist(x, z));
+    col.lerp(K.alpine, mm * (1 - smooth(20, 34, h + n1 * 5)) * 0.9);
+    col.lerp(tmp.copy(K.rock).lerp(K.rockD, clamp(0.5 + n2, 0, 1)), clamp(smooth(0.42, 0.7, slope + n2 * 0.1) + mm * smooth(26, 40, h + n2 * 6), 0, 1));
+    col.lerp(K.snow, smooth(48, 62, h + n1 * 8) * (1 - smooth(0.75, 1.0, slope)));
     const vv = 1 + nC(x * 0.17, z * 0.17) * 0.07;
     clr.set([col.r * vv, col.g * vv, col.b * vv], k * 3);
     TCOL.set([col.r, col.g, col.b], k * 3);
@@ -941,7 +944,7 @@ const envUsers = [];
 function refreshEnv() {
   const old = envRT;
   envRT = pmrem.fromScene(envScene, 0, 1, 2000);
-  for (const m of envUsers) { m.envMap = envRT.texture; m.needsUpdate = true; }
+  for (const m of envUsers) { if (!m.envMap) m.needsUpdate = true; m.envMap = envRT.texture; }
   if (old) old.dispose();
 }
 
@@ -1172,13 +1175,13 @@ function speciesAt(x, z, h, f, R) {
 }
 function placeTrees() {
   const R = mulberry32(555);
-  for (let gz = -176; gz < 176; gz += 5) for (let gx = -176; gx < 176; gx += 5) {
+  for (let gz = -190; gz < 190; gz += 5) for (let gx = -190; gx < 190; gx += 5) {
     const x = gx + R() * 5, z = gz + R() * 5, f = forestAt(x, z), dc = cabinDist(x, z);
     let p = 0.03 + f * 0.82;
     if (dc > 18 && dc < 40) p += 0.12;
     if (R() > p) continue;
     const h = heightAt(x, z);
-    if (h < 0.7 || slopeAt(x, z) > 0.2 || pathDist(x, z) < 3 || edgeDist(x, z) > 170 || dc < 18) continue;
+    if (h < 0.7 || slopeAt(x, z) > 0.2 || pathDist(x, z) < 3 || edgeDist(x, z) > 188 || dc < 18) continue;
     let ok = true;
     gNear(x, z, 4, (o) => { if (Math.hypot(o.x - x, o.z - z) < (o.kind === "tree" ? 2.6 : o.r + 1.5)) ok = false; });
     if (!ok) continue;
