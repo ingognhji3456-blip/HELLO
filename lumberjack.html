@@ -57,7 +57,8 @@ kbd {
 #clock { padding: 3px 12px; font-size: 13px; font-variant-numeric: tabular-nums; border-radius: 999px; }
 #prompt {
   position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%);
-  padding: 9px 16px; font-size: 15px; white-space: nowrap; transition: opacity 0.15s;
+  padding: 9px 16px; font-size: 15px; transition: opacity 0.15s;
+  width: max-content; max-width: calc(100vw - 32px); text-align: center;
 }
 #stamina { position: absolute; left: 50%; bottom: 60px; width: 180px; height: 6px; transform: translateX(-50%); border-radius: 4px; background: rgba(0, 0, 0, 0.4); overflow: hidden; opacity: 0; transition: opacity 0.4s; }
 #stamina i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #d9a441, #f3d27a); }
@@ -190,7 +191,7 @@ kbd {
   <div class="inner">
     <div class="kicker">WILD TIMBER</div>
     <h1>나무꾼의 숲</h1>
-    <p>호수와 언덕, 소나무와 자작나무, 참나무가 우거진 야생의 숲. 도끼 한 자루로 나무를 베어 통나무를 모으고, 오두막에 팔아 더 좋은 장비를 마련하세요.</p>
+    <p>호수와 언덕, 소나무와 자작나무, 참나무가 우거진 야생의 숲. 도끼 한 자루로 나무를 쓰러뜨려 통째로 메고 오두막에 팔아, 더 좋은 장비를 마련하세요.</p>
     <button id="startBtn" class="btn">숲으로 들어가기</button>
     <div id="saveInfo"></div>
     <div id="controls">
@@ -713,6 +714,11 @@ const windChunk = (flutter) => `#include <begin_vertex>
   float wph = uTime * 1.25 + wip.x * 0.21 + wip.z * 0.17;
   float sway = (sin(wph) + 0.45 * sin(wph * 2.3 + 1.7)) * 0.009 * wh * uWind;
   float flut = ${flutter ? "sin(uTime * 6.5 + position.x * 3.1 + position.z * 2.7 + position.y * 1.9) * 0.03 * uWind" : "0.0"};
+  #if defined(TREE_RIGID) && defined(USE_INSTANCING)
+    // crystal and frozen trees stand stiff, so their shards and icicles stay on the branches
+    float stiff = max(aMut.y, aMut.w);
+    sway *= 1.0 - stiff; flut *= 1.0 - stiff;
+  #endif
   transformed.x += sway + flut;
   transformed.z += sway * 0.6 - flut * 0.7;
 }`;
@@ -812,12 +818,29 @@ const LEAF_TRANSLUCENCY = `
 }
 #include <opaque_fragment>`;
 // Wind sway for trees and bushes, plus (optionally) mutation looks, translucency and near-camera fade.
-function treeShader(mat, { flutter = false, mut = false, bark = false, trans = false } = {}) {
+// Additive glows (auras, arcs, bolt glow) fade into fog rather than being tinted toward the fog colour.
+const ADD_FOG = `#ifdef USE_FOG
+  #ifdef FOG_EXP2
+    float fogFactor = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
+  #else
+    float fogFactor = smoothstep(fogNear, fogFar, vFogDepth);
+  #endif
+  gl_FragColor.a *= 1.0 - fogFactor;
+#endif`;
+function additiveFog(m) {
+  m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace("#include <fog_fragment>", ADD_FOG); };
+  m.customProgramCacheKey = () => "addfog";
+  return m;
+}
+// still: felled and carried trees ignore the wind (they are no longer rooted).
+const STILL_WIND = { value: 0 };
+function treeShader(mat, { flutter = false, mut = false, bark = false, trans = false, still = false } = {}) {
   const depth = !!mat.isMeshDepthMaterial;
   if (mut && !depth) mat.defines = Object.assign(mat.defines || {}, { TREE_MUT: "" }, bark ? { IS_BARK: "" } : {});
+  if (mut) mat.defines = Object.assign(mat.defines || {}, { TREE_RIGID: "" });
   mat.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, { uTime: U.time, uWind: U.wind, uSnow: U.snow, uSunView: U.sunView, uSunCol: U.sunCol, uSkyTop: skyMat.uniforms.uTop, uSkyHor: skyMat.uniforms.uHorizon, uFocus: U.focus });
-    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uTime;\nuniform float uWind;" + (depth ? "" : MUT_VERT_PARS + "\nvarying vec3 vTreeWPos;"))
+    Object.assign(sh.uniforms, { uTime: U.time, uWind: still ? STILL_WIND : U.wind, uSnow: U.snow, uSunView: U.sunView, uSunCol: U.sunCol, uSkyTop: skyMat.uniforms.uTop, uSkyHor: skyMat.uniforms.uHorizon, uFocus: U.focus });
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uTime;\nuniform float uWind;" + (depth ? "\n#if defined(TREE_RIGID) && defined(USE_INSTANCING)\n  attribute vec4 aMut;\n#endif" : MUT_VERT_PARS + "\nvarying vec3 vTreeWPos;"))
       .replace("#include <begin_vertex>", windChunk(flutter) + (depth ? "" : MUT_VERT));
     if (!depth) sh.vertexShader = sh.vertexShader.replace("#include <project_vertex>", `#include <project_vertex>
       {
@@ -838,9 +861,9 @@ function treeShader(mat, { flutter = false, mut = false, bark = false, trans = f
   mat.customProgramCacheKey = () => key;
   return mat;
 }
-function leafMaterial(map, mut = false) {
-  const m = treeShader(new THREE.MeshStandardMaterial({ map, vertexColors: true, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.78, alphaToCoverage: true }), { flutter: true, mut, trans: true });
-  m.userData.depth = treeShader(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map, alphaTest: 0.42, side: THREE.DoubleSide }), { flutter: true });
+function leafMaterial(map, mut = false, still = false) {
+  const m = treeShader(new THREE.MeshStandardMaterial({ map, vertexColors: true, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.78, alphaToCoverage: true }), { flutter: true, mut, trans: true, still });
+  m.userData.depth = treeShader(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map, alphaTest: 0.42, side: THREE.DoubleSide }), { flutter: true, mut, still });
   return m;
 }
 function cardMaterial(map, extra = {}) {
@@ -1170,6 +1193,7 @@ function buildWater() {
   };
   envUsers.push(waterMat);
   const w = new THREE.Mesh(new THREE.PlaneGeometry(WORLD, WORLD), waterMat);
+  w.renderOrder = -1;
   w.rotation.x = -Math.PI / 2; w.position.y = 0;
   w.receiveShadow = true;
   scene.add(w);
@@ -1248,6 +1272,8 @@ function treeTags(t) {
   return out;
 }
 const tagMult = (tags) => tags.reduce((a, k) => a * MUTS[k].mult, 1);
+// what a mutation does to the price: its multiplier, and for big/titan also the extra wood
+const valueMult = (tags) => tags.reduce((a, k) => a * MUTS[k].mult * (MUTS[k].logs || 1), 1);
 const logPrice = (L) => Math.round(SPECIES[L.sp].price * tagMult(L.m));
 const fmtMult = (x) => (Math.round(x * 10) / 10).toLocaleString("ko-KR");
 const MAT = {};
@@ -1451,13 +1477,18 @@ const VARIANTS = [];
 const trees = [];
 function buildTreeAssets() {
   const pb = barkTextures("pine"), bb = barkTextures("birch"), ob = barkTextures("oak");
-  const barkMat = (t) => treeShader(new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normal, normalScale: new THREE.Vector2(1.2, 1.2), roughness: 0.95, vertexColors: true }), { mut: true, bark: true });
+  const barkMat = (t, still = false) => treeShader(new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normal, normalScale: new THREE.Vector2(1.2, 1.2), roughness: 0.95, vertexColors: true }), { mut: true, bark: true, still });
   MAT.bark = { pine: barkMat(pb), birch: barkMat(bb), oak: barkMat(ob) };
+  MAT.barkStill = { pine: barkMat(pb, true), birch: barkMat(bb, true), oak: barkMat(ob, true) };
+  // trunk shadows sway with the trunks
+  MAT.barkDepth = treeShader(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), { mut: true });
   const logBark = (t) => new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normal, roughness: 0.95 });
   MAT.logBark = { pine: logBark(pb), birch: logBark(bb), oak: logBark(ob) };
   MAT.endGrain = new THREE.MeshStandardMaterial({ map: endGrainTexture(), roughness: 0.85 });
   const oakLeaf = leafAtlas("oak");
-  MAT.leaf = { pine: leafMaterial(pineAtlas(), true), birch: leafMaterial(leafAtlas("birch"), true), oak: leafMaterial(oakLeaf, true) };
+  const leafMaps = { pine: pineAtlas(), birch: leafAtlas("birch"), oak: oakLeaf };
+  MAT.leaf = {}; MAT.leafStill = {};
+  for (const k in leafMaps) { MAT.leaf[k] = leafMaterial(leafMaps[k], true); MAT.leafStill[k] = leafMaterial(leafMaps[k], true, true); }
   MAT.oakLeafTex = oakLeaf;
   for (const s of [101, 102, 103, 104]) VARIANTS.push(makeVariant("pine", s));
   for (const s of [201, 202, 203]) VARIANTS.push(makeVariant("birch", s));
@@ -1531,6 +1562,7 @@ function placeTrees() {
     t.leafTint.setRGB(lf * (1 + hs * 0.07), lf, lf * (1 - hs * 0.12));
     const bf = 0.85 + R() * 0.25; t.barkTint.setRGB(bf, bf * (0.97 + R() * 0.05), bf * 0.97);
     setupTree(t);
+    t.i = trees.length; t.seedMat = [t.mut.gold, t.mut.crystal];
     trees.push(t); gAdd(t);
   }
   // one big tree near the cabin, so the first mutation goal can be found without a long search
@@ -1541,7 +1573,7 @@ function placeTrees() {
     for (const list of groupByChunk(trees.filter((t) => t.v === vi), (t) => [t.x, t.z])) {
       const n = list.length;
       const tIM = new THREE.InstancedMesh(treeGeo(v.lod1.trunk, n), MAT.bark[v.sp], n), lIM = new THREE.InstancedMesh(treeGeo(v.lod1.leaves, n), MAT.leaf[v.sp], n);
-      lIM.customDepthMaterial = MAT.leaf[v.sp].userData.depth;
+      lIM.customDepthMaterial = MAT.leaf[v.sp].userData.depth; tIM.customDepthMaterial = MAT.barkDepth;
       list.forEach((t, i) => {
         t.idx = i; t.tIM = tIM; t.lIM = lIM;
         treeMatrix(t, _m); tIM.setMatrixAt(i, _m); lIM.setMatrixAt(i, _m);
@@ -1553,7 +1585,7 @@ function placeTrees() {
     }
     v.nearT = new THREE.InstancedMesh(treeGeo(v.lod0.trunk, NEAR_CAP), MAT.bark[v.sp], NEAR_CAP);
     v.nearL = new THREE.InstancedMesh(treeGeo(v.lod0.leaves, NEAR_CAP), MAT.leaf[v.sp], NEAR_CAP);
-    v.nearL.customDepthMaterial = MAT.leaf[v.sp].userData.depth;
+    v.nearL.customDepthMaterial = MAT.leaf[v.sp].userData.depth; v.nearT.customDepthMaterial = MAT.barkDepth;
     v.slots = new Array(NEAR_CAP).fill(null); v.used = 0;
     for (const m of [v.nearT, v.nearL]) {
       for (let i = 0; i < NEAR_CAP; i++) { m.setMatrixAt(i, ZERO_M); m.setColorAt(i, WHITE); }
@@ -1909,7 +1941,7 @@ function buildCabin() {
     _m.compose(_v.set(5.2 + (PR() - 0.5) * 0.12, y, Math.min(z, 2.15)), _q, _s.set(1, 1, 1));
     pile.setMatrixAt(k, _m);
   }
-  pile.count = 10; pile.castShadow = pile.receiveShadow = true; g.add(pile);
+  pile.count = 96; pile.computeBoundingSphere(); pile.count = 10; pile.castShadow = pile.receiveShadow = true; g.add(pile);
   cabin.woodpile = pile;
   // chopping block with an old axe
   add(MAT.stumpGeo, [MAT.logBark.oak, MAT.endGrain, MAT.endGrain], -5.6, 0.3, 4.2).scale.set(0.38, 0.6, 0.38);
@@ -2453,7 +2485,7 @@ function buildMutFx() {
   mfx.auraTex = softDot();
   const ag = new THREE.BufferGeometry();
   ag.setAttribute("position", new THREE.BufferAttribute(new Float32Array(4 * 8 * 9 * 6 * 3), 3)); ag.setDrawRange(0, 0);
-  mfx.arcs = new THREE.Mesh(ag, new THREE.MeshBasicMaterial({ color: 0xb8d4ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+  mfx.arcs = new THREE.Mesh(ag, additiveFog(new THREE.MeshBasicMaterial({ color: 0xb8d4ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false })));
   mfx.arcs.frustumCulled = false; scene.add(mfx.arcs);
 }
 // Crystal crowns: clusters of faceted shards growing where the tree's leaf sprays would be.
@@ -2482,20 +2514,28 @@ function crystalGeo(vi) {
   mfx.crystal[vi] = gb.build();
   return mfx.crystal[vi];
 }
-function refreshMutFx(t) {
+// Icicles and puddles come from fixed pools, so only frost/wet trees near the player hold slots;
+// trees that move out of range hand theirs back, trees that come into range (or missed out) take them.
+const ICE_R = 70, PUDDLE_R = 95;
+function refreshMutFx(t, onlyIfChanged = false) {
   if (!mfx.icicles) return;
   const alive = t.state === "standing" || t.state === "growing", m = t.mut;
   const fx = t.fx || (t.fx = { ice: null, puddle: -1, crystal: null, aura: null });
-  if (alive && m.frost && !fx.ice) {
-    const v = VARIANTS[t.v], n = Math.min(28, v.hangs.length, mfx.icicleFree.length);
-    fx.ice = [];
-    for (let k = 0; k < n; k++) fx.ice.push({ slot: mfx.icicleFree.pop(), h: v.hangs[Math.floor((k * v.hangs.length) / n)], len: 0.6 + Math.random() * 1.4 });
-  } else if ((!alive || !m.frost) && fx.ice) {
+  const d = Math.hypot(t.x - player.pos.x, t.z - player.pos.y);
+  let changed = false;
+  if (alive && m.frost && !fx.ice && d < ICE_R) {
+    const v = VARIANTS[t.v], n = Math.min(16, v.hangs.length, mfx.icicleFree.length);
+    if (n > 0) {
+      fx.ice = []; changed = true;
+      for (let k = 0; k < n; k++) fx.ice.push({ slot: mfx.icicleFree.pop(), h: v.hangs[Math.floor((k * v.hangs.length) / n)], len: 0.6 + Math.random() * 1.4 });
+    }
+  } else if ((!alive || !m.frost || d > ICE_R + 12) && fx.ice) {
     for (const e of fx.ice) { mfx.icicles.setMatrixAt(e.slot, ZERO_M); mfx.icicleFree.push(e.slot); }
     fx.ice = null; mfx.icicles.instanceMatrix.needsUpdate = true;
   }
-  if (alive && m.wet && fx.puddle < 0 && mfx.puddleFree.length) fx.puddle = mfx.puddleFree.pop();
-  else if ((!alive || !m.wet) && fx.puddle >= 0) { mfx.puddles.setMatrixAt(fx.puddle, ZERO_M); mfx.puddleFree.push(fx.puddle); fx.puddle = -1; mfx.puddles.instanceMatrix.needsUpdate = true; }
+  if (alive && m.wet && fx.puddle < 0 && d < PUDDLE_R && mfx.puddleFree.length) { fx.puddle = mfx.puddleFree.pop(); changed = true; }
+  else if ((!alive || !m.wet || d > PUDDLE_R + 12) && fx.puddle >= 0) { mfx.puddles.setMatrixAt(fx.puddle, ZERO_M); mfx.puddleFree.push(fx.puddle); fx.puddle = -1; mfx.puddles.instanceMatrix.needsUpdate = true; }
+  if (onlyIfChanged && !changed) return;
   if (alive && m.crystal && !fx.crystal) {
     fx.crystal = new THREE.Mesh(crystalGeo(t.v), mfx.crystalMat);
     fx.crystal.matrixAutoUpdate = false; fx.crystal.castShadow = true; scene.add(fx.crystal);
@@ -2503,7 +2543,7 @@ function refreshMutFx(t) {
   const auraCol = m.crystal ? 0x6fd8ff : m.gold ? 0xffc040 : null;
   if (alive && auraCol !== null) {
     if (!fx.aura) {
-      fx.aura = new THREE.Sprite(new THREE.SpriteMaterial({ map: mfx.auraTex, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
+      fx.aura = new THREE.Sprite(additiveFog(new THREE.SpriteMaterial({ map: mfx.auraTex, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false })));
       fx.aura.renderOrder = 2; scene.add(fx.aura); mfx.auras.push(t);
     }
     fx.aura.material.color.set(auraCol);
@@ -2582,7 +2622,7 @@ const WEATHER = {
   clear: { name: "맑음", icon: "☀" },
   rain: { name: "비", icon: "☂", msg: "비가 내립니다 — 서 있는 나무가 하나둘 젖어요 (젖은 ×2)" },
   storm: { name: "뇌우", icon: "⚡", msg: "뇌우가 몰려옵니다 — 번개에 맞은 나무는 ×10!" },
-  snow: { name: "눈", icon: "❄", msg: "눈이 내립니다 — 나무에 서리가 껴요 (서리 ×3, 젖은 나무는 금방 얼어요)" },
+  snow: { name: "눈", icon: "❄", msg: "눈이 내립니다 — 나무에 서리가 껴요 (서리 ×3)" },
   blizzard: { name: "눈보라", icon: "❄", msg: "눈보라가 몰아칩니다 — 숲이 온통 눈에 파묻히고 나무가 빠르게 얼어붙어요 (서리 ×3)" },
 };
 const weather = { type: "clear", timer: 360, rain: 0, snow: 0, storm: 0, blizz: 0, flash: 0, nextBolt: 4, mutTimer: 1, fxTimer: 0, drift: new THREE.Vector3(), rainDrift: new THREE.Vector3() };
@@ -2638,7 +2678,7 @@ function buildWeather() {
   for (const o of [wfx.rain, wfx.snow]) { o.frustumCulled = false; o.visible = false; scene.add(o); }
   wfx.cam = cam;
   wfx.boltMat = new THREE.MeshBasicMaterial({ color: 0xeef3ff, toneMapped: false });
-  wfx.glowMat = new THREE.MeshBasicMaterial({ color: 0x8fb0ff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+  wfx.glowMat = additiveFog(new THREE.MeshBasicMaterial({ color: 0x8fb0ff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
   wfx.light = new THREE.PointLight(0xc8d8ff, 0, 120, 1.6);
   scene.add(wfx.light);
 }
@@ -2696,22 +2736,25 @@ function updateWeatherFx(dt) {
 // Weather marks trees near the player once a second; wet and frost wear off 3 minutes after the weather ends.
 function applyWeatherMutations() {
   const now = U.time.value, raining = weather.rain > 0.6, snowing = weather.snow > 0.6, bl = weather.blizz > 0.6;
-  gNear(player.pos.x, player.pos.y, 90, (t) => {
+  // new marks appear around the player…
+  if (raining || snowing) gNear(player.pos.x, player.pos.y, 90, (t) => {
     if (t.kind !== "tree" || t.state !== "standing") return;
     const m = t.mut;
     let changed = false;
-    if (raining) {
-      if (m.wet) t.wetT = now + 180;
-      else if (!m.frost && Math.random() < 0.005) { m.wet = true; t.wetT = now + 180; changed = true; }
-    }
-    if (snowing) {
-      if (m.frost) t.frostT = now + 180;
-      else if (Math.random() < (m.wet ? (bl ? 0.06 : 0.025) : bl ? 0.01 : 0.003)) { m.frost = true; m.wet = false; t.frostT = now + 180; changed = true; }
-    }
-    if (m.wet && !raining && now > t.wetT) { m.wet = false; changed = true; }
-    if (m.frost && !snowing && now > t.frostT) { m.frost = false; changed = true; }
+    if (raining && !m.wet && !m.frost && Math.random() < 0.005) { m.wet = true; t.wetT = now + 180; changed = true; }
+    if (snowing && !m.frost && Math.random() < (bl ? 0.01 : 0.003)) { m.frost = true; m.wet = false; t.frostT = now + 180; changed = true; }
     if (changed) setTreeMut(t);
   });
+  // …but the weather covers the whole forest, so marks are kept up or wear off everywhere
+  for (const t of trees) {
+    const m = t.mut;
+    if (t.state !== "standing" || !(m.wet || m.frost)) continue;
+    let changed = false;
+    if (m.wet) { if (raining) t.wetT = now + 180; else if (now > t.wetT) { m.wet = false; changed = true; } }
+    if (m.frost) { if (snowing) t.frostT = now + 180; else if (now > t.frostT) { m.frost = false; changed = true; } }
+    if (changed) setTreeMut(t);
+    else refreshMutFx(t, true);
+  }
 }
 function lightning() {
   const cands = [], fwd = camera.getWorldDirection(new THREE.Vector3());
@@ -2863,12 +2906,24 @@ function updateAmbience(dt) {
 const SAVE_KEY = "woodcutter-wild-v1";
 const MUT_STATS = () => ({ big: 0, titan: 0, gold: 0, crystal: 0, wet: 0, frost: 0, shock: 0 });
 const state = {
-  coins: 0, axe: 0, str: 0, boots: 0, carrying: null, qdone: [], hour: 7.5,
+  coins: 0, axe: 0, str: 0, boots: 0, carrying: null, qdone: [], hour: 7.5, forest: {}, ground: [],
   stats: { trees: 0, pine: 0, birch: 0, oak: 0, logsSold: 0, sold: 0, earned: 0, mutTrees: 0, mut: MUT_STATS() },
 };
+// What changed in the (seeded) forest must be saved too, or a reload would regrow felled trees:
+// stumps and their regrow time, regrown trees whose gold/crystal roll differs from the seed, and felled trees on the ground.
+function forestMark(t) {
+  const e = { s: t.state === "stump" ? Math.max(1, Math.round(t.regrowAt - U.time.value)) : t.state === "falling" ? 240 : 0, g: t.mut.gold ? 1 : 0, c: t.mut.crystal ? 1 : 0 };
+  if (!e.s && !!e.g === t.seedMat[0] && !!e.c === t.seedMat[1]) delete state.forest[t.i]; else state.forest[t.i] = e;
+}
+const r3 = (a) => a.map((x) => Math.round(x * 1000) / 1000);
 function save() {
+  if (trees.length) {
+    for (const i in state.forest) if (trees[i]) forestMark(trees[i]);
+    state.ground = felled.filter((o) => o.state === "ground").map((o) => ({ d: o.d, p: r3(o.holder.position.toArray()), q: r3(o.holder.quaternion.toArray()), base: r3(o.base.toArray()), dir: r3(o.dir.toArray()), len: o.len }));
+  }
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) { /* storage unavailable */ }
 }
+const validSnap = (c) => !!(c && SPECIES[c.sp] && VARIANTS[c.v] && Array.isArray(c.tags) && c.mut && Array.isArray(c.leafTint));
 // Quest order of the first release, used to carry old saves (which stored a quest index) over to quest ids.
 const OLD_QUEST_ORDER = ["t1", "sell1", "axe1", "birch5", "oak3", "str1", "t40", "sold30", "axe4"];
 function load() {
@@ -2884,8 +2939,9 @@ function load() {
     if (Array.isArray(s.carried)) state.coins += s.carried.length * 5;
     if (typeof s.str !== "number") state.str = clamp(s.bag || 0, 0, STRENGTH.length - 1);
     delete state.carried; delete state.bag;
-    const c = state.carrying;
-    if (c && !(SPECIES[c.sp] && VARIANTS[c.v] && Array.isArray(c.tags) && c.mut && Array.isArray(c.leafTint))) state.carrying = null;
+    if (!validSnap(state.carrying)) state.carrying = null;
+    if (!state.forest || typeof state.forest !== "object" || Array.isArray(state.forest)) state.forest = {};
+    state.ground = (Array.isArray(state.ground) ? state.ground : []).filter((g) => g && validSnap(g.d) && [g.p, g.base, g.dir].every((a) => Array.isArray(a) && a.length === 3) && Array.isArray(g.q) && g.q.length === 4);
     return true;
   } catch (e) { /* storage unavailable */ }
   return false;
@@ -2893,7 +2949,7 @@ function load() {
 const mutCount = (s, k) => s.stats.mut[k] || 0;
 const QUESTS = [
   { id: "t1", text: "나무를 한 그루 베어 보세요", prog: (s) => [s.stats.trees, 1], reward: 15 },
-  { id: "sell1", text: "쓰러뜨린 나무를 들고(E) 장작더미에 팔기", prog: (s) => [s.stats.sold + (s.stats.logsSold ? 1 : 0), 1], reward: 20 },
+  { id: "sell1", text: "쓰러뜨린 나무를 들어서 장작더미에 팔기", prog: (s) => [s.stats.sold + (s.stats.logsSold ? 1 : 0), 1], reward: 20 },
   { id: "axe1", text: "오두막 상점에서 도끼 강화하기", prog: (s) => [s.axe, 1], reward: 30 },
   { id: "mut1", text: "변이 나무 베기 (미니맵의 색 점)", prog: (s) => [s.stats.mutTrees, 1], reward: 40 },
   { id: "birch5", text: "자작나무 5그루 베기", prog: (s) => [s.stats.birch, 5], reward: 50 },
@@ -3017,7 +3073,7 @@ function updatePlayer(dt) {
       }
     }
     if (prevT < 0.4 && c.t >= 0.4) SFX.whoosh();
-    if (prevT < CHOP_HIT && c.t >= CHOP_HIT) hitTree(c.tree);
+    if (prevT < CHOP_HIT && c.t >= CHOP_HIT && !carried) hitTree(c.tree);
     if (c.t >= 1) {
       player.chop = null;
       if (player.chopHeld || player.chopQueued) { player.chopQueued = false; tryChop(); }
@@ -3040,7 +3096,7 @@ function findTarget() {
 function tryChop() {
   if (mode !== "play") return;
   initAudio();
-  if (carried) { if (msgCooldown <= 0) { toast("나무를 메고 있어서 도끼질을 할 수 없어요. Q로 내려놓거나 장작더미로 가져가세요."); msgCooldown = 3; } return; }
+  if (carried) { if (msgCooldown <= 0) { toast(`나무를 메고 있어서 도끼질을 할 수 없어요. ${isTouch ? "내려놓기 버튼으로" : "Q로"} 내려놓거나 장작더미로 가져가세요.`); msgCooldown = 3; } return; }
   if (player.chop) { player.chopQueued = true; return; }
   const t = findTarget();
   player.chop = { t: 0, tree: t, face: t ? Math.atan2(t.x - player.pos.x, t.z - player.pos.y) : null };
@@ -3131,35 +3187,61 @@ function partInstance(d, src, mat, tint) {
   im.setMatrixAt(0, new THREE.Matrix4());
   im.setColorAt(0, new THREE.Color().fromArray(tint));
   writeMutAt(im, 0, mutValues(d.mut));
-  im.castShadow = im.receiveShadow = true; im.frustumCulled = false;
+  im.castShadow = im.receiveShadow = true;
   return im;
 }
 // The whole tree as one movable object: holder (position, orientation, scale) → spin (the tree's own turn) → meshes.
 function makeHolder(d) {
   const v = VARIANTS[d.v], holder = new THREE.Group(), spin = new THREE.Group();
   spin.rotation.y = d.rot; holder.scale.setScalar(d.s); holder.add(spin);
-  spin.add(partInstance(d, v.lod0.trunk, MAT.bark[d.sp], d.barkTint));
+  spin.add(partInstance(d, v.lod0.trunk, MAT.barkStill[d.sp], d.barkTint));
   if (d.mut.crystal) spin.add(new THREE.Mesh(crystalGeo(d.v), mfx.crystalMat));
-  else { const lm = partInstance(d, v.lod0.leaves, MAT.leaf[d.sp], d.leafTint); lm.customDepthMaterial = MAT.leaf[d.sp].userData.depth; spin.add(lm); }
+  else { const lm = partInstance(d, v.lod0.leaves, MAT.leafStill[d.sp], d.leafTint); lm.customDepthMaterial = MAT.leafStill[d.sp].userData.depth; spin.add(lm); }
   holder.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   return holder;
 }
-function disposeHolder(h) { scene.remove(h); h.parent && h.parent.remove(h); h.traverse((o) => { if (o.isInstancedMesh) o.dispose(); }); }
+function disposeHolder(h) {
+  scene.remove(h); h.parent && h.parent.remove(h);
+  h.traverse((o) => {
+    if (!o.isInstancedMesh) return;
+    // the vertex attributes are shared with the variant's geometry; only the per-holder mutation buffers are ours
+    const g = o.geometry;
+    for (const k of Object.keys(g.attributes)) if (k !== "aMut" && k !== "aMut2") g.deleteAttribute(k);
+    g.dispose(); o.dispose();
+  });
+}
 const felled = [];
+function makeStump(t, tags) {
+  const stump = new THREE.Mesh(MAT.stumpGeo, logMats(t.sp, tags));
+  stump.scale.set(t.r * 0.95, 0.55, t.r * 0.95); stump.position.set(t.x, t.y + 0.27, t.z); stump.castShadow = stump.receiveShadow = true;
+  scene.add(stump); t.stump = stump;
+}
+function restoreForest() {
+  for (const [i, e] of Object.entries(state.forest)) {
+    const t = trees[i];
+    if (!t || !e) { delete state.forest[i]; continue; }
+    t.mut.gold = !!e.g; t.mut.crystal = !!e.c;
+    if (e.s > 0) { t.state = "stump"; t.regrowAt = U.time.value + e.s; makeStump(t, treeTags(t)); }
+    setTreeMut(t);
+  }
+  for (const g of state.ground) {
+    const holder = makeHolder(g.d);
+    holder.position.fromArray(g.p); holder.quaternion.fromArray(g.q); scene.add(holder);
+    felled.push({ holder, d: g.d, base: new THREE.Vector3().fromArray(g.base), dir: new THREE.Vector3().fromArray(g.dir), len: g.len, state: "ground", t: 0 });
+  }
+}
 function fellTree(t, dirX, dirZ) {
   t.state = "falling"; t.shake = 0; setTreeMatrix(t); refreshMutFx(t);
   const v = VARIANTS[t.v], d = treeSnapshot(t), holder = makeHolder(d);
   holder.position.set(t.x, t.y, t.z);
   scene.add(holder);
-  const stump = new THREE.Mesh(MAT.stumpGeo, logMats(t.sp, d.tags));
-  stump.scale.set(t.r * 0.95, 0.55, t.r * 0.95); stump.position.set(t.x, t.y + 0.27, t.z); stump.castShadow = stump.receiveShadow = true;
-  scene.add(stump); t.stump = stump;
+  makeStump(t, d.tags);
   falling.push({ t, d, holder, axis: new THREE.Vector3(dirZ, 0, -dirX).normalize(), dir: new THREE.Vector3(dirX, 0, dirZ), theta: 0.05, omega: 0.12, phase: "fall", timer: 0, bounces: 0, L: v.height * t.s });
   state.stats.trees++; state.stats[t.sp]++;
   if (d.tags.length) { state.stats.mutTrees++; for (const k of d.tags) state.stats.mut[k] = (state.stats.mut[k] || 0) + 1; }
   toast(d.tags.includes("titan") ? "타이탄이 쓰러진다!!" : "쓰러진다!", true); SFX.creak(t.mut.size ? 0.7 : 1);
-  if (d.tags.length) toast(`${treeLabel(d)} — 값 ×${fmtMult(tagMult(d.tags))}`);
-  checkQuest(); save();
+  if (d.tags.length) toast(`${treeLabel(d)} — 값 ×${fmtMult(valueMult(d.tags))}`);
+  forestMark(t); checkQuest(); save();
 }
 function updateFalling(dt) {
   for (let i = falling.length - 1; i >= 0; i--) {
@@ -3190,6 +3272,7 @@ function updateFalling(dt) {
         felled.push({ holder: f.holder, d: f.d, base: new THREE.Vector3(t.x, t.y, t.z), dir: f.dir.clone(), len: f.L, state: "ground", t: 0 });
         while (felled.filter((o) => o.state === "ground").length > 30) { const k = felled.findIndex((o) => o.state === "ground"); disposeHolder(felled[k].holder); felled.splice(k, 1); }
         falling.splice(i, 1);
+        forestMark(t); save();
       }
     }
   }
@@ -3219,6 +3302,7 @@ function liftTree(o) {
     const need = STRENGTH.findIndex((x) => x.lift >= o.d.weight);
     toast(`너무 무거워요 (무게 ${o.d.weight}). 상점에서 힘을 ${need + 1}단계까지 길러야 들 수 있어요.`); SFX.deny(); return;
   }
+  player.chop = null; player.chopQueued = false;
   char.carry.attach(o.holder);
   o.state = "lift"; o.t = 0; o.fromPos = o.holder.position.clone(); o.fromQuat = o.holder.quaternion.clone();
   carried = o; state.carrying = o.d;
@@ -3247,7 +3331,7 @@ function updateFelled(dt) {
     } else if (o.state === "drop") {
       o.t = Math.min(1, o.t + dt / 0.4);
       o.holder.position.lerpVectors(o.fromPos, o.toPos, ease(o.t)); o.holder.quaternion.slerpQuaternions(o.fromQuat, o.toQuat, ease(o.t));
-      if (o.t >= 1) { o.state = "ground"; emitPuff(o.base, 6, { size: 1.2, spread: 1, up: 0.4, life: 1.4, alpha: 0.3, color: [0.6, 0.55, 0.45] }); }
+      if (o.t >= 1) { o.state = "ground"; save(); emitPuff(o.base, 6, { size: 1.2, spread: 1, up: 0.4, life: 1.4, alpha: 0.3, color: [0.6, 0.55, 0.45] }); }
     } else if (o.state === "throw") {
       o.t = Math.min(1, o.t + dt / 0.9);
       const k = ease(o.t);
@@ -3289,7 +3373,7 @@ function updateTrees(dt) {
       // a new tree grows in the same spot: weather marks are gone, gold/crystal are rolled again
       Object.assign(t.mut, { wet: false, frost: false, shock: false });
       rollMaterialMut(t, Math.random);
-      setTreeMut(t);
+      setTreeMut(t); forestMark(t); save();
     } else if (t.state === "growing") {
       t.growT = Math.min(1, t.growT + dt / 8);
       if (t.growT >= 1) { t.state = "standing"; t.hp = t.maxHp; }
@@ -3393,7 +3477,7 @@ function updateMutLabels() {
     if (el.dataset.key !== key) {
       const main = tags.find((k) => ["gold", "crystal", "shock"].includes(k)) || tags[0];
       el.dataset.key = key; el.style.color = MUTS[main].color;
-      el.textContent = `${tags.map((k) => MUTS[k].name).join(" · ")} ${SPECIES[t.sp].name} ×${fmtMult(tagMult(tags))}`;
+      el.textContent = `${tags.map((k) => MUTS[k].name).join(" · ")} ${SPECIES[t.sp].name} ×${fmtMult(valueMult(tags))}`;
     }
   });
 }
@@ -3409,7 +3493,7 @@ function updateWorldHUD(dt) {
     const tags = treeTags(target), key = target.sp + tags.join();
     if (hpEl.dataset.key !== key) {
       hpEl.dataset.key = key;
-      hpEl.querySelector(".name").innerHTML = tags.map((k) => `<span style="color:${MUTS[k].color}">${MUTS[k].name}</span> `).join("") + SPECIES[target.sp].name + (tags.length ? ` <b class="mult">×${fmtMult(tagMult(tags))}</b>` : "");
+      hpEl.querySelector(".name").innerHTML = tags.map((k) => `<span style="color:${MUTS[k].color}">${MUTS[k].name}</span> `).join("") + SPECIES[target.sp].name + (tags.length ? ` <b class="mult">×${fmtMult(valueMult(tags))}</b>` : "");
     }
     hpEl.querySelector("i").style.width = (clamp(target.hp / target.maxHp, 0, 1) * 100) + "%";
   } else hpEl.classList.add("hidden");
@@ -3468,7 +3552,7 @@ function drawMinimap(dt) {
     if (o.kind !== "tree" || (o.state !== "standing" && o.state !== "growing")) return;
     g.beginPath(); g.arc(o.x, o.z, 0.9 + o.s * 0.5, 0, TAU); g.fill();
     const m = o.mut;
-    if (m.size === "titan" || m.gold || m.crystal || m.shock || m.frost || m.wet) marked.push(o);
+    if (m.size || m.gold || m.crystal || m.shock || m.frost || m.wet) marked.push(o);
   });
   // mutation markers: weather marks small, rare mutations bright, titans ringed
   g.lineWidth = 0.6; g.strokeStyle = "rgba(0,0,0,0.7)";
@@ -3476,6 +3560,7 @@ function drawMinimap(dt) {
     const m = o.mut, rare = m.gold || m.crystal || m.shock;
     if (pass === 0 && !rare && (m.frost || m.wet)) { g.fillStyle = m.frost ? MUTS.frost.color : MUTS.wet.color; g.beginPath(); g.arc(o.x, o.z, 1.3, 0, TAU); g.fill(); }
     if (pass === 1 && rare) { g.fillStyle = MUTS[m.gold ? "gold" : m.crystal ? "crystal" : "shock"].color; g.beginPath(); g.arc(o.x, o.z, 2.3, 0, TAU); g.fill(); g.stroke(); }
+    if (pass === 0 && m.size === "big") { g.strokeStyle = MUTS.big.color; g.lineWidth = 0.9; g.beginPath(); g.arc(o.x, o.z, 3, 0, TAU); g.stroke(); g.strokeStyle = "rgba(0,0,0,0.7)"; g.lineWidth = 0.6; }
     if (pass === 1 && m.size === "titan") { g.strokeStyle = MUTS.titan.color; g.lineWidth = 1.1; g.beginPath(); g.arc(o.x, o.z, 4.2, 0, TAU); g.stroke(); g.strokeStyle = "rgba(0,0,0,0.7)"; g.lineWidth = 0.6; }
   }
   g.fillStyle = "#f0b860";
@@ -3573,20 +3658,21 @@ addEventListener("keydown", (e) => {
   if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
   if (mode === "title") { if (e.code === "Enter" || e.code === "Space") startGame(); return; }
   if (mode === "shop") {
+    if (e.repeat) return;
     if (e.code === "Escape" || e.code === "KeyE") closeShop();
     const n = { Digit1: "axe", Digit2: "str", Digit3: "boots", Numpad1: "axe", Numpad2: "str", Numpad3: "boots" }[e.code];
     if (n) buy(n);
     return;
   }
-  if (mode === "pause") { if (e.code === "Escape" || e.code === "KeyP") setPaused(false); if (e.code === "KeyM") setMuted(!sfx.muted); return; }
+  if (mode === "pause") { if (e.repeat) return; if (e.code === "Escape" || e.code === "KeyP") setPaused(false); if (e.code === "KeyM") setMuted(!sfx.muted); return; }
   if (mode !== "play") return;
   keys[e.code] = true;
   initAudio();
   if ((e.code === "Space" || e.code === "KeyJ") && !e.repeat) { player.chopHeld = true; tryChop(); }
   if (e.code === "KeyE" && !e.repeat) interact();
   if (e.code === "KeyQ" && !e.repeat && carried && carried.state === "carried") dropTree();
-  if (e.code === "Escape" || e.code === "KeyP") setPaused(true);
-  if (e.code === "KeyM") setMuted(!sfx.muted);
+  if ((e.code === "Escape" || e.code === "KeyP") && !e.repeat) setPaused(true);
+  if (e.code === "KeyM" && !e.repeat) setMuted(!sfx.muted);
 });
 addEventListener("keyup", (e) => {
   keys[e.code] = false;
@@ -3599,7 +3685,7 @@ canvas.addEventListener("pointerdown", (e) => {
   if (mode !== "play") return;
   drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0, button: e.button, type: e.pointerType };
   canvas.setPointerCapture(e.pointerId);
-  if (e.pointerType === "mouse" && e.button === 0) { player.chopHeld = true; drag.chopTimer = setTimeout(() => { if (drag && drag.moved < 6) tryChop(); }, 140); }
+  if (e.pointerType === "mouse" && e.button === 0) { player.chopHeld = true; drag.chopTimer = setTimeout(() => { if (!drag) return; drag.chopFired = true; if (drag.moved < 6) tryChop(); }, 140); }
 });
 canvas.addEventListener("pointermove", (e) => {
   if (!drag || drag.id !== e.pointerId) return;
@@ -3613,7 +3699,7 @@ canvas.addEventListener("pointermove", (e) => {
 });
 const endDrag = (e) => {
   if (!drag || drag.id !== e.pointerId) return;
-  if (drag.chopTimer) { clearTimeout(drag.chopTimer); if (drag.moved < 6) tryChop(); }
+  if (drag.chopTimer && !drag.chopFired) { clearTimeout(drag.chopTimer); if (drag.moved < 6) tryChop(); }
   player.chopHeld = false; drag = null;
 };
 canvas.addEventListener("pointerup", endDrag);
@@ -3651,6 +3737,7 @@ $("#resetBtn").addEventListener("click", () => {
   location.reload();
 });
 $("#shopClose").addEventListener("click", closeShop);
+if (isTouch) $("#shopClose").textContent = "닫기";
 $("#startBtn").addEventListener("click", startGame);
 addEventListener("resize", () => {
   renderer.setSize(innerWidth, innerHeight);
@@ -3698,7 +3785,7 @@ function startGame() {
   const tgt = new THREE.Vector3(player.pos.x, player.y + 1.55, player.pos.y);
   camera.position.copy(tgt).add(new THREE.Vector3(Math.sin(cam.yaw) * cam.dist, 3, Math.cos(cam.yaw) * cam.dist));
   updateHUD(); updateGrass();
-  toast(state.stats.trees ? "다시 숲으로! 오늘도 힘차게 베어 봅시다." : "숲에 온 걸 환영해요. 가까운 나무 앞에서 Space(또는 클릭)로 도끼질!");
+  toast(state.stats.trees ? "다시 숲으로! 오늘도 힘차게 베어 봅시다." : `숲에 온 걸 환영해요. 가까운 나무 앞에서 ${isTouch ? "도끼질 버튼으로" : "Space(또는 클릭)로"} 도끼질!`);
   setTimeout(() => toast("숲 곳곳에 황금·수정·거대·타이탄 나무가 있어요. 미니맵의 색 점과 테두리 화살표를 따라가 보세요."), 3500);
   canvas.focus();
 }
@@ -3784,6 +3871,7 @@ async function init() {
   const hadSave = load();
   buildAxeMesh(state.axe); setWoodpile(woodpileCount());
   spawnPlayer();
+  restoreForest();
   if (state.carrying) {
     const o = { holder: makeHolder(state.carrying), d: state.carrying, base: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, 1), len: VARIANTS[state.carrying.v].height * state.carrying.s, state: "carried", t: 1 };
     char.carry.add(o.holder); carryTarget(o, o.holder.position, o.holder.quaternion);
