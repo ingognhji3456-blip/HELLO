@@ -4485,6 +4485,61 @@ function updateFalling(dt) {
 /* ---------- lying on the ground ---------- */
 const _sa = new THREE.Vector3(), _sb = new THREE.Vector3(), _sq = new THREE.Quaternion();
 // Where a piece comes to rest: both ends on the ground (the crown end held up by its limbs), keeping its heading.
+// Other pieces count as ground: a piece comes to rest on top of the ones under it, never through them.
+// A piece's trunk centre line in world space as a short polyline with radii, in the pose it is in or settling into.
+function axisPts(q) {
+  const v = VARIANTS[q.d.v], s = q.d.s, ya = q.s0, yb = pieceEnd(q), n = clamp(Math.ceil(((yb - ya) * s) / 0.5), 2, 24), pts = [];
+  const pos = q.state === "settle" ? q.toPos : q.holder.position, quat = q.state === "settle" ? q.toQuat : q.holder.quaternion, pv = q.pivot;
+  for (let i = 0; i <= n; i++) {
+    const y = lerp(ya, yb, i / n), c = spineAt(v.spine, y), r = c.r * s;
+    const w = new THREE.Vector3(c.x - pv.x, y - pv.y, c.z - pv.z).applyAxisAngle(UP, q.d.rot).multiplyScalar(s).applyQuaternion(quat).add(pos);
+    pts.push({ x: w.x, y: w.y, z: w.z, r });
+  }
+  return { q, pts, up: !!q.upright, len: (yb - ya) * s };
+}
+// the lying (or settling) pieces near a spot, as support lines
+function supportsNear(p, x, z, reach) {
+  const out = [];
+  for (const q of pieces) {
+    if (q === p || q === carried || (q.state !== "ground" && q.state !== "settle") || !q.pivot) continue;
+    const P = q.state === "settle" ? q.toPos : q.holder.position;
+    if (Math.hypot(P.x - x, P.z - z) < reach + haulLen(q) / 2 + 1) out.push(axisPts(q));
+  }
+  return out;
+}
+// how high the centre of a log of radius r must be at (x, z) to lie on the pieces there (-Infinity if none is under it)
+function restHeight(x, z, r, lines, used) {
+  let h = -Infinity;
+  for (const L of lines) {
+    const P = L.pts;
+    if (L.up) {
+      // an upright round: a log lies across its flat top face
+      const a = P[0], b = P[P.length - 1], top = a.y > b.y ? a : b;
+      if (Math.hypot(x - top.x, z - top.z) < top.r + r * 0.5 && top.y + r > h) { h = top.y + r; used.add(L.q); }
+      continue;
+    }
+    const n = P.length - 1;
+    for (let i = 1; i <= n; i++) {
+      const a = P[i - 1], b = P[i], dx = b.x - a.x, dz = b.z - a.z, ll = dx * dx + dz * dz;
+      if (ll < 1e-6) continue;
+      const u = ((x - a.x) * dx + (z - a.z) * dz) / ll;
+      if (u < 0 || u > 1) continue;
+      // not right at its ends: a log sawn in two touches its other half end to end
+      const t = (i - 1 + u) / n;
+      if (t * L.len < 0.04 || (1 - t) * L.len < 0.04) continue;
+      const d = Math.hypot(x - a.x - dx * u, z - a.z - dz * u), rq = lerp(a.r, b.r, u);
+      if (d >= rq + r) continue;
+      const hh = lerp(a.y, b.y, u) + Math.sqrt((rq + r) ** 2 - d * d);
+      if (hh > h) h = hh;
+      used.add(L.q);
+    }
+  }
+  return h;
+}
+// a piece leaving the ground lets whatever lay on it come down (onto the ground or whatever is now under it)
+function unsupport(q) {
+  for (const r of pieces) if (r !== q && r.state === "ground" && r.restsOn && r.restsOn.has(q)) settle(r);
+}
 function settle(p, stump = null, quick = false) {
   const v = VARIANTS[p.d.v], s = p.d.s, ya = p.s0, yb = pieceEnd(p);
   scene.attach(p.holder);
@@ -4509,8 +4564,11 @@ function settle(p, stump = null, quick = false) {
     p.fromPos = p.holder.position.clone(); p.fromQuat = p.holder.quaternion.clone();
     p.toQuat = _sq.clone().multiply(p.holder.quaternion);
     const off = new THREE.Vector3().addVectors(A, B).multiplyScalar(0.5).sub(p.holder.position).applyQuaternion(_sq);
-    const gx = cx, gz = cz, gy = Math.max(groundY(gx + 0.6 * Math.max(rA, rB), gz), groundY(gx - 0.6 * Math.max(rA, rB), gz), groundY(gx, gz + 0.6 * Math.max(rA, rB)), groundY(gx, gz - 0.6 * Math.max(rA, rB)), groundY(gx, gz));
-    p.toPos = new THREE.Vector3(gx, gy + L / 2 + 0.005, gz).sub(off);
+    const R = 0.6 * Math.max(rA, rB), lines = supportsNear(p, cx, cz, 1), used = new Set();
+    let gy = -Infinity;
+    for (const [ox, oz] of [[0, 0], [R, 0], [-R, 0], [0, R], [0, -R]]) gy = Math.max(gy, groundY(cx + ox, cz + oz), restHeight(cx + ox, cz + oz, 0, lines, used));
+    p.toPos = new THREE.Vector3(cx, gy + L / 2 + 0.005, cz).sub(off);
+    p.upright = true; p.restsOn = used;
     p.state = "settle"; p.t = quick ? 1 : 0;
     if (quick) { p.holder.position.copy(p.toPos); p.holder.quaternion.copy(p.toQuat); p.state = "ground"; }
     return;
@@ -4519,13 +4577,31 @@ function settle(p, stump = null, quick = false) {
   // tips up like a leaning tree (at most about 12 degrees)
   let prop = rB;
   if (pieceTop(p)) { const n = v.subs.filter((sb) => sb.y >= p.s0).length; if (n) prop = Math.max(rB, Math.min(v.crownR * s * 0.3 * Math.sqrt(n / v.subs.length), rA + L * 0.2)); }
-  // both ends on the ground: the horizontal span shrinks on a slope so the log keeps its length
+  // Both ends down, the whole length clear of bumps and of other pieces under it. Where something holds it up, the
+  // log pivots over it: the end on the side that carries more of the log stays down, the other one rises onto it.
+  // The horizontal span shrinks as it tilts so the log keeps its length.
+  const lines = supportsNear(p, cx, cz, L / 2 + 1), used = new Set(), ns = clamp(Math.ceil(L / 0.3), 2, 40), hs = [];
   let half = L / 2, ax, az, bx, bz, ay, by;
-  for (let k = 0; k < 3; k++) {
+  for (let it = 0; it < 4; it++) {
     ax = cx - hx * half; az = cz - hz * half; bx = cx + hx * half; bz = cz + hz * half;
-    ay = groundY(ax, az) + rA; by = groundY(bx, bz) + prop;
+    used.clear();
+    for (let i = 0; i <= ns; i++) {
+      const k = i / ns, x = lerp(ax, bx, k), z = lerp(az, bz, k), r = spineAt(v.spine, lerp(ya, yb, k)).r * s;
+      hs[i] = Math.max(groundY(x, z) + (i === ns ? prop : r), restHeight(x, z, r, lines, used));
+    }
+    ay = hs[0]; by = hs[ns];
+    for (let j = 0; j < 8; j++) {
+      let worst = 0.004, wi = -1;
+      for (let i = 1; i < ns; i++) { const e = hs[i] - lerp(ay, by, i / ns); if (e > worst) { worst = e; wi = i; } }
+      if (wi < 0) break;
+      const k = wi / ns;
+      if (Math.abs(k - 0.5) < 0.12) { ay += worst; by += worst; }
+      else if (k < 0.5) ay = by + (hs[wi] - by) / (1 - k);
+      else by = ay + (hs[wi] - ay) / k;
+    }
     half = Math.sqrt(Math.max(L * L * 0.04, L * L - (by - ay) ** 2)) / 2;
   }
+  p.upright = false; p.restsOn = used;
   const axisNow = _v.subVectors(B, A).normalize(), axisNew = _v2.set(bx - ax, by - ay, bz - az).normalize();
   _sq.setFromUnitVectors(axisNow, axisNew);
   p.fromPos = p.holder.position.clone(); p.fromQuat = p.holder.quaternion.clone();
@@ -4566,7 +4642,7 @@ function evictPieces() {
   let n = ground.length;
   for (const p of ground) {
     if (n <= MAX) break;
-    if (pieceTop(p) && p.s0 > p.d.cutY + 1e-3 && !p.d.tags.length && far(p)) { removePiece(p); n--; }
+    if (pieceTop(p) && p.s0 > p.d.cutY + 1e-3 && !p.d.tags.length && far(p)) { removePiece(p); unsupport(p); n--; }
   }
 }
 
@@ -4750,6 +4826,7 @@ function splitPiece(p, y) {
   removePiece(p);
   pieces.push(...parts);
   for (const q of parts) settle(q);
+  unsupport(p);
   return parts;
 }
 
@@ -4772,7 +4849,7 @@ function pickUp(p) {
     p.backPos = (p.front === p.s0 ? B : A).clone();
     const c = spineAt(VARIANTS[p.d.v].spine, p.front); setPivot(p, c.x, p.front, c.z);
   }
-  carried = p; setPieceCarried(p, true);
+  carried = p; setPieceCarried(p, true); unsupport(p);
   SFX.creak(1.6); SFX.pickup(); updateHUD();
 }
 // In the torso's frame: long logs ride on the right shoulder, short ones are hugged against the belly. A shouldered log
@@ -5309,15 +5386,37 @@ function updateTruck(dt) {
 }
 // bed layout: logs lie lengthwise, side by side, stacking up when a layer is full. The butt rests against the front
 // board (inner face at bed z 0.97) and anything longer than the 2 m bed hangs out past the tailgate, never into the cab.
+// Each log lies lengthwise with its butt against the front board, aligned by its real trunk axis, in the lowest spot
+// across the bed where it rests on the floor or on the logs already there (a height map over the bed: no overlaps).
 function layoutBed() {
-  let x = -0.7, layer = 0, rowH = 0, kg = 0;
+  const NX = 29, NZ = 26, X0 = -0.7, DX = 1.42 / (NX - 1), Z1 = 0.95, DZ = 0.25, H = new Float32Array(NX * NZ);
+  let kg = 0;
   truck.over = 0;
   for (const p of truck.bed) {
-    const r = diamAt(p.d, (p.s0 + pieceEnd(p)) / 2) / 2, L = pieceLen(p);
-    if (x + 2 * r > 0.72) { x = -0.7; layer += rowH; rowH = 0; }
-    const cx = x + r, cy = layer + r, cz = 0.95 - L / 2;
-    x += 2 * r + 0.02; rowH = Math.max(rowH, 2 * r);
-    p.bedPose = { pos: new THREE.Vector3(cx, cy, cz), quat: new THREE.Quaternion().setFromUnitVectors(UP, _v.set(0, 0, -1)) };
+    const v = VARIANTS[p.d.v], s = p.d.s, ya = p.s0, yb = pieceEnd(p), L = pieceLen(p);
+    const c0 = { ...spineAt(v.spine, ya) }, c1 = { ...spineAt(v.spine, yb) }, cm = spineAt(v.spine, (ya + yb) / 2);
+    const r = Math.max(c0.r, c1.r) * s, nz = Math.min(NZ, Math.ceil(L / DZ));
+    // the lowest place across the bed for this log
+    let best = Infinity, bx = 0;
+    for (let cx = X0 + r; cx <= 0.72 - r + 1e-6; cx += 0.05) {
+      let y = r;
+      for (let i = 0; i < NX; i++) {
+        const dx = X0 + i * DX - cx; if (Math.abs(dx) >= r) continue;
+        const lift = Math.sqrt(r * r - dx * dx);
+        for (let j = 0; j < nz; j++) y = Math.max(y, H[i * NZ + j] + lift);
+      }
+      if (y < best - 1e-4) { best = y; bx = cx; }
+    }
+    for (let i = 0; i < NX; i++) {
+      const dx = X0 + i * DX - bx; if (Math.abs(dx) >= r) continue;
+      const top = best + Math.sqrt(r * r - dx * dx);
+      for (let j = 0; j < nz; j++) H[i * NZ + j] = Math.max(H[i * NZ + j], top);
+    }
+    // the trunk's own axis (it leans a little in the tree's space) points to the tailgate; keep the bow offset
+    const axisL = _v.set(c1.x - c0.x, yb - ya, c1.z - c0.z).applyAxisAngle(UP, p.d.rot).normalize();
+    const quat = new THREE.Quaternion().setFromUnitVectors(axisL, _v2.set(0, 0, -1));
+    const bow = new THREE.Vector3((c0.x + c1.x) / 2 - cm.x, 0, (c0.z + c1.z) / 2 - cm.z).applyAxisAngle(UP, p.d.rot).multiplyScalar(s).applyQuaternion(quat);
+    p.bedPose = { pos: new THREE.Vector3(bx, best, Z1 - L / 2).sub(bow), quat };
     // how far the load reaches past the tailgate (outer face at bed z -1.04), crown included: the truck bumps with it
     truck.over = Math.max(truck.over, haulLen(p) - 1.99);
     kg += pieceKg(p);
@@ -5367,7 +5466,7 @@ function startWinch(p) {
   const why = canLoad(p);
   if (why) { toast(why); SFX.deny(); return; }
   truck.winching = { p, t: 0, from: p.holder.position.clone() };
-  p.state = "winch";
+  p.state = "winch"; unsupport(p);
   SFX.winch();
 }
 function updateWinch(dt) {
