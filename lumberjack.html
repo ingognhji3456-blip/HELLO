@@ -76,8 +76,9 @@ kbd {
 #cutInfo .bar i { display: block; height: 100%; background: linear-gradient(90deg, #d9a441, #f3d27a); }
 .haul { font-style: normal; font-size: 11px; font-weight: 800; padding: 1px 6px; border-radius: 999px; margin-left: 4px; color: #1b1308; }
 .haul.carry { background: #9fe36a; } .haul.drag { background: #f3d27a; } .haul.truck { background: #f0a050; } .haul.cut { background: #e06a52; }
-#toasts { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); display: grid; gap: 6px; justify-items: center; width: min(420px, calc(100vw - 380px)); }
-@media (max-width: 760px) { #toasts { top: 210px; width: calc(100vw - 32px); } }
+/* toasts sit outside the HUD so they draw above the shop and pause sheets (a quest reward shows while the shop opens) */
+#toasts { position: fixed; z-index: 26; pointer-events: none; left: 50%; top: 18px; transform: translateX(-50%); display: grid; gap: 6px; justify-items: center; width: min(420px, calc(100vw - 380px)); }
+@media (max-width: 760px) { #toasts { top: 210px; width: calc(100vw - 32px); } body.touch #toasts { top: 322px; } }
 .toast { padding: 8px 14px; font-size: 14px; text-align: center; animation: toastIn 0.25s ease-out; }
 .toast.big { font-size: 22px; font-weight: 800; letter-spacing: 0.04em; color: #ffe2a0; background: rgba(40, 24, 8, 0.6); }
 .toast.out { opacity: 0; transition: opacity 0.5s; }
@@ -112,6 +113,8 @@ kbd {
 body.touch #hotbar { left: auto; right: 16px; bottom: auto; top: 214px; transform: none; flex-direction: column; gap: 6px; }
 body.touch .slot { min-width: 0; padding: 4px 10px 4px 6px; }
 body.touch .slot kbd { display: none; }
+/* the prompt stays in the free middle between the joystick and the button cluster */
+body.touch #prompt { left: 164px; right: 202px; margin: 0 auto; transform: none; max-width: calc(100vw - 366px); }
 .tbtn:active, .tbtn.on { background: rgba(232, 172, 76, 0.45); }
 
 /* Overlays */
@@ -152,7 +155,12 @@ body.touch .slot kbd { display: none; }
 .card .t span { font-weight: 600; font-size: 12px; color: var(--amber); margin-left: 6px; }
 .card .d { grid-column: 1; font-size: 13px; color: var(--ink-dim); }
 .card .btn { grid-row: 1 / span 2; grid-column: 2; min-width: 112px; }
-.shopFoot { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; gap: 12px; flex-wrap: wrap; }
+/* the footer with the close button stays in view however far the card list scrolls (touch has no E or Esc); it is
+   opaque so the cards scrolling under it do not show through, and the stats sit above it to keep it one button tall */
+.shopFoot { display: flex; justify-content: flex-end; align-items: center; margin-top: 12px;
+  position: sticky; bottom: -22px; margin-bottom: -22px; padding: 10px 0 22px; background: rgb(26, 20, 13); border-top: 1px solid var(--edge); }
+#shopStats { margin-top: 14px; }
+.card.sel { border-color: rgba(232, 172, 76, 0.85); background: rgba(70, 46, 16, 0.55); }
 .stats { font-size: 12px; color: var(--ink-dim); line-height: 1.6; }
 #pause .sheet { text-align: center; width: min(380px, 100%); }
 .shopSheet { width: min(640px, 100%); }
@@ -185,6 +193,15 @@ body.touch .slot kbd { display: none; }
   #minimap { height: 118px; }
   #pauseBtn { right: 146px; }
   #quest { top: 112px; }
+  /* phones on their side have no room for the slot column beside the buttons: the slots go in the free bottom middle
+     (as on desktop) with the prompt above them, the tool button moves over the use button to clear the minimap */
+  body.touch #hotbar { left: 164px; right: 202px; top: auto; bottom: 14px; width: max-content; max-width: calc(100vw - 366px); margin: 0 auto; flex-direction: row; }
+  body.touch .slot small { display: none; }
+  body.touch .slot b { max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+  body.touch #prompt { bottom: 66px; font-size: 13px; padding: 7px 12px; }
+  body.touch #stamina { bottom: 58px; }
+  body.touch #bTool { right: 132px; bottom: 104px; }
+  body.touch #toasts { top: 18px; width: min(420px, calc(100vw - 380px)); }
 }
 @media (max-width: 560px) {
   #res { min-width: 0; padding: 8px 10px; }
@@ -194,6 +211,9 @@ body.touch .slot kbd { display: none; }
   #pauseBtn { right: 146px; }
   #prompt { bottom: 178px; font-size: 14px; }
   #stamina { bottom: 168px; }
+  /* portrait phones: the prompt and stamina bar go above the tool button instead of under it */
+  body.touch #prompt { left: 16px; right: 16px; max-width: calc(100vw - 32px); bottom: 220px; }
+  body.touch #stamina { bottom: 208px; }
 }
 </style>
 </head>
@@ -223,7 +243,6 @@ body.touch .slot kbd { display: none; }
     <div class="slot panel" id="slotAxe" data-tool="axe"><kbd>1</kbd><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 15 9" stroke="#8b5a2b" stroke-width="2.4" stroke-linecap="round"/><path d="M12.5 6.5c2-2 5-3 7.5-2.5.5 2.5-.5 5.5-2.5 7.5z" fill="#c4cad0"/></svg><div><b id="slotAxeName"></b><small id="slotAxeStat"></small></div></div>
     <div class="slot panel" id="slotSaw" data-tool="saw"><kbd>2</kbd><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15h16l2-3H5z" fill="#c4cad0"/><path d="M3 15c0-6 3-9 9-9s9 3 9 6" stroke="#c0612c" stroke-width="2" fill="none"/></svg><div><b id="slotSawName"></b><small id="slotSawStat"></small></div></div>
   </div>
-  <div id="toasts"></div>
   <div id="floaters"></div>
   <div id="mutLabels"></div>
   <div id="touch" class="hidden">
@@ -233,6 +252,7 @@ body.touch .slot kbd { display: none; }
     <div id="bChop" class="tbtn">도끼질</div>
   </div>
 </div>
+<div id="toasts"></div>
 
 <div id="title" class="overlay hidden">
   <div class="inner">
@@ -265,8 +285,8 @@ body.touch .slot kbd { display: none; }
       <span id="shopCoins"></span>
     </div>
     <div class="cards" id="shopCards"></div>
+    <div class="stats" id="shopStats"></div>
     <div class="shopFoot">
-      <div class="stats" id="shopStats"></div>
       <button class="btn ghost small" id="shopClose">닫기 (E)</button>
     </div>
   </div>
@@ -2225,6 +2245,11 @@ function buildCabin() {
     [-W2 - T, -0.6, D2 - T, D2 + T], [0.6, W2 + T, D2 - T, D2 + T],
     [-W2 - 0.95, -W2 - 0.05, -0.45, 0.45], [-1.45, 1.45, COUNTER_Z - 0.32, COUNTER_Z + 0.32], [-IN_X, -IN_X + 0.75, -0.45, 0.35],
     [4.3, 6.15, -2.55, 2.55],
+    // behind the counter is the keeper's: the gaps from its ends to the side walls are closed, and he, the
+    // blueprint table and the two crates are solid
+    [-IN_X, -1.45, COUNTER_Z - 0.32, COUNTER_Z + 0.1], [1.45, IN_X, COUNTER_Z - 0.32, COUNTER_Z + 0.1],
+    [KEEPER_LOCAL[0] - 0.35, KEEPER_LOCAL[0] + 0.35, KEEPER_LOCAL[1] - 0.33, KEEPER_LOCAL[1] + 0.32],
+    [-3.0, -2.1, 1.4, 2.0], [2.45, 3.05, 1.55, 2.15], [2.7, 3.2, 1.0, 1.5],
   ];
   cabin.platforms = [[-W2 - 0.3, W2 + 0.3, D2, D2 + 2.0, 0.18], [-0.8, 0.8, D2 + 1.95, D2 + 2.45, 0.1], [-IN_X, IN_X, -IN_Z, IN_Z, 0.18], [-0.6, 0.6, D2 - 0.3, D2 + 0.1, 0.18]];
 }
@@ -5485,7 +5510,7 @@ function makePlanks(p) {
   updateHUD(); checkQuest(); save();
 }
 function buyBlueprint() {
-  if (state.bp || state.coins < BLUEPRINT_COST) { SFX.deny(); return; }
+  if (state.bp || state.coins < BLUEPRINT_COST) { SFX.deny(); shopSel = -1; if (mode === "shop") renderShop(); return; }
   state.coins -= BLUEPRINT_COST; state.bp = true;
   SFX.buy(); toast("픽업트럭 설계도를 샀어요! 재료 위치가 미니맵에 표시돼요.", true);
   $("#keeperSay").textContent = "설계도는 오두막 뒤 작업장에 펼쳐 두었네. 재료를 모아 오면 하나씩 조립해 보게.";
@@ -5495,7 +5520,8 @@ function buyBlueprint() {
 function renderBlueprintTab(box) {
   const card = document.createElement("div"); card.className = "card";
   if (!state.bp) {
-    card.innerHTML = `<div class="t"><span class="num">1</span>픽업트럭 설계도</div><div class="d">숲이 넓으니 트럭이 있으면 통나무를 한꺼번에 실어 나를 수 있지. 설계도를 사면 재료가 있는 곳이 미니맵에 표시되고, 오두막 뒤 작업장에서 직접 조립할 수 있어. 재료는 팔지 않네 — 숲에서 직접 찾아오게.</div>`;
+    if (shopSel === 0) card.classList.add("sel");
+    card.innerHTML = `<div class="t"><span class="num">1</span>픽업트럭 설계도${shopSel === 0 ? selHint(state.coins >= BLUEPRINT_COST, "구매") : ""}</div><div class="d">숲이 넓으니 트럭이 있으면 통나무를 한꺼번에 실어 나를 수 있지. 설계도를 사면 재료가 있는 곳이 미니맵에 표시되고, 오두막 뒤 작업장에서 직접 조립할 수 있어. 재료는 팔지 않네 — 숲에서 직접 찾아오게.</div>`;
     const b = document.createElement("button"); b.className = "btn small"; b.textContent = `${BLUEPRINT_COST.toLocaleString("ko-KR")} 코인`; b.disabled = state.coins < BLUEPRINT_COST; b.onclick = buyBlueprint;
     card.appendChild(b); box.appendChild(card);
   } else {
@@ -5874,12 +5900,14 @@ const KEEPER_LINES = [
   "숲이 넓으니 언젠가는 트럭이 있어야 할 걸세.",
   "황금빛 나무를 봤다는 소문이 있던데… 자네도 봤나?",
 ];
-let shopTab = "axe";
+let shopTab = "axe", shopSel = -1, shopOpenAt = 0, shopDown = null;
 function shopItems() {
   if (shopTab === "axe") return AXES.map((A, i) => ({ i, kind: "axe", def: A })).slice(1).concat([{ i: 0, kind: "axe", def: AXES[0] }]);
   if (shopTab === "saw") return SAWS.map((S, i) => ({ i, kind: "saw", def: S })).slice(1).concat([{ i: 0, kind: "saw", def: SAWS[0] }]);
   return [];
 }
+// the card picked with a number key waits for the same key again (or Enter) before it spends anything
+const selHint = (ok, verb) => `<span>${ok ? `한 번 더 누르거나 Enter → ${verb}` : "코인이 모자라요"}</span>`;
 const bar = (label, v, txt) => `<span>${label}</span><i><b style="width:${Math.round(clamp(v, 0.03, 1) * 100)}%"></b></i><span class="v">${txt}</span>`;
 function renderShop() {
   $("#shopCoins").textContent = `${state.coins.toLocaleString("ko-KR")} 코인`;
@@ -5888,11 +5916,11 @@ function renderShop() {
   if (shopTab === "bp") renderBlueprintTab(box);
   else shopItems().forEach((it, n) => {
     const own = (it.kind === "axe" ? state.ownAxes : state.ownSaws).includes(it.i), eq = state[it.kind] === it.i, D = it.def;
-    const card = document.createElement("div"); card.className = "card";
+    const card = document.createElement("div"); card.className = "card" + (n === shopSel ? " sel" : "");
     const stats = it.kind === "axe"
       ? bar("위력", D.dmg / 12, D.dmg) + bar("속도", (1 / D.speed) / 1.7, `${(1 / D.speed).toFixed(2)}회/초`) + bar("초당", D.dmg / D.speed / 19, (D.dmg / D.speed).toFixed(1))
       : bar("속도", D.speed / 0.55, `${Math.round(D.speed * 100)}cm/초`) + bar("최대 지름", D.maxD / 2.2, `${D.maxD.toFixed(2)}m`);
-    card.innerHTML = `<div class="t"><span class="num">${it.i ? (n + 1) % 10 : "·"}</span>${D.name}${own ? `<span class="own">${eq ? "· 사용 중" : "· 보유"}</span>` : ""}</div>
+    card.innerHTML = `<div class="t"><span class="num">${it.i ? (n + 1) % 10 : "·"}</span>${D.name}${own ? `<span class="own">${eq ? "· 사용 중" : "· 보유"}</span>` : ""}${n === shopSel ? selHint(own || state.coins >= D.cost, own ? "쓰기" : "구매") : ""}</div>
       <div class="d">${D.desc}</div><div class="bars">${stats}</div>`;
     const b = document.createElement("button"); b.className = "btn small";
     if (eq) { b.textContent = "사용 중"; b.disabled = true; }
@@ -5905,13 +5933,13 @@ function renderShop() {
   $("#shopStats").innerHTML = `벤 나무 ${s.trees}그루 · 자른 통나무 ${s.cuts || 0}번 · 판 통나무 ${s.sold}개<br>변이 나무 ${s.mutTrees}그루${mutLine ? ` (${mutLine})` : ""} · 번 코인 ${s.earned.toLocaleString("ko-KR")}`;
 }
 function equip(kind, i) {
-  state[kind] = i;
+  state[kind] = i; shopSel = -1;
   if (kind === "axe") buildAxeMesh(i); else buildSawMesh(i);
   SFX.pickup(); updateHotbar(); save(); renderShop();
 }
 function buy(kind, i) {
   const D = (kind === "axe" ? AXES : SAWS)[i], own = kind === "axe" ? state.ownAxes : state.ownSaws;
-  if (own.includes(i) || state.coins < D.cost) { SFX.deny(); return; }
+  if (own.includes(i) || state.coins < D.cost) { SFX.deny(); shopSel = -1; if (mode === "shop") renderShop(); return; }
   state.coins -= D.cost; own.push(i); own.sort((a, b) => a - b);
   equip(kind, i);
   SFX.buy(); toast(`${D.name}을(를) 샀어요!`);
@@ -5924,20 +5952,25 @@ function openShop() {
   $("#keeperSay").textContent = KEEPER_LINES[(state.stats.talks || 0) % KEEPER_LINES.length];
   state.stats.talks = (state.stats.talks || 0) + 1;
   if (cabin.keeper) { cabin.keeper.wave = 1.6; cabin.keeper.talk = 2.2; }
-  renderShop(); $("#shop").classList.remove("hidden"); checkQuest();
+  shopSel = -1; shopOpenAt = performance.now(); shopDown = null;
+  // the first talk can finish a quest: pay it out before drawing the coins and the buy buttons
+  checkQuest(); renderShop(); $("#shop").classList.remove("hidden");
 }
 function closeShop() { $("#shop").classList.add("hidden"); mode = "play"; canvas.focus(); if (player.vehicle) engineSound(true); }
 function shopKey(code) {
   const tabs = ["axe", "saw", "bp"];
-  if (code === "Tab" || code === "ArrowRight") { shopTab = tabs[(tabs.indexOf(shopTab) + 1) % 3]; renderShop(); return; }
-  if (code === "ArrowLeft") { shopTab = tabs[(tabs.indexOf(shopTab) + 2) % 3]; renderShop(); return; }
-  const m = /^(?:Digit|Numpad)(\d)$/.exec(code);
-  if (!m) return;
-  const n = (Number(m[1]) + 9) % 10, it = shopItems()[n];
-  if (shopTab === "bp") { if (n === 0) buyBlueprint(); return; }
-  if (!it || !it.i) return;
-  const own = (it.kind === "axe" ? state.ownAxes : state.ownSaws).includes(it.i);
-  if (own) equip(it.kind, it.i); else buy(it.kind, it.i);
+  if (code === "Tab" || code === "ArrowRight") { shopTab = tabs[(tabs.indexOf(shopTab) + 1) % 3]; shopSel = -1; renderShop(); return; }
+  if (code === "ArrowLeft") { shopTab = tabs[(tabs.indexOf(shopTab) + 2) % 3]; shopSel = -1; renderShop(); return; }
+  // a number only picks a card and the same number (or Enter) buys or equips it, so the 1/2 tool keys pressed out of
+  // habit never spend coins; numbers in the first half second after opening are dropped as that habit too
+  const m = /^(?:Digit|Numpad)(\d)$/.exec(code), enter = code === "Enter" || code === "NumpadEnter";
+  if (!(m ? performance.now() - shopOpenAt > 500 : enter && shopSel >= 0)) return;
+  const n = m ? (Number(m[1]) + 9) % 10 : shopSel, it = shopItems()[n];
+  if (shopTab === "bp" ? n !== 0 || state.bp : !it || !it.i || state[it.kind] === it.i) return;
+  if (n !== shopSel) { shopSel = n; renderShop(); return; }
+  shopSel = -1;
+  if (shopTab === "bp") buyBlueprint();
+  else if ((it.kind === "axe" ? state.ownAxes : state.ownSaws).includes(it.i)) equip(it.kind, it.i); else buy(it.kind, it.i);
 }
 // Everything E (or the use button) can do right now, in one priority order: the prompt and the button use it too.
 const pieceLine = (p) => `${haulLen(p).toFixed(1)}m · ${pieceKg(p)}kg · Ø${Math.round(diamAt(p.d, p.s0) * 100)}cm · ${pieceValue(p).toLocaleString("ko-KR")}코인`;
@@ -6101,7 +6134,13 @@ $("#resetBtn").addEventListener("click", () => {
   location.reload();
 });
 $("#shopClose").addEventListener("click", closeShop);
-document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => { shopTab = b.dataset.tab; renderShop(); }));
+// The use button opens the shop on its press, and the browser then sends that tap's click to whatever the sheet put
+// under the finger (a buy or the close button): a pointer click only counts once a press has begun inside the shop.
+$("#shop").addEventListener("pointerdown", (e) => { shopDown = e.target; });
+$("#shop").addEventListener("click", (e) => { if (!shopDown && e.isTrusted && e.detail) { e.stopPropagation(); e.preventDefault(); } }, true);
+// a tap on the dimmed backdrop around the sheet closes the shop too (only when the press also began there)
+$("#shop").addEventListener("click", (e) => { if (e.target.id === "shop" && shopDown === e.target && mode === "shop") closeShop(); });
+document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => { shopTab = b.dataset.tab; shopSel = -1; renderShop(); }));
 if (isTouch) $("#shopClose").textContent = "닫기";
 $("#startBtn").addEventListener("click", startGame);
 addEventListener("resize", () => {
