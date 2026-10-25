@@ -4509,7 +4509,7 @@ function axisPts(q) {
 function supportsNear(p, x, z, reach) {
   const out = [];
   for (const q of pieces) {
-    if (q === p || q === carried || (q.state !== "ground" && q.state !== "settle") || !q.pivot) continue;
+    if (q === p || q === carried || q.pending || (q.state !== "ground" && q.state !== "settle") || !q.pivot) continue;
     const P = q.state === "settle" ? q.toPos : q.holder.position;
     if (Math.hypot(P.x - x, P.z - z) < reach + haulLen(q) / 2 + 1) out.push(axisPts(q));
   }
@@ -4598,13 +4598,21 @@ function settle(p, stump = null, quick = false) {
   // so the curved trunk (not the straight line) is what comes to rest on the ground
   const axis0 = new THREE.Vector3().subVectors(B, A).normalize(), offs = [], _bq = new THREE.Quaternion(), _bd = new THREE.Vector3(), _bo = new THREE.Vector3();
   for (let i = 0; i <= ns; i++) offs.push(pieceWorldAt(p, lerp(ya, yb, i / ns), new THREE.Vector3()).sub(new THREE.Vector3().lerpVectors(A, B, i / ns)));
+  // How high the axis must be at each sample so no part of the bark is in the ground. Across the log the ground is
+  // checked under the whole bark circle (exact on any slope, cliffs included); a tilted log's section in that vertical
+  // plane is an ellipse r / cos(tilt) tall, so it needs that much more room.
+  const LAT = [-1, -0.75, -0.45, -0.15, 0.15, 0.45, 0.75, 1];
   const heights = (ax, az, bx, bz, ay, by, used) => {
     used.clear();
-    _bq.setFromUnitVectors(axis0, _bd.set(bx - ax, by - ay, bz - az).normalize());
+    const dx = bx - ax, dy = by - ay, dz = bz - az, hl = Math.hypot(dx, dz) || 1, lx = -dz / hl, lz = dx / hl, cosA = Math.max(0.2, hl / (Math.hypot(dx, dy, dz) || 1));
+    _bq.setFromUnitVectors(axis0, _bd.set(dx, dy, dz).normalize());
+    // the cabin's floors only matter near the cabin
+    const gy = Math.min(cabinDist(ax, az), cabinDist(bx, bz), cabinDist((ax + bx) / 2, (az + bz) / 2)) < 25 ? groundY : heightAt;
     for (let i = 0; i <= ns; i++) {
       const k = i / ns, x = lerp(ax, bx, k), z = lerp(az, bz, k), r = spineAt(v.spine, lerp(ya, yb, k)).r * s;
-      const ny = platformHeight(x, z) > -Infinity ? 1 : clamp(gridSample(TNRM, x, z, 1), 0.5, 1);
-      hs[i] = Math.max(groundY(x, z) + (i === ns ? prop : r / ny), restHeight(x, z, r, lines, used)) - _bo.copy(offs[i]).applyQuaternion(_bq).y;
+      let h = i === ns ? gy(x, z) + prop : -Infinity;
+      for (const t of LAT) { const tt = t * r; h = Math.max(h, gy(x + lx * tt, z + lz * tt) + Math.sqrt(r * r - tt * tt) / cosA); }
+      hs[i] = Math.max(h, restHeight(x, z, r, lines, used)) - _bo.copy(offs[i]).applyQuaternion(_bq).y;
     }
   };
   const rest = (cx, cz, hx, hz, used) => {
@@ -4645,7 +4653,7 @@ function settle(p, stump = null, quick = false) {
   // (a log lying across another one, one end on the ground, is leaning on it, not hanging in the air: it stays put,
   // unless that leaves it propped up high over a hollow)
   let best = rest(cx, cz, hx, hz, used), bestScore = best.air;
-  if (best.air > 0.12 && (!best.onPiece || best.air > 0.5)) {
+  if (best.air > 0.08 && (!best.onPiece || best.air > 0.5)) {
     const far = Math.min(2.5, L * 0.3), tryUsed = new Set();
     for (const fa of [0, -0.5, 0.5, -1, 1]) for (const dl of [0, -0.6, 0.6, -1.2, 1.2]) for (const dr of [0, -0.2, 0.2]) {
       if (!fa && !dl && !dr) continue;
@@ -4658,7 +4666,7 @@ function settle(p, stump = null, quick = false) {
     }
     // a deep hollow: keep rolling and sliding down into it (and turning to lie along it) in shrinking steps,
     // up to about 8 m from where it fell
-    if (best.air > 0.15) {
+    if (best.air > 0.08) {
       let cur = best.x !== undefined ? { x: best.x, z: best.z, a: Math.atan2(best.hz2, best.hx2) } : { x: cx, z: cz, a: Math.atan2(hz, hx) };
       const a0 = Math.atan2(hz, hx), scoreOf = (r, c) => r.air + 0.02 * Math.hypot(c.x - cx, c.z - cz) + 0.05 * Math.abs(angDiff(a0, c.a));
       for (const [st, sa] of [[3, 0.35], [2, 0.25], [1, 0.15], [0.5, 0.08]]) for (let it = 0; it < 6; it++) {
@@ -4904,7 +4912,9 @@ function splitPiece(p, y) {
   if (p.d.mut.gold || p.d.mut.crystal) for (let k = 0; k < 10; k++) emitSparkle(C.clone().add(randDir(Math.random).multiplyScalar(0.6)), p.d.mut.gold ? [1.6, 1.15, 0.45] : [0.7, 1.3, 1.8], 0.4, 0.8);
   removePiece(p);
   pieces.push(...parts);
-  for (const q of parts) settle(q);
+  // the first half must not come to rest on where the second half was before it fell: settle it ignoring its sibling,
+  // then settle the second one around it
+  parts[1].pending = true; settle(parts[0]); parts[1].pending = false; settle(parts[1]);
   unsupport(p);
   return parts;
 }
