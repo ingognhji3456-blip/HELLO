@@ -845,8 +845,9 @@ const TREE_SURFACE = `#include <emissivemap_fragment>
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.93, 0.97), uSnow * smoothstep(0.3, 0.8, upF) * (0.6 + 0.35 * smoothstep(0.8, 1.0, uSnow)));
 #ifdef TREE_MUT
   vec3 lp = vLocalPos;
+  float bk = 1.0;   // 0 on a cut face: moss, ice, rain trails and the lightning scar belong to the bark, not the end grain
   #ifdef TREE_PIECE
-    if (capS != 0.0) lp = capL;
+    if (capS != 0.0) { lp = capL; bk = 0.0; }
   #endif
   vec3 Vv = normalize(vViewPosition);
   vec3 Rw = normalize((vec4(reflect(-Vv, normal), 0.0) * viewMatrix).xyz);
@@ -856,7 +857,7 @@ const TREE_SURFACE = `#include <emissivemap_fragment>
   float rnd = fract(sin(dot(floor(lp * 8.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
   #ifdef IS_BARK
     // titan: ancient bark furred with moss on its upper sides
-    float moss = vMut2.y * smoothstep(0.2, 0.7, upF + (rnd - 0.5) * 0.7);
+    float moss = vMut2.y * bk * smoothstep(0.2, 0.7, upF + (rnd - 0.5) * 0.7);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.15, 0.25, 0.06) * (0.7 + lum), moss * 0.85);
   #endif
   // gold: polished metal that mirrors the sky, with sparkling glints
@@ -871,16 +872,16 @@ const TREE_SURFACE = `#include <emissivemap_fragment>
   totalEmissiveRadiance += vMut.y * vec3(0.2, 0.5, 0.9) * 0.08 * (0.5 + 0.5 * fres);
   // wet: soaked bark and leaves turn darker and richer, with a soft sheen (no mirror) and darker rain trails
   float trail = 0.5 + 0.5 * sin(atan(lp.z, lp.x) * 9.0 + sin(lp.y * 1.7) * 1.5);
-  diffuseColor.rgb = mix(diffuseColor.rgb, pow(diffuseColor.rgb, vec3(1.2)) * 0.6, vMut.z * (0.75 + 0.25 * trail));
+  diffuseColor.rgb = mix(diffuseColor.rgb, pow(diffuseColor.rgb, vec3(1.2)) * 0.6, vMut.z * mix(0.35, 0.75 + 0.25 * trail, bk));
   roughnessFactor = mix(roughnessFactor, 0.4, vMut.z);
   totalEmissiveRadiance += vMut.z * skyRef * fres * 0.06;
   // frost: sheathed in blue-white ice that glitters
-  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.8, 0.91, 1.0), vMut.w * (0.72 + 0.28 * upF));
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.8, 0.91, 1.0), vMut.w * (0.72 + 0.28 * upF) * mix(0.2, 1.0, bk));
   roughnessFactor = mix(roughnessFactor, 0.3, vMut.w);
   totalEmissiveRadiance += vMut.w * (vec3(0.5, 0.72, 1.0) * 0.1 + skyRef * 0.3 * fres);
   // lightning-struck: the bolt tore a spiral strip of bark off one side, baring pale split wood with scorched edges;
   // the rest of the tree is sooty and part of the leaves are scorched brown
-  float sh = vMut2.x;
+  float sh = vMut2.x * bk;
   #ifdef IS_BARK
     float ang = atan(lp.z, lp.x);
     float scarD = abs(mod(ang - lp.y * 0.35 + 3.14159, 6.28318) - 3.14159);
@@ -1645,7 +1646,8 @@ function makeTreeLods(sp, seed) {
   const rootCol = (q) => { const c = P.barkCol(q, 0, H); return typeof c === "number" ? c * 0.9 : c.map((x) => x * 0.9); };
   for (let k = 0; k < P.roots; k++) {
     const a = (k / P.roots) * TAU + R() * 0.7, r0 = P.trunkR, ext = r0 * (1.8 + R() * 1.2);
-    const pts = [new THREE.Vector3(0, r0 * 2.2, 0), new THREE.Vector3(Math.cos(a) * r0 * 0.75, r0 * 0.9, Math.sin(a) * r0 * 0.75), new THREE.Vector3(Math.cos(a) * (r0 + ext * 0.5), r0 * 0.12, Math.sin(a) * (r0 + ext * 0.5)), new THREE.Vector3(Math.cos(a) * (r0 + ext), -0.25, Math.sin(a) * (r0 + ext))];
+    // the root leaves the trunk low (under 0.15 local) so even a titan's felling cut (0.25 local) never opens it up
+    const pts = [new THREE.Vector3(0, r0 * 2.2, 0), new THREE.Vector3(Math.cos(a) * r0 * 0.6, Math.min(r0 * 0.9, 0.13), Math.sin(a) * r0 * 0.6), new THREE.Vector3(Math.cos(a) * (r0 + ext * 0.5), Math.min(r0 * 0.12, 0.05), Math.sin(a) * (r0 + ext * 0.5)), new THREE.Vector3(Math.cos(a) * (r0 + ext), -0.25, Math.sin(a) * (r0 + ext))];
     tubes.push({ pts, radii: [r0 * 0.3, r0 * 0.42, r0 * 0.24, r0 * 0.05], level: 1, far: true, radial: 7, opts: { vTile: P.vTile, col: rootCol, seed: k } });
   }
   const nRootTubes = tubes.length;
@@ -4315,7 +4317,8 @@ function capGeo(v, y, sgn) {
     const a = i + e, b = i + ((e + 1) % 3), ya = P.getY(a), yb = P.getY(b);
     if ((ya < y) === (yb < y)) continue;
     const k = (y - ya) / (yb - ya), x = lerp(P.getX(a), P.getX(b), k), z = lerp(P.getZ(a), P.getZ(b), k);
-    pts.push([Math.atan2(z - cz, x - cx), x, z]);
+    // 1.5 % wider than the bark so the cap and the clipped bark overlap: no pixel-wide seam along the far rim
+    pts.push([Math.atan2(z - cz, x - cx), cx + (x - cx) * 1.015, cz + (z - cz) * 1.015]);
   }
   // the section is star-shaped around the trunk centre, so sorting by angle walks its outline (each edge is shared)
   pts.sort((p, q) => p[0] - q[0]);
@@ -4498,9 +4501,24 @@ function settle(p, stump = null, quick = false) {
     const bx = cx - hx * L / 2, bz = cz - hz * L / 2, dd = Math.hypot(bx - stump.x, bz - stump.z), need = stump.r + rA + 0.05;
     if (dd < need) { cx += hx * (need - dd); cz += hz * (need - dd); }
   }
-  // a top rests on its remaining limbs: the more crown it still has, the higher its end is held up
+  // a round shorter than it is thick stands on its bigger cut face like a chopping block, not on its rim like a wheel
+  // (only rounds too short to saw again, so an upright piece never needs a cut)
+  if (!pieceTop(p) && L < Math.min(0.5, 0.9 * 2 * Math.max(rA, rB))) {
+    const up = rA >= rB, down = _v.subVectors(up ? A : B, up ? B : A).normalize();   // from the top face to the bottom face
+    _sq.setFromUnitVectors(down, _v2.set(0, -1, 0));
+    p.fromPos = p.holder.position.clone(); p.fromQuat = p.holder.quaternion.clone();
+    p.toQuat = _sq.clone().multiply(p.holder.quaternion);
+    const off = new THREE.Vector3().addVectors(A, B).multiplyScalar(0.5).sub(p.holder.position).applyQuaternion(_sq);
+    const gx = cx, gz = cz, gy = Math.max(groundY(gx + 0.6 * Math.max(rA, rB), gz), groundY(gx - 0.6 * Math.max(rA, rB), gz), groundY(gx, gz + 0.6 * Math.max(rA, rB)), groundY(gx, gz - 0.6 * Math.max(rA, rB)), groundY(gx, gz));
+    p.toPos = new THREE.Vector3(gx, gy + L / 2 + 0.005, gz).sub(off);
+    p.state = "settle"; p.t = quick ? 1 : 0;
+    if (quick) { p.holder.position.copy(p.toPos); p.holder.quaternion.copy(p.toQuat); p.state = "ground"; }
+    return;
+  }
+  // a top rests on its remaining limbs: the more crown it still has, the higher its end is held up, but it never
+  // tips up like a leaning tree (at most about 12 degrees)
   let prop = rB;
-  if (pieceTop(p)) { const n = v.subs.filter((sb) => sb.y >= p.s0).length; if (n) prop = Math.max(rB, v.crownR * s * 0.3 * Math.sqrt(n / v.subs.length)); }
+  if (pieceTop(p)) { const n = v.subs.filter((sb) => sb.y >= p.s0).length; if (n) prop = Math.max(rB, Math.min(v.crownR * s * 0.3 * Math.sqrt(n / v.subs.length), rA + L * 0.2)); }
   // both ends on the ground: the horizontal span shrinks on a slope so the log keeps its length
   let half = L / 2, ax, az, bx, bz, ay, by;
   for (let k = 0; k < 3; k++) {
@@ -4827,7 +4845,12 @@ function updatePieces(dt) {
   // dragging: the gripped end hangs from the tongs in his hands, the far end scrapes along behind
   const p = carried;
   if (p && p.mode === "drag" && (p.state === "lift" || p.state === "carried")) {
-    const v = VARIANTS[p.d.v], s = p.d.s, rf = spineAt(v.spine, p.front).r * s, rb = spineAt(v.spine, p.back).r * s, L = pieceLen(p);
+    const v = VARIANTS[p.d.v], s = p.d.s, rf = spineAt(v.spine, p.front).r * s, rb = spineAt(v.spine, p.back).r * s;
+    // the trunk's real axis in the holder's frame (it leans a little in the tree's own space), and its true length
+    const cf = spineAt(v.spine, p.front), fx = cf.x, fz = cf.z, cb = spineAt(v.spine, p.back);
+    const axisL = tongs.axisL || (tongs.axisL = new THREE.Vector3());
+    axisL.set(cb.x - fx, p.back - p.front, cb.z - fz).applyAxisAngle(UP, p.d.rot);
+    const L = axisL.length() * s; axisL.normalize();
     const c = Math.cos(player.yaw), sn = Math.sin(player.yaw), bk = DRAG_BAR.z;
     // the T-handle, fixed in his frame (it sinks with him on slopes), and the jaws on the end straight behind it
     const bar = tongs.bar.set(player.pos.x + sn * bk, player.y - gait.drop + DRAG_BAR.y, player.pos.y + c * bk);
@@ -4849,7 +4872,7 @@ function updatePieces(dt) {
     p.backPos.y = groundY(p.backPos.x, p.backPos.z) + rb;
     p.holder.position.copy(hold);
     const along = tongs.along.subVectors(p.backPos, hold).normalize();
-    p.holder.quaternion.setFromUnitVectors(_v.set(0, p.back > p.front ? 1 : -1, 0), along);
+    p.holder.quaternion.setFromUnitVectors(axisL, along);
     // where the jaws close: over the top of the log a little in from the end
     tongs.up.set(0, 1, 0).addScaledVector(along, -along.y).normalize();
     tongs.bite.copy(hold).addScaledVector(along, 0.07).addScaledVector(tongs.up, tongs.R);
