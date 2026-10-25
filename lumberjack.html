@@ -2098,7 +2098,7 @@ const fromCabinLocal = (lx, lz) => {
 const W2 = 3.6, D2 = 2.7, ROW_H = 0.3, ROWS = 9, WALL_H = 0.32 + ROWS * ROW_H - 0.1, RIDGE = WALL_H + 1.75;
 // inside the walls (cabin frame)
 const IN_X = W2 - 0.18, IN_Z = D2 - 0.18;
-const KEEPER_LOCAL = [0, -1.62], COUNTER_Z = -0.95;
+const KEEPER_LOCAL = [0, -1.45], COUNTER_Z = -0.95;   // he stands right behind the counter (its back edge is at z -1.31)
 const SELL_LOCAL = [7.5, 0];
 function buildCabin() {
   const g = new THREE.Group();
@@ -2340,24 +2340,24 @@ function updateKeeper(dt, time, lx, lz, near) {
   K.wave = Math.max(0, K.wave - dt);
   K.talk = Math.max(0, K.talk - dt);
   const g = cabin.group;
-  K.torso.rotation.set(0.12 + Math.sin(time * 1.4) * 0.012, 0, 0);
+  K.torso.rotation.set(0.32 + Math.sin(time * 1.4) * 0.012, 0, 0);
   K.body.position.set(Math.sin(time * 0.37) * 0.01, -0.02, 0);
   // look at the woodcutter when he is in the room (or at the door)
   const dx = lx - KEEPER_LOCAL[0], dz = lz - KEEPER_LOCAL[1], dist = Math.hypot(dx, dz);
   K.look = lerp(K.look, dist < 7.5 ? 1 : 0, 1 - Math.exp(-dt * 3));
   const yaw = clamp(Math.atan2(dx, dz), -1.1, 1.1) * K.look, pitch = clamp(Math.atan2(1.62 - 1.0, dist) * 0.5, -0.3, 0.3) * K.look;
-  K.head.rotation.set(0.05 + pitch + (K.talk > 0 ? Math.sin(time * 7) * 0.05 : 0), yaw * 0.75 + Math.sin(time * 0.23) * 0.1 * (1 - K.look), 0);
+  K.head.rotation.set(-0.15 + pitch + (K.talk > 0 ? Math.sin(time * 7) * 0.05 : 0), yaw * 0.75 + Math.sin(time * 0.23) * 0.1 * (1 - K.look), 0);
   K.torso.rotation.y = yaw * 0.25;
   g.updateMatrixWorld(true);
   g.getWorldQuaternion(_kq);
-  // hands resting on the counter top; the right one waves now and then while greeting
-  _kp.set(0.28, 1.09, COUNTER_Z + 0.08).applyMatrix4(g.matrixWorld);
-  solveArm(K.armL, _kp, _v.set(0.6, -0.5, -0.4).applyQuaternion(_kq));
+  // leaning on his hands, flat on the counter top near its back edge; the right one waves now and then while greeting
+  _kp.set(0.3, 1.1, COUNTER_Z - 0.22).applyMatrix4(g.matrixWorld);
+  solveArm(K.armL, inReach(K.armL, _kp), _v.set(0.6, -0.5, -0.4).applyQuaternion(_kq));
   if (K.wave > 0) {
     const w = Math.sin(clamp(K.wave / 1.6, 0, 1) * Math.PI);
-    _kp.set(lerp(-0.28, -0.42, w), lerp(1.09, 1.85, w), lerp(COUNTER_Z + 0.08, KEEPER_LOCAL[1] + 0.2, w)).add(_v.set(Math.sin(time * 11) * 0.08 * w, 0, 0)).applyMatrix4(g.matrixWorld);
-  } else _kp.set(-0.28, 1.09, COUNTER_Z + 0.08).applyMatrix4(g.matrixWorld);
-  solveArm(K.armR, _kp, _v.set(-0.6, -0.5, -0.4).applyQuaternion(_kq));
+    _kp.set(lerp(-0.3, -0.42, w), lerp(1.1, 1.85, w), lerp(COUNTER_Z - 0.22, KEEPER_LOCAL[1] + 0.35, w)).add(_v.set(Math.sin(time * 11) * 0.08 * w, 0, 0)).applyMatrix4(g.matrixWorld);
+  } else _kp.set(-0.3, 1.1, COUNTER_Z - 0.22).applyMatrix4(g.matrixWorld);
+  solveArm(K.armR, inReach(K.armR, _kp), _v.set(-0.6, -0.5, -0.4).applyQuaternion(_kq));
 }
 const nearKeeper = () => {
   const [lx, lz] = toCabinLocal(player.pos.x, player.pos.y);
@@ -2426,6 +2426,11 @@ function axeModel(i, into = new THREE.Group()) {
   if (A.kind === "damascus") { const uv = blade.attributes.uv; for (let j = 0; j < uv.count; j++) uv.setXY(j, uv.getX(j) * 6, uv.getY(j) * 6); }
   const hy = len - 0.18;
   const b1 = mk(blade, head, hy); b1.scale.setScalar(sc);
+  // the middle of the cutting edge in the axe's frame: the swing aims this at the bark
+  const ep = blade.attributes.position; let ez = -1, ey = 0, en = 0;
+  for (let j = 0; j < ep.count; j++) ez = Math.max(ez, ep.getZ(j));
+  for (let j = 0; j < ep.count; j++) if (ep.getZ(j) > ez - 0.004) { ey += ep.getY(j); en++; }
+  into.userData.edge = [hy + (ey / en) * sc, ez * sc];
   if (A.kind === "double") { const b2 = mk(blade, head, hy); b2.rotation.y = Math.PI; }
   if (A.trim) mk(new THREE.CylinderGeometry(0.03, 0.03, 0.05, 10), metalMat(A.trim, 1, 0.3), hy - 0.07);
   into.userData.headY = hy;
@@ -2592,10 +2597,10 @@ function buildPerson(M, look) {
 /* ---------- character animation: arms ---------- */
 // Two-bone arm IK: shoulder rotation + elbow bend so the grip point of the hand lands on `target`,
 // with the elbow bent toward the world direction `pole`. w blends from the current (FK) pose.
-const ARM_L1 = 0.29, ARM_L2 = 0.35;
+const ARM_L1 = 0.29, ARM_L2 = 0.35, ARM_REACH = 0.625;   // reach: a hand target further than this leaves the arm locked straight
 const _S = new THREE.Vector3(), _T = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
 const _A = new THREE.Vector3(), _B = new THREE.Vector3(), _C = new THREE.Vector3(), _mA = new THREE.Matrix4(), _mB = new THREE.Matrix4();
-const _qT = new THREE.Quaternion(), _qI = new THREE.Quaternion();
+const _qT = new THREE.Quaternion(), _qI = new THREE.Quaternion(), _S2 = new THREE.Vector3(), _mC = new THREE.Matrix4();
 function solveArm(arm, target, pole, w = 1) {
   if (w <= 0.001) return;
   arm.sh.getWorldPosition(_S);
@@ -2616,6 +2621,13 @@ function solveArm(arm, target, pole, w = 1) {
   if (w >= 0.999) { arm.sh.quaternion.copy(_qI); arm.el.rotation.x = -flex; }
   else { arm.sh.quaternion.slerp(_qI, w); arm.el.rotation.x = lerp(arm.el.rotation.x, -flex, w); }
 }
+// pull a hand target in to within reach of its shoulder, so no pose can leave a hand floating short of its target
+function inReach(arm, T, max = ARM_REACH) {
+  arm.sh.getWorldPosition(_S2);
+  const d = T.distanceTo(_S2);
+  if (d > max) T.lerpVectors(_S2, T, max / d);
+  return T;
+}
 // Orientation of a tool whose handle points along u with its working edge/bar along e (tool frame: +Y handle, +Z edge).
 const _mb = new THREE.Matrix4(), _tx = new THREE.Vector3();
 function toolQuat(u, e, out) {
@@ -2628,40 +2640,73 @@ function toolQuat(u, e, out) {
 // around a pivot in front of the chest; the axe trails the arc with cocked wrists and is released into the cut edge
 // first. The left hand stays at the knob, the right hand slides from near the head down to it during the downswing.
 const CHOP_HIT = 0.56, CHOP_Y = 0.8;
-const SW = { O: new THREE.Vector3(-0.08, 1.2, 0.1), e1: new THREE.Vector3(), e2: new THREE.Vector3(), R: 0.42 };
+const SW = { O: new THREE.Vector3(-0.08, 1.2, 0.1), e1: new THREE.Vector3(), e2: new THREE.Vector3(), R: 0.42, R0: 0.42 };
 const SW_ATTACK = new THREE.Vector3(0.42, -0.5, 0.76).normalize();
 // [t, arc angle, wrist cock, arm reach, right-hand slide, torso twist, torso lean, crouch, weight shift]
+// The shoulders stay turned toward the cut (negative twist, matching the left-foot-forward stance) and the hands pull in
+// at the hit, so the knob hand can stay on the handle through the impact.
 const SWING_KEYS = [
   // lined up: the head rests against the spot he is about to hit
-  [0.0, -0.04, 0.12, -0.13, 0.26, 0.26, 0.24, 0.08, 0.03],
+  [0.0, -0.04, 0.12, -0.15, 0.26, -0.18, 0.36, 0.1, 0.03],
   [0.4, 2.45, 0.75, 0.0, 0.52, -0.9, -0.02, 0.0, -0.05],
-  [0.56, 0.0, 0.0, 0.0, 0.1, 0.32, 0.32, 0.12, 0.05],
-  [0.66, -0.04, 0.02, 0.0, 0.1, 0.34, 0.34, 0.13, 0.05],
-  [0.8, 0.12, -0.2, -0.12, 0.18, 0.28, 0.28, 0.1, 0.04],
-  [1.0, -0.04, 0.12, -0.13, 0.26, 0.26, 0.24, 0.08, 0.03],
+  [0.56, 0.0, 0.0, -0.1, 0.1, -0.25, 0.45, 0.15, 0.05],
+  [0.66, -0.04, 0.02, -0.1, 0.1, -0.18, 0.46, 0.16, 0.05],
+  [0.8, 0.12, -0.2, -0.16, 0.18, -0.12, 0.4, 0.12, 0.04],
+  [1.0, -0.04, 0.12, -0.15, 0.26, -0.18, 0.36, 0.1, 0.03],
 ];
-const swingLen = () => (char.axeHeadY || 0.7) + 0.05;
+const SW_HIT = SWING_KEYS.find((k) => k[0] === CHOP_HIT);
+// knob grip to the middle of the edge, along the handle and out to the edge (axe frame)
+const swingLen = () => (char.axe.userData.edge ? char.axe.userData.edge[0] : 0.7) + 0.05;
+const swingEdge = () => (char.axe.userData.edge ? char.axe.userData.edge[1] : 0.16);
 const toLocal = (wx, wz, out) => {
   const dx = wx - player.pos.x, dz = wz - player.pos.y, c = Math.cos(player.yaw), s = Math.sin(player.yaw);
   out.x = c * dx - s * dz; out.z = s * dx + c * dz; return out;
 };
+// the trunk at chopping height: its real centre (the spine leans) and bark radius, less a little for the bite
+const _ring = { x: 0, z: 0, r: 0 };
+function chopRing(t) {
+  const c = spineAt(VARIANTS[t.v].spine, CHOP_Y / t.s), cs = Math.cos(t.rot), sn = Math.sin(t.rot);
+  _ring.x = t.x + (c.x * cs + c.z * sn) * t.s; _ring.z = t.z + (-c.x * sn + c.z * cs) * t.s; _ring.r = c.r * t.s - 0.015;
+  return _ring;
+}
+// how far round the trunk the notch sits: front-right, but no more than 0.3 m to his right on thick trunks
+const chopSide = (r) => Math.min(0.6, Math.asin(Math.min(1, 0.3 / r)));
 // where the edge bites: the front-right of the trunk at chopping height (or thin air in front of him)
 function swingContact(t, out) {
   if (!t) return out.set(-0.14, CHOP_Y, 1.0);
-  toLocal(t.x, t.z, out);
-  const r = t.r * 0.92;
-  return out.set(out.x - r * Math.sin(0.75), t.y + CHOP_Y - player.y, out.z - r * Math.cos(0.75));
+  const c = chopRing(t), a = chopSide(c.r);
+  toLocal(c.x, c.z, out);
+  return out.set(out.x - c.r * Math.sin(a), t.y + CHOP_Y - player.y, out.z - c.r * Math.cos(a));
 }
-// how far from the trunk to stand so the blade just reaches it with the arms at their natural reach
+// the knob hand circles a pivot that drops and shifts with the body: where that pivot is at the hit
+const swingPivot = (out) => out.set(SW.O.x + SW_HIT[8], SW.O.y - SW_HIT[7], SW.O.z);
+const _swO = new THREE.Vector3(), _swE = new THREE.Vector3();
+// how far from the trunk (base centre) to stand so the edge lands on the bark with the arc at its natural radius
 function chopStandoff(t) {
-  const L = swingLen() + 0.42, r = t.r * 0.92, A = SW_ATTACK, O = SW.O;
-  const dx = -r * Math.sin(0.75) - O.x - 0.15 * A.x, dy = t.y + CHOP_Y - player.y - O.y - 0.15 * A.y;
-  return r * Math.cos(0.75) + O.z + 0.15 * A.z + Math.sqrt(Math.max(0.04, L * L - dx * dx - dy * dy));
+  const c = chopRing(t), a = chopSide(c.r), E = swingEdge(), L = swingLen() + SW.R0 + SW_HIT[3], O = swingPivot(_swO), A = SW_ATTACK;
+  // facing the base centre: the bark spot sits at (kx, ky, kz + d) in his frame
+  const cy = Math.cos(player.yaw), sy = Math.sin(player.yaw), ox = c.x - t.x, oz = c.z - t.z;
+  const kx = cy * ox - sy * oz - c.r * Math.sin(a), kz = sy * ox + cy * oz - c.r * Math.cos(a), ky = t.y + CHOP_Y - player.y;
+  let d = 1.2;
+  for (let i = 0; i < 3; i++) {
+    _swE.set(kx - O.x, ky - O.y, kz + d - O.z).normalize();
+    _swE.set(A.x - _swE.x * A.dot(_swE), A.y - _swE.y * A.dot(_swE), A.z - _swE.z * A.dot(_swE)).normalize();
+    const wx = kx - O.x - E * _swE.x, wy = ky - O.y - E * _swE.y;
+    d = Math.sqrt(Math.max(0.01, L * L - wx * wx - wy * wy)) - kz + O.z + E * _swE.z;
+  }
+  // never inside the trunk's collision circle: from there the arc is stretched to reach (and the hands kept on)
+  return Math.max(d, t.r + 0.37);
 }
+// Swing plane for a bark spot C: at the hit (arc angle 0) the handle points along e1 and the edge along the attack
+// direction, so the middle of the edge (swingLen along the handle, swingEdge out from it) lands exactly on C.
 function swingFrame(C) {
-  _v.copy(C).sub(SW.O).addScaledVector(SW_ATTACK, -0.15);
-  SW.R = clamp(_v.length() - swingLen(), 0.28, 0.58);
-  SW.e1.copy(_v).normalize();
+  const O = swingPivot(_swO), E = swingEdge();
+  SW.e1.subVectors(C, O).normalize();
+  for (let i = 0; i < 3; i++) {
+    SW.e2.copy(SW_ATTACK).addScaledVector(SW.e1, -SW_ATTACK.dot(SW.e1)).normalize();
+    _v.subVectors(C, O).addScaledVector(SW.e2, -E); SW.e1.copy(_v).normalize();
+  }
+  SW.R = clamp(_v.length() - swingLen() - SW_HIT[3], 0.3, 0.62);
   SW.e2.copy(SW_ATTACK).addScaledVector(SW.e1, -SW_ATTACK.dot(SW.e1)).multiplyScalar(-1).normalize();
 }
 const swingState = { phi: 0, beta: 0, dR: 0, slide: 0, twist: 0, lean: 0, crouch: 0, shift: 0 };
@@ -2699,9 +2744,11 @@ function localToWorld(lx, lz, out) {
 // where each foot belongs when standing: a relaxed stance, wider and staggered while chopping
 function footRest(side, out) {
   if (player.chop) return localToWorld(side * 0.22, side > 0 ? 0.26 : -0.12, out);
-  if (player.sawing && player.sawing.ready) return localToWorld(side * 0.25, side > 0 ? 0.14 : -0.1, out);
+  if (player.sawing && player.sawing.ready) return player.sawing.kneel ? localToWorld(side > 0 ? 0.27 : -0.2, side > 0 ? 0.2 : -0.48, out) : localToWorld(side * 0.25, side > 0 ? 0.14 : -0.1, out);
   return localToWorld(side * (carried ? 0.15 : 0.12), 0.02, out);
 }
+// a kneeling foot stands on its toes, heel up, so the shin lies back and the knee rests on the ground
+const footPitch = (side) => (side < 0 && player.sawing && player.sawing.ready && player.sawing.kneel ? 1.2 : 0);
 function footSound(f) {
   const x = f.pos.x, z = f.pos.z, surf = heightAt(x, z) < -0.15 ? "water" : platformHeight(x, z) > -Infinity ? "wood" : U.snow.value > 0.4 ? "snow" : pathDist(x, z) < 1.4 ? "path" : "grass";
   SFX.step(surf);
@@ -2714,7 +2761,7 @@ function updateGait(dt) {
   gait.w = lerp(gait.w, moving ? clamp(sp / 2.2, 0.35, 1) : 0, 1 - Math.exp(-dt * 7));
   gait.runW = lerp(gait.runW, player.running && sp > 3.4 ? 1 : 0, 1 - Math.exp(-dt * 5));
   // step length is bounded by what the legs can reach: a walk quickens its cadence rather than overstriding
-  const r = gait.runW, stepLen = lerp(clamp(0.28 + 0.19 * sp, 0.35, 0.7), clamp(0.5 + 0.17 * sp, 0.8, 1.45), r) * (carried ? 0.82 : 1);
+  const r = gait.runW, stepLen = lerp(clamp(0.28 + 0.19 * sp, 0.35, 0.7), clamp(0.5 + 0.17 * sp, 0.8, 1.45), r) * (carried ? (carried.mode === "drag" ? 0.72 : 0.82) : 1);
   const duty = lerp(0.62, 0.32, r), T = (2 * stepLen) / Math.max(sp, 0.6);
   const toeOff = lerp(1.0, 1.1, r), strike = lerp(-0.3, -0.08, r), heelUp = lerp(0.45, 0.5, r);
   if (moving && !gait.moving) {
@@ -2768,7 +2815,7 @@ function updateGait(dt) {
         f.cur.lerpVectors(f.from, f.to, e); f.cur.y = lerp(f.from.y, f.to.y, e) + Math.sin(Math.PI * f.idle) * 0.08;
         f.pitch = lerp(f.pitch, Math.sin(Math.PI * f.idle) * 0.2, 1 - Math.exp(-dt * 20));
         if (f.idle >= 1) { f.idle = -1; f.pos.copy(f.to); footSound(f); }
-      } else { f.pos.y = groundY(f.pos.x, f.pos.z); f.cur.copy(f.pos); f.pitch = lerp(f.pitch, 0, 1 - Math.exp(-dt * 10)); }
+      } else { f.pos.y = groundY(f.pos.x, f.pos.z); f.cur.copy(f.pos); f.pitch = lerp(f.pitch, footPitch(f.side), 1 - Math.exp(-dt * 10)); }
     }
   }
   return { duty };
@@ -2808,12 +2855,22 @@ const TOOL_POSE = {
   sawShoulder: { H: V3(-0.27, 0.47, 0.33), u: orth(V3(-0.08, 0.6, -0.8).normalize(), V3(-1, 0, 0)), e: V3(-0.08, 0.6, -0.8).normalize() },
   sawSide: { H: V3(-0.31, 0.0, 0.12), u: V3(0, 1, 0.3).normalize(), e: orth(V3(0, 1, 0.3).normalize(), V3(0, -0.3, 1)) },
   axeBack: { H: V3(-0.13, 0.1, -0.21), u: V3(0.34, 0.94, 0).normalize(), e: V3(0, 0, -1) },
-  sawBack: { H: V3(0.16, 0.52, -0.23), u: V3(0, 0, -1), e: V3(-0.45, -0.89, 0).normalize() },
+  bowBack: { H: V3(0.16, 0.52, -0.23), u: V3(0, 0, -1), e: V3(-0.45, -0.89, 0).normalize() },
+  // a chainsaw's engine hangs below its top handle: the handle goes against the back, the engine and bar face outward
+  chainBack: { H: V3(0.16, 0.52, -0.2), u: V3(0, 0, 1), e: V3(-0.45, -0.89, 0).normalize() },
+  get sawBack() { return SAWS[state.saw].kind === "chainsaw" ? this.chainBack : this.bowBack; },
 };
 function setToolFromTorso(obj, P, tm, tq) {
   obj.position.copy(P.H).applyMatrix4(tm);
   _U2.copy(P.u).applyQuaternion(tq); _E2.copy(P.e).applyQuaternion(tq);
   toolQuat(_U2, _E2, obj.quaternion);
+}
+// part of the way from where a tool is now to a pose in the torso frame
+const _tp = new THREE.Vector3(), _tq3 = new THREE.Quaternion(), _Kw = new THREE.Vector3();
+function blendToolToTorso(obj, P, tm, tq, w) {
+  if (w <= 0.001) return;
+  _tp.copy(P.H).applyMatrix4(tm); _U2.copy(P.u).applyQuaternion(tq); _E2.copy(P.e).applyQuaternion(tq);
+  obj.position.lerp(_tp, w); obj.quaternion.slerp(toolQuat(_U2, _E2, _tq3), w);
 }
 // Driving: seated on the bench (hips a little above the cushion, head under the roof), feet flat on the footwell floor,
 // hands on the rim at ten to two turning with the wheel, head and shoulders turning into the bend (steer > 0 = left).
@@ -2884,9 +2941,10 @@ function animateAssembly(dt) {
   lookAt(a, w * 0.8);
 }
 function animateCharacter(dt, time) {
+  if (char.tongsMesh) char.tongsMesh.g.visible = char.tongsMesh.jaws.visible = !!(carried && carried.mode === "drag" && !player.vehicle);
   if (player.vehicle) { animateDriver(dt, time); return; }
   const { duty } = updateGait(dt);
-  char.chopW = lerp(char.chopW || 0, player.chop ? 1 : 0, 1 - Math.exp(-dt * 12));
+  char.chopW = lerp(char.chopW || 0, player.chop ? 1 : 0, 1 - Math.exp(-dt * (player.chop ? 12 : 5)));
   char.carryW = lerp(char.carryW || 0, carried ? 1 : 0, 1 - Math.exp(-dt * 8));
   const w = gait.w, r = gait.runW, ph = gait.phase, still = 1 - w, TWO = TAU;
   // pelvis: rises over each stance leg, dips at heel strike (running: dips at mid-stance), sways over the
@@ -2901,20 +2959,31 @@ function animateCharacter(dt, time) {
   let twist = -pYaw * 1.3, lean = 0.04 * w + 0.17 * r + 0.012 * breathe, crouch = 0.025 * w + 0.045 * r, shift = 0;
   let sk = null;
   if (cw > 0.001) {
+    // blending out after the last swing keeps that swing's frame: the axe eases back from the tree, not from thin air
     const t = player.chop ? player.chop.t : 1;
-    swingFrame(swingContact(player.chop ? player.chop.tree : null, _K));
+    if (player.chop) swingFrame(swingContact(player.chop.tree, _K));
     sk = swingPose(t, _G, _U, _E, _H);
     twist = lerp(twist, sk.twist, cw); lean = lerp(lean, sk.lean, cw); crouch = lerp(crouch, sk.crouch, cw); shift = sk.shift * cw;
   }
-  if (kw > 0.001) { lean = lerp(lean, 0.14 + 0.06 * w, kw); crouch = lerp(crouch, 0.04 + 0.025 * w, kw); }
-  // sawing (once he has walked over to the cut): bend over the log, squatting deeper the lower the cut is
+  if (kw > 0.001) {
+    // under a load: a log on the shoulder or in the arms; dragging leans into the pull (more for a heavier log), knees bent
+    const dg = carried && carried.mode === "drag" ? Math.min(1, pieceKg(carried) / DRAG.kg) : -1;
+    lean = lerp(lean, dg >= 0 ? 0.3 + 0.15 * dg + 0.04 * w : 0.14 + 0.06 * w, kw);
+    crouch = lerp(crouch, dg >= 0 ? 0.07 + 0.04 * dg + 0.02 * w : 0.04 + 0.025 * w, kw);
+  }
+  // sawing (once he has walked over to the cut): bend over the saw, kneeling for a low cut
   char.sawW = lerp(char.sawW || 0, player.sawing && player.sawing.ready ? 1 : 0, 1 - Math.exp(-dt * 8));
   const swW = char.sawW;
   if (swW > 0.001 && player.sawing) {
-    const S = player.sawing, h = S.C.y + S.diam / 2 - player.y;
-    lean = lerp(lean, clamp((1.05 - h) * 0.85, 0.15, 0.8), swW);
-    crouch = lerp(crouch, clamp((0.95 - h) * 0.5, 0.02, 0.42), swW);
-    twist = lerp(twist, -0.12, swW);
+    // follow the handle down through the cut, keeping the right shoulder about half a metre above it: standing he leans,
+    // then squats; for a cut that ends low he kneels on his right knee from the start and bends over from there
+    const S = player.sawing, hk = sawFrame(S, time) - player.y;
+    if (S.kneel === undefined) S.kneel = sawHandleEnd(S) < 0.6;
+    let ln, cr;
+    if (S.kneel) { cr = 0.5; ln = Math.acos(clamp(2 * (hk - 0.11), 0.41, 0.99)); }
+    else { const need = Math.max(0, 1.06 - hk); ln = clamp(0.15 + need * 0.9, 0.15, 1.0); cr = clamp(need - 0.5 * (1 - Math.cos(ln)), 0, 0.42); }
+    lean = lerp(lean, ln, swW); crouch = lerp(crouch, cr, swW);
+    twist = lerp(twist, SAW_GEO[SAWS[state.saw].kind].twist, swW);
   }
   char.root.position.set(player.pos.x, player.y, player.pos.y);
   char.root.rotation.set(0, player.yaw, 0);
@@ -2951,41 +3020,52 @@ function animateCharacter(dt, time) {
   // tools (posed in the root frame): the one in use in the hands, the other on the back; both on the back under a load
   const tm = char.torso.matrix.clone().premultiply(char.hips.matrix).premultiply(char.body.matrix);   // torso -> root
   _tq2.setFromRotationMatrix(tm);
-  const axeInHand = state.tool === "axe" && kw < 0.5, sawInHand = state.tool === "saw" && kw < 0.5;
+  // picking up a load slings the tool in hand onto the back over a few frames instead of popping it there
+  const bw = smooth(0.15, 0.85, kw), axeHeld = state.tool === "axe" && bw < 1, sawHeld = state.tool === "saw" && bw < 1;
   char.root.getWorldQuaternion(_rootQ);
-  if (!axeInHand) setToolFromTorso(char.axe, TOOL_POSE.axeBack, tm, _tq2);
-  if (!sawInHand) setToolFromTorso(char.saw, TOOL_POSE.sawBack, tm, _tq2);
-  if (sawInHand) {
+  if (!axeHeld) setToolFromTorso(char.axe, TOOL_POSE.axeBack, tm, _tq2);
+  if (!sawHeld) setToolFromTorso(char.saw, TOOL_POSE.sawBack, tm, _tq2);
+  if (sawHeld) {
     setToolFromTorso(char.saw, SAWS[state.saw].kind === "chainsaw" ? TOOL_POSE.sawSide : TOOL_POSE.sawShoulder, tm, _tq2);
     if (swW > 0.001 && player.sawing) sawPose(swW, time);
+    blendToolToTorso(char.saw, TOOL_POSE.sawBack, tm, _tq2, bw);
     char.saw.updateMatrixWorld(true);
-    solveArm(char.armR, _hw.copy(char.saw.position).applyMatrix4(char.root.matrixWorld), _pole.set(-0.75, -0.55, -0.35).applyQuaternion(_rootQ));
+    solveArm(char.armR, _hw.copy(char.saw.position).applyMatrix4(char.root.matrixWorld), _pole.set(-0.75, -0.55, -0.35).applyQuaternion(_rootQ), 1 - bw);
     if (swW > 0.001 && player.sawing) {
       solveArm(char.armL, sawLeft, _pole.set(0.7, -0.6, -0.25).applyQuaternion(_rootQ), swW);
       lookAt(sawLook, swW);
     }
   }
+  if (axeHeld) {
+    if (sk) {
+      // keep both grips where the arms can hold them, given where the torso pose puts the shoulders (within reach, and
+      // not folded into the shoulder, as on a steep slope): the axe gives way, not the hands
+      const inv = _mC.copy(char.root.matrixWorld).invert();
+      for (const arm of [char.armL, char.armR]) {
+        const P = arm === char.armL ? _G : _H, S = arm.sh.getWorldPosition(_S2).applyMatrix4(inv), d = Math.max(1e-4, P.distanceTo(S));
+        const k = d > ARM_REACH ? (d - ARM_REACH) / d : d < 0.16 ? (d - 0.16) / d : 0;
+        if (k) { _v.subVectors(S, P).multiplyScalar(k); _G.add(_v); _H.add(_v); }
+      }
+    }
+    // shoulder pose blended into the swing; the handle turns by a slerp (the two directions are almost opposite)
+    _H2.copy(TOOL_POSE.axeShoulder.H).applyMatrix4(tm);
+    _U2.copy(TOOL_POSE.axeShoulder.u).applyQuaternion(_tq2); _E2.copy(TOOL_POSE.axeShoulder.e).applyQuaternion(_tq2);
+    toolQuat(_U2, _E2, char.axe.quaternion);
+    const ce = cw * cw * (3 - 2 * cw);   // eased, so the axe sets off and arrives gently
+    if (sk) { _H2.lerp(_H, ce); char.axe.quaternion.slerp(toolQuat(_U, _E, _tq3), ce); }
+    // the right hand is on the handle at its slide position; the axe origin sits 0.05 above the knob grip
+    const slide = sk ? lerp(0.05, sk.slide, ce) : 0.05;
+    char.axe.position.copy(_H2).addScaledVector(_U2.set(0, 1, 0).applyQuaternion(char.axe.quaternion), 0.05 - slide);
+    blendToolToTorso(char.axe, TOOL_POSE.axeBack, tm, _tq2, bw);
+    char.axe.updateMatrixWorld(true);
+    solveArm(char.armR, char.axe.localToWorld(_hw.set(0, slide - 0.05, 0)), _pole.set(-0.75, -0.55, -0.35).applyQuaternion(_rootQ), 1 - bw);
+    if (sk) {
+      solveArm(char.armL, char.axe.localToWorld(_hw.set(0, -0.05, 0)), _pole.set(0.7, -0.6, -0.2).applyQuaternion(_rootQ), cw * (1 - bw));
+      // while chopping he watches the spot where the blade will bite
+      lookAt(_Kw.copy(_K).applyMatrix4(char.root.matrixWorld), cw);
+    }
+  }
   if (kw > 0.001 && carried) carryArms(kw);
-  if (!axeInHand) return;
-  _H2.copy(TOOL_POSE.axeShoulder.H).applyMatrix4(tm);
-  _U2.copy(TOOL_POSE.axeShoulder.u).applyQuaternion(_tq2); _E2.copy(TOOL_POSE.axeShoulder.e).applyQuaternion(_tq2);
-  if (sk) {
-    _H2.lerp(_H, cw); _U2.lerp(_U, cw).normalize(); _E2.lerp(_E, cw);
-    _E2.addScaledVector(_U2, -_E2.dot(_U2)).normalize();
-  }
-  // the right hand is on the handle at its slide position; the axe origin sits 0.05 above the knob grip
-  const slide = sk ? lerp(0.05, sk.slide, cw) : 0.05;
-  char.axe.position.copy(_H2).addScaledVector(_U2, 0.05 - slide);
-  toolQuat(_U2, _E2, char.axe.quaternion);
-  char.axe.updateMatrixWorld(true);
-  _hw.copy(_H2).applyMatrix4(char.root.matrixWorld);
-  solveArm(char.armR, _hw, _pole.set(-0.75, -0.55, -0.35).applyQuaternion(_rootQ), 1 - kw * 2);
-  if (sk) {
-    _hw.copy(char.axe.position).addScaledVector(_U2, -0.05).applyMatrix4(char.root.matrixWorld);
-    solveArm(char.armL, _hw, _pole.set(0.7, -0.6, -0.2).applyQuaternion(_rootQ), cw);
-  }
-  // while chopping he watches the spot where the blade will bite
-  if (sk) lookAt(_K.applyMatrix4(char.root.matrixWorld), cw);
 }
 // turn the head (relative to the torso) toward a world point
 function lookAt(P, w) {
@@ -2996,18 +3076,53 @@ function lookAt(P, w) {
 }
 // Sawing across a log: the blade (or bar) stands square to the log at the cut, strokes back and forth along its
 // length and sinks through the trunk as the cut deepens. A bow saw is steadied by the left hand on the log.
-const SAW_GEO = { bow: { teeth: -0.046, z: [0.03, 0], amp: 0.13 }, pull: { teeth: -0.05, z: [0.06, 0], amp: 0.15 }, crosscut: { teeth: -0.1, z: [0.05, 0], amp: 0.3 }, chainsaw: { teeth: -0.19, z: [0.3, 0], amp: 0 } };
+// stand: how far in front of him the handle is and how far left of the cut he stands; twist: torso turn toward the cut.
+// A bow saw runs under the right shoulder while the left hand holds the log (so a thin log is never more than an arm's
+// length away: `log`); saws held in both hands sit between the shoulders, a chainsaw close in by the hip.
+const SAW_GEO = {
+  bow: { teeth: -0.046, z: [0.03, 0], amp: 0.13, stand: [0.36, 0.22], twist: -0.12, log: 0.45 },
+  pull: { teeth: -0.05, z: [0.06, 0], amp: 0.15, stand: [0.34, 0.12], twist: -0.25 },
+  crosscut: { teeth: -0.1, z: [0.05, 0], amp: 0.3, stand: [0.3, 0.06], twist: -0.25 },
+  chainsaw: { teeth: -0.19, z: [0.3, 0], amp: 0, stand: [0.22, 0.06], twist: -0.3 },
+};
 const sawLeft = new THREE.Vector3(), sawLook = new THREE.Vector3(), _sz = new THREE.Vector3(), _sy = new THREE.Vector3(), _sk = new THREE.Vector3(), _sw = new THREE.Vector3();
-function sawPose(w, time) {
-  const S = player.sawing, saw = SAWS[state.saw], G = SAW_GEO[saw.kind], r = S.diam / 2, prog = Math.min(1, S.prog);
-  char.root.updateMatrixWorld(true);
-  // stroke straight away from him across the log; teeth at the bottom of the kerf
-  _sz.set(-S.nx, 0, -S.nz); _sy.set(0, 1, 0);
+// How far the blade is tipped (handle end up) for a level handle h0 above his feet: low in a cut the handle end is
+// lifted, high up it is lowered, so the handle stays between knee and head height where his hands can follow it.
+function sawTilt(h0, mid) {
+  return h0 < 0.5 ? Math.min(0.7, Math.asin(Math.min(1, (0.5 - h0) / mid))) : h0 > 1.6 ? -Math.min(0.6, Math.asin(Math.min(1, (h0 - 1.6) / mid))) : 0;
+}
+// handle to kerf along the blade: the middle of a hand saw's blade, further out on a log too thick for that to keep the
+// handle and his hand outside the wood; a chainsaw reaches just past the far side
+const sawMid = (saw, r) => SAW_GEO[saw.kind].z[0] + (saw.kind === "chainsaw" ? Math.min(saw.len - 0.05, r + 0.12) : clamp(r + 0.12, saw.len * 0.5, saw.len - 0.05));
+// The saw's frame for the cut, in world space: the blade crosses the log square to it with its teeth at the bottom of the
+// kerf (_sk), stroking straight away from him (_sz, saw up _sy, handle _sw). Returns the handle's height.
+function sawFrame(S, time) {
+  const saw = SAWS[state.saw], G = SAW_GEO[saw.kind], r = S.diam / 2, prog = Math.min(1, S.prog), mid = sawMid(saw, r);
   _sk.copy(S.C); _sk.y += r * (1 - 2 * prog);
-  const chain = saw.kind === "chainsaw";
-  const mid = chain ? G.z[0] + Math.min(saw.len - 0.05, r + 0.12) : G.z[0] + saw.len * 0.5;
-  const stroke = chain ? Math.sin(time * 70) * 0.004 : G.amp * Math.sin(S.stroke * TAU);
+  const tilt = sawTilt(_sk.y - G.teeth - player.y, mid), ct = Math.cos(tilt), st = Math.sin(tilt);
+  _sz.set(-S.nx * ct, -st, -S.nz * ct); _sy.set(-S.nx * st, ct, -S.nz * st);
+  const stroke = saw.kind === "chainsaw" ? Math.sin(time * 70) * 0.004 : G.amp * Math.sin(S.stroke * TAU);
   _sw.copy(_sk).addScaledVector(_sz, -mid + stroke).addScaledVector(_sy, -G.teeth);
+  return _sw.y;
+}
+// how high above his feet the handle ends up when the cut is through (decides kneeling)
+function sawHandleEnd(S) {
+  const saw = SAWS[state.saw], mid = sawMid(saw, S.diam / 2), h0 = S.C.y - S.diam / 2 - SAW_GEO[saw.kind].teeth - player.y;
+  return h0 + mid * Math.sin(sawTilt(h0, mid));
+}
+function sawPose(w, time) {
+  const S = player.sawing, saw = SAWS[state.saw], G = SAW_GEO[saw.kind], r = S.diam / 2;
+  char.root.updateMatrixWorld(true);
+  sawFrame(S, time);
+  // a handle still out of reach (the far end of a long stroke, a cut a little high) is held as far out as the arm goes,
+  // the blade aimed back at the kerf: the saw never strokes without his hands on it
+  char.armR.sh.getWorldPosition(_S2);
+  const d = _sw.distanceTo(_S2);
+  if (d > ARM_REACH) {
+    _sw.lerpVectors(_S2, _sw, ARM_REACH / d);
+    _sz.copy(_sk).addScaledVector(_sy, -G.teeth).sub(_sw).normalize();
+    _sy.addScaledVector(_sz, -_sy.dot(_sz)).normalize();
+  }
   // into the root frame
   const inv = _mA.copy(char.root.matrixWorld).invert();
   const pos = _v.copy(_sw).applyMatrix4(inv), q = toolQuat(_sy, _sz, _qT);
@@ -3018,33 +3133,68 @@ function sawPose(w, time) {
   const L = char.saw.userData.left;
   if (L) sawLeft.copy(L).applyMatrix4(char.saw.matrixWorld);
   else {
-    // left hand flat on the log beside the cut, on the side of his left hand
+    // left hand flat on the log beside the cut, on the side of his left hand, on the part of the bark nearest his
+    // shoulder (the near upper flank of a log on the ground, the near underside of one propped up high)
     const ax = S.ax * Math.cos(player.yaw) - S.az * Math.sin(player.yaw) > 0 ? 1 : -1;
-    sawLeft.set(S.C.x + S.ax * ax * 0.3, S.C.y + r + 0.02, S.C.z + S.az * ax * 0.3);
+    sawLeft.set(S.C.x + S.ax * ax * 0.25, S.C.y, S.C.z + S.az * ax * 0.25);
+    _v.subVectors(char.armL.sh.getWorldPosition(_S2), sawLeft);
+    const al = _v.x * S.ax + _v.z * S.az; _v.x -= S.ax * al; _v.z -= S.az * al;
+    sawLeft.addScaledVector(_v.normalize(), r + 0.03);
+    // kneeling at a thin log on the ground he can't reach down to it: the left hand rests on his raised left knee instead
+    const off = S.kneel ? smooth(0.58, 0.68, sawLeft.distanceTo(_S2)) : 0;
+    if (off > 0) sawLeft.lerp(char.legL.knee.getWorldPosition(_tp).add(_v.set(0, 0.1, 0)), off);
   }
+  inReach(char.armL, sawLeft);
   sawLook.copy(_sk);
 }
-// hands on a log in the arms, on the shoulder, or gripping the end being dragged
+// Skidding tongs for dragging: a T-handle held in both hands behind his hips, a shaft down to two jaws that bite the
+// top of the log's gripped end. The handle is fixed in his frame; updatePieces hangs the log from the jaws.
+const DRAG_BAR = { y: 1.0, z: -0.21, half: 0.19 }, TONG_LEN = 0.55;
+const tongs = { bar: new THREE.Vector3(), left: new THREE.Vector3(), bite: new THREE.Vector3(), along: new THREE.Vector3(), up: new THREE.Vector3(), R: 0.1 };
+function buildTongs() {
+  const steel = new THREE.MeshStandardMaterial({ color: 0x3b3e42, metalness: 0.7, roughness: 0.45 }), rubber = new THREE.MeshStandardMaterial({ color: 0x7a2416, roughness: 0.85 });
+  const mk = (geo, mat, parent) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; parent.add(m); return m; };
+  const g = new THREE.Group(), jaws = new THREE.Group();
+  mk(new THREE.CylinderGeometry(0.015, 0.015, 0.5, 8), steel, g).rotation.z = Math.PI / 2;
+  for (const x of [-DRAG_BAR.half, DRAG_BAR.half]) { const m = mk(new THREE.CylinderGeometry(0.022, 0.022, 0.12, 8), rubber, g); m.rotation.z = Math.PI / 2; m.position.x = x; }
+  const shaft = mk(new THREE.CylinderGeometry(0.012, 0.012, 1, 6).translate(0, -0.5, 0), steel, g);
+  // unit quarter circles from his side over the top of the log; scaled to the log's radius each frame
+  for (const sx of [1, -1]) mk(new THREE.TorusGeometry(1, 0.07, 6, 12, Math.PI / 2), steel, jaws).scale.x = sx;
+  scene.add(g, jaws);
+  return { g, shaft, jaws };
+}
+// hands on a log in the arms, on the shoulder, or on the tongs of the one being dragged; every hand target is kept
+// within reach of its shoulder
 function carryArms(w) {
   const p = carried, r = diamAt(p.d, (p.s0 + pieceEnd(p)) / 2) / 2;
   char.root.getWorldQuaternion(_rootQ);
   if (p.mode === "drag") {
-    const front = pieceWorldAt(p, p.front, _sa);
-    solveArm(char.armR, front, _pole.set(-0.6, -0.4, 0.5).applyQuaternion(_rootQ), w);
+    const T = char.tongsMesh || (char.tongsMesh = buildTongs());
+    _sy.subVectors(tongs.bar, tongs.bite); const len = _sy.length(); _sy.divideScalar(len);
+    _sz.copy(tongs.left).addScaledVector(_sy, -tongs.left.dot(_sy)).normalize();
+    T.g.position.copy(tongs.bar); T.g.quaternion.setFromRotationMatrix(_mb.makeBasis(_sz, _sy, _v.crossVectors(_sz, _sy)));
+    T.shaft.scale.y = len;
+    T.jaws.position.copy(tongs.bite).addScaledVector(tongs.up, -tongs.R);
+    T.jaws.quaternion.setFromRotationMatrix(_mb.makeBasis(_v.crossVectors(tongs.up, tongs.along), tongs.up, tongs.along));
+    T.jaws.scale.setScalar(tongs.R);
+    // both hands on the T-handle, elbows out and back
+    solveArm(char.armL, inReach(char.armL, _sw.copy(tongs.bar).addScaledVector(_sz, DRAG_BAR.half)), _pole.set(0.6, -0.2, -0.5).applyQuaternion(_rootQ), w);
+    solveArm(char.armR, inReach(char.armR, _sw.copy(tongs.bar).addScaledVector(_sz, -DRAG_BAR.half)), _pole.set(-0.6, -0.2, -0.5).applyQuaternion(_rootQ), w);
     return;
   }
   const A = pieceWorldAt(p, p.s0, _sa), B = pieceWorldAt(p, pieceEnd(p), _sb), L = pieceLen(p), mid = _sk.addVectors(A, B).multiplyScalar(0.5), ax = _sz.subVectors(B, A).normalize();
   const left = _sy.set(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
   if (L < 0.9) {
-    // hugged: a hand under each end
-    const sgn = ax.dot(left) > 0 ? 1 : -1, reach = Math.min(0.32, L * 0.42);
-    solveArm(char.armL, _sw.copy(mid).addScaledVector(ax, sgn * reach).add(_v.set(0, -r * 0.7, 0)), _pole.set(0.7, -0.5, -0.2).applyQuaternion(_rootQ), w);
-    solveArm(char.armR, _sw.copy(mid).addScaledVector(ax, -sgn * reach).add(_v.set(0, -r * 0.7, 0)), _pole.set(-0.7, -0.5, -0.2).applyQuaternion(_rootQ), w);
+    // hugged: a palm against each end face, a little below the middle
+    const sgn = ax.dot(left) > 0 ? 1 : -1, reach = L / 2 + 0.02;
+    solveArm(char.armL, inReach(char.armL, _sw.copy(mid).addScaledVector(ax, sgn * reach).add(_v.set(0, -r * 0.3, 0))), _pole.set(0.7, -0.5, -0.2).applyQuaternion(_rootQ), w);
+    solveArm(char.armR, inReach(char.armR, _sw.copy(mid).addScaledVector(ax, -sgn * reach).add(_v.set(0, -r * 0.3, 0))), _pole.set(-0.7, -0.5, -0.2).applyQuaternion(_rootQ), w);
   } else {
-    // on the right shoulder: the right hand steadies it just ahead, the left reaches across to hold it further on
-    const fwd = _v2.set(Math.sin(player.yaw), 0, Math.cos(player.yaw)), sgn = ax.dot(fwd) > 0 ? 1 : -1;
-    solveArm(char.armR, _sw.copy(mid).addScaledVector(ax, sgn * 0.22).addScaledVector(left, r * 0.7).add(_v.set(0, -r * 0.2, 0)), _pole.set(-0.7, -0.6, 0).applyQuaternion(_rootQ), w);
-    solveArm(char.armL, _sw.copy(mid).addScaledVector(ax, sgn * 0.48).addScaledVector(left, r * 0.6).add(_v.set(0, -r * 0.5, 0)), _pole.set(0.5, -0.7, 0).applyQuaternion(_rootQ), w);
+    // on the right shoulder: the right hand steadies it just ahead of the shoulder, the left reaches across the chest
+    // to hold it a little further back (positions along the log are measured from his shoulders, not the log's middle)
+    const fwd = _v2.set(Math.sin(player.yaw), 0, Math.cos(player.yaw)), sgn = ax.dot(fwd) > 0 ? 1 : -1, zc = carryMidZ(L);
+    solveArm(char.armR, inReach(char.armR, _sw.copy(mid).addScaledVector(ax, sgn * (0.38 - zc)).addScaledVector(left, r * 0.6).add(_v.set(0, -r * 0.7, 0))), _pole.set(-0.7, -0.6, 0).applyQuaternion(_rootQ), w);
+    solveArm(char.armL, inReach(char.armL, _sw.copy(mid).addScaledVector(ax, sgn * (0.24 - zc)).addScaledVector(left, r * 0.75).add(_v.set(0, -r * 0.55, 0))), _pole.set(0.5, -0.7, 0).applyQuaternion(_rootQ), w);
   }
 }
 
@@ -4468,12 +4618,17 @@ function startSaw(st) {
   // stand beside the log, square to it, facing the cut: on the woodcutter's side unless a rock, post or tree is there
   let nx = -az, nz = ax;
   if ((player.pos.x - C.x) * nx + (player.pos.y - C.z) * nz < 0) { nx = -nx; nz = -nz; }
-  const r = st.diam / 2, standD = r + 0.55;
+  // stand where the saw handle is just in front of him (it sits `mid` out from the cut toward him), a step to the left
+  // of the cut so the blade runs under his right shoulder (SAW_GEO.stand)
+  const saw = SAWS[state.saw], G = SAW_GEO[saw.kind], [ahead, side] = G.stand, standD = Math.min(sawMid(saw, st.diam / 2) + ahead, st.diam / 2 + (G.log || 9));
   // where he would actually end up standing on each side (pushed out of colliders), and how far that is off
   const spot = (sgn) => {
-    const q = new THREE.Vector2(C.x + nx * sgn * standD, C.z + nz * sgn * standD), x0 = q.x, z0 = q.y;
+    const q = new THREE.Vector2(C.x + nx * sgn * standD - nz * sgn * side, C.z + nz * sgn * standD + nx * sgn * side), x0 = q.x, z0 = q.y;
     collide(q, 0.36);
-    q.off = Math.hypot(q.x - x0, q.y - z0) + (blocked(x0, z0, Math.max(heightAt(player.pos.x, player.pos.y), 0)) ? 9 : 0);
+    // ...and whether his saw can reach the cut from there: a kerf top above about 2.2 m (a trunk propped high on its
+    // crown) or a log well below his feet (downhill) counts against the spot like an obstacle
+    const gy = groundY(q.x, q.y), r = st.diam / 2, reach = Math.max(0, C.y + r - gy - 2.2) + Math.max(0, gy - 0.35 - (C.y - r));
+    q.off = Math.hypot(q.x - x0, q.y - z0) + (blocked(x0, z0, Math.max(heightAt(player.pos.x, player.pos.y), 0)) ? 9 : 0) + reach * 2;
     return q;
   };
   let at = spot(1);
@@ -4577,11 +4732,18 @@ function pickUp(p) {
   carried = p; setPieceCarried(p, true);
   SFX.creak(1.6); SFX.pickup(); updateHUD();
 }
-// in the torso's frame: long logs ride on the right shoulder, short ones are hugged against the chest
+// In the torso's frame: long logs ride on the right shoulder, short ones are hugged against the belly. A shouldered log
+// sits on top of the shoulder (a ball of radius 0.085 at (-0.27, 0.5, 0)), moved out by half its radius so a thick one
+// clears the head; its axis rises 0.12 toward the front.
+const carryMidZ = (L) => 0.02 + Math.min(0.3, L * 0.08);
 function carryPose(p, outPos, outQuat) {
   const L = pieceLen(p), r = diamAt(p.d, (p.s0 + pieceEnd(p)) / 2) / 2;
-  if (L < 0.9) { outPos.set(0.0, 0.26, 0.24 + r); outQuat.setFromUnitVectors(UP, _v.set(1, 0, 0)); }
-  else { outPos.set(-0.2, 0.66 + r + 0.03, 0.02 + Math.min(0.3, L * 0.08)); outQuat.setFromUnitVectors(UP, _v.set(0, 0.12, 1).normalize()); }
+  if (L < 0.9) { outPos.set(0.0, 0.34, 0.15 + r); outQuat.setFromUnitVectors(UP, _v.set(1, 0, 0)); }
+  else {
+    const zc = carryMidZ(L), sx = 0.5 * r;
+    outPos.set(-0.27 - sx, 0.5 + Math.sqrt((r + 0.085) ** 2 - sx * sx) + 0.12 * zc, zc);
+    outQuat.setFromUnitVectors(UP, _v.set(0, 0.12, 1).normalize());
+  }
 }
 function dropCarried() {
   const p = carried; if (!p) return;
@@ -4637,21 +4799,35 @@ function updatePieces(dt) {
       }
     }
   }
-  // dragging: the gripped end follows the woodcutter's hand, the far end scrapes along behind
+  // dragging: the gripped end hangs from the tongs in his hands, the far end scrapes along behind
   const p = carried;
   if (p && p.mode === "drag" && (p.state === "lift" || p.state === "carried")) {
-    char.root.updateMatrixWorld(true);
-    const hold = _dh.set(-0.24, 0.55, -0.3).applyMatrix4(char.root.matrixWorld), v = VARIANTS[p.d.v], s = p.d.s;
-    const rf = spineAt(v.spine, p.front).r * s, rb = spineAt(v.spine, p.back).r * s, L = pieceLen(p);
+    const v = VARIANTS[p.d.v], s = p.d.s, rf = spineAt(v.spine, p.front).r * s, rb = spineAt(v.spine, p.back).r * s, L = pieceLen(p);
+    const c = Math.cos(player.yaw), sn = Math.sin(player.yaw), bk = DRAG_BAR.z;
+    // the T-handle, fixed in his frame (it sinks with him on slopes), and the jaws on the end straight behind it
+    const bar = tongs.bar.set(player.pos.x + sn * bk, player.y - gait.drop + DRAG_BAR.y, player.pos.y + c * bk);
+    tongs.left.set(c, 0, -sn); tongs.R = rf + 0.015;
+    const hold = _dh, gy = groundY(bar.x - sn * 0.35, bar.z - c * 0.35);
+    // the shaft hangs back and down at up to 55 degrees; a thick end rides lower so its bottom stays off the ground
+    const sink = clamp(bar.y - gy - 2 * tongs.R - 0.02, 0, TONG_LEN * 0.82), out = Math.sqrt(TONG_LEN * TONG_LEN - sink * sink);
+    hold.set(bar.x - sn * out, bar.y - sink - tongs.R, bar.z - c * out);
     hold.y = Math.max(hold.y, groundY(hold.x, hold.z) + rf);
+    // picking it up: the end swings up from where it lay
+    if (p.state === "lift") { if (!p.liftFrom) p.liftFrom = p.holder.position.clone(); hold.lerpVectors(p.liftFrom, hold, ease(p.t)); }
+    else p.liftFrom = null;
     const dir = _v.subVectors(p.backPos, hold); dir.y = 0;
-    if (dir.lengthSq() < 1e-4) dir.set(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
+    if (dir.lengthSq() < 1e-4) dir.set(-sn, 0, -c);
     dir.normalize();
-    p.backPos.set(hold.x + dir.x * L, 0, hold.z + dir.z * L);
+    // far end on the ground, a log's length from the lifted end
+    const by = groundY(p.backPos.x, p.backPos.z) + rb, hd = Math.sqrt(Math.max(0.0025, L * L - (hold.y - by) ** 2));
+    p.backPos.set(hold.x + dir.x * hd, 0, hold.z + dir.z * hd);
     p.backPos.y = groundY(p.backPos.x, p.backPos.z) + rb;
     p.holder.position.copy(hold);
-    const along = _v2.subVectors(p.backPos, hold).normalize();
+    const along = tongs.along.subVectors(p.backPos, hold).normalize();
     p.holder.quaternion.setFromUnitVectors(_v.set(0, p.back > p.front ? 1 : -1, 0), along);
+    // where the jaws close: over the top of the log a little in from the end
+    tongs.up.set(0, 1, 0).addScaledVector(along, -along.y).normalize();
+    tongs.bite.copy(hold).addScaledVector(along, 0.07).addScaledVector(tongs.up, tongs.R);
     if (p.state === "lift") { p.t = Math.min(1, p.t + dt / 0.4); if (p.t >= 1) p.state = "carried"; }
     if (player.speedNow > 0.3 && Math.random() < dt * 4) SFX.scrape();
   }
