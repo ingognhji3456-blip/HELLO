@@ -908,6 +908,11 @@ const PIECE_VERT_PARS = (depth) => `
   varying vec4 vClip;
   varying float vPieceY;
 #endif
+#if defined(TREE_PIECE) || defined(TREE_PIECE_BRANCH)
+  attribute vec4 aBend0;
+  attribute vec4 aBend1;
+  attribute vec4 aBend2;
+#endif
 #ifdef TREE_PIECE_BRANCH
   attribute float aBury;
   varying float vBury;
@@ -921,6 +926,17 @@ ${depth ? "" : `#ifdef TREE_PIECE
 const PIECE_VERT = (depth) => `
 #if defined(TREE_PIECE) || defined(TREE_PIECE_BRANCH)
   vClip = aClip; vPieceY = position.y;
+#endif
+#if defined(TREE_PIECE) || defined(TREE_PIECE_BRANCH)
+  {
+    // a lying log bends a hair to follow the ground (its limbs move with it): 11 offsets (world metres, straight down)
+    // spread evenly from its bottom end to the top of its trunk (aBend2.w)
+    float bt = clamp((position.y - aClip.x) / max(1e-4, aBend2.w - aClip.x), 0.0, 1.0) * 10.0;
+    float bk[11] = float[11](aBend0.x, aBend0.y, aBend0.z, aBend0.w, aBend1.x, aBend1.y, aBend1.z, aBend1.w, aBend2.x, aBend2.y, aBend2.z);
+    int bi = int(min(floor(bt), 9.0));
+    float bd = mix(bk[bi], bk[bi + 1], bt - float(bi));
+    if (bd > 0.0) transformed += inverse(mat3(modelMatrix * instanceMatrix)) * vec3(0.0, -bd, 0.0);
+  }
 #endif
 #ifdef TREE_PIECE_BRANCH
   vBury = aBury;
@@ -3912,7 +3928,7 @@ function pieceSave(p) {
   // a tree still falling is saved as it will land, with its stump, so it comes back lying beside the stump
   const f = p.state === "falling" && falling.find((e) => e.p === p);
   if (f) q.setFromAxisAngle(f.axis, Math.PI / 2);
-  return { d: p.d, s0: p.s0, s1: Math.min(p.s1, OPEN), piv: r3([p.pivot.x, p.pivot.y, p.pivot.z]), p: r3(pos.toArray()), q: r3(q.toArray()), c: held ? 1 : 0, settle: p.state === "falling" || p.state === "winch" ? 1 : 0, ...(f ? { st: r3([f.t.x, f.t.z, f.t.rc + 0.05]) } : {}) };
+  return { d: p.d, s0: p.s0, s1: Math.min(p.s1, OPEN), piv: r3([p.pivot.x, p.pivot.y, p.pivot.z]), p: r3(pos.toArray()), q: r3(q.toArray()), c: held ? 1 : 0, settle: p.state === "falling" || p.state === "winch" ? 1 : 0, ...(p.state === "ground" && p.bend ? { b: r3([...p.bend.d, p.bend.yEnd]) } : {}), ...(f ? { st: r3([f.t.x, f.t.z, f.t.rc + 0.05]) } : {}) };
 }
 function save() {
   if (trees.length) {
@@ -4292,7 +4308,8 @@ function pieceMesh(d, src, mat, range, tint, clip, ctr) {
   g.setAttribute("aMut2", new THREE.InstancedBufferAttribute(new Float32Array(4), 4));
   if (clip) g.setAttribute("aClip", new THREE.InstancedBufferAttribute(new Float32Array(clip), 4));
   if (ctr) g.setAttribute("aCtr", new THREE.InstancedBufferAttribute(new Float32Array(ctr), 4));
-  g.userData.own = ["aMut", "aMut2", "aClip", "aCtr"];
+  if (clip) for (const k of ["aBend0", "aBend1", "aBend2"]) g.setAttribute(k, new THREE.InstancedBufferAttribute(new Float32Array(4), 4));
+  g.userData.own = ["aMut", "aMut2", "aClip", "aCtr", "aBend0", "aBend1", "aBend2"];
   const im = new THREE.InstancedMesh(g, mat, 1);
   im.setMatrixAt(0, _id4);
   if (tint) im.setColorAt(0, new THREE.Color().fromArray(tint));
@@ -4391,11 +4408,31 @@ function setPivot(p, x, y, z) {
   p.inner.position.set(-x, -y, -z);
 }
 const pivotMid = (p) => { const y = (p.s0 + pieceEnd(p)) / 2, c = spineAt(VARIANTS[p.d.v].spine, y); setPivot(p, c.x, y, c.z); };
-// world point on the trunk centre at local height y
+// A lying log's bend: how far (world metres, down) the trunk at local height y is drawn below its straight pose,
+// from 11 offsets spread evenly from its bottom end to the top of its trunk.
+const BEND_N = 11;
+function bendOf(b, s0, y) {
+  if (!b) return 0;
+  const t = clamp((y - s0) / Math.max(1e-4, b.yEnd - s0), 0, 1) * (BEND_N - 1), i = Math.min(BEND_N - 2, Math.floor(t));
+  return lerp(b.d[i], b.d[i + 1], t - i);
+}
+function setBend(p, b) {
+  p.bend = b && b.d.some((x) => x > 0.002) ? b : null;
+  const d = p.bend ? p.bend.d : new Array(BEND_N).fill(0);
+  for (const m of p.meshes) {
+    const a0 = m.geometry.attributes.aBend0, a1 = m.geometry.attributes.aBend1, a2 = m.geometry.attributes.aBend2;
+    if (!a0) continue;
+    a0.setXYZW(0, d[0], d[1], d[2], d[3]); a1.setXYZW(0, d[4], d[5], d[6], d[7]); a2.setXYZW(0, d[8], d[9], d[10], p.bend ? p.bend.yEnd : 0);
+    a0.needsUpdate = a1.needsUpdate = a2.needsUpdate = true;
+  }
+}
+// world point on the trunk centre at local height y (where it is drawn, bend included)
 function pieceWorldAt(p, y, out) {
   const c = spineAt(VARIANTS[p.d.v].spine, y);
   p.inner.updateWorldMatrix(true, false);
-  return out.set(c.x, y, c.z).applyMatrix4(p.inner.matrixWorld);
+  out.set(c.x, y, c.z).applyMatrix4(p.inner.matrixWorld);
+  if (p.bend) out.y -= bendOf(p.bend, p.s0, y);
+  return out;
 }
 // carried logs are exempt from the see-through fade on the camera line (aMut2.w)
 function setPieceCarried(p, on) {
@@ -4501,6 +4538,7 @@ function axisPts(q) {
   for (let i = 0; i <= n; i++) {
     const y = lerp(ya, yb, i / n), c = spineAt(v.spine, y), r = c.r * s;
     const w = new THREE.Vector3(c.x - pv.x, y - pv.y, c.z - pv.z).applyAxisAngle(UP, q.d.rot).multiplyScalar(s).applyQuaternion(quat).add(pos);
+    w.y -= bendOf(q.state === "settle" ? q.bendNext : q.bend, q.s0, y);
     pts.push({ x: w.x, y: w.y, z: w.z, r });
   }
   return { q, pts, up: !!q.upright, len: (yb - ya) * s };
@@ -4550,6 +4588,7 @@ function unsupport(q) {
 }
 function settle(p, stump = null, quick = false) {
   const v = VARIANTS[p.d.v], s = p.d.s, ya = p.s0, yb = pieceEnd(p);
+  setBend(p, null); p.bendNext = null;
   scene.attach(p.holder);
   pivotMid(p);
   const A = pieceWorldAt(p, ya, _sa), B = pieceWorldAt(p, yb, _sb);
@@ -4583,35 +4622,41 @@ function settle(p, stump = null, quick = false) {
   }
   // a top rests on its remaining limbs, crushed flat under the trunk: its end is held up a little (at most ~0.25 m), and
   // from its lowest limb on the trunk counts as carried by the crown
-  let prop = rB, kCrown = 1;
+  let prop = rB, kCrown = 1, limbReach = 0;
   if (pieceTop(p)) {
     const limbs = v.subs.filter((sb) => sb.y >= p.s0);
-    if (limbs.length) { prop = rB + Math.min(0.25, 0.1 * v.crownR * s) * Math.sqrt(limbs.length / v.subs.length); kCrown = clamp((Math.min(...limbs.map((sb) => sb.y)) - ya) / (yb - ya), 0, 1); }
+    if (limbs.length) { prop = rB + Math.min(0.25, 0.1 * v.crownR * s) * Math.sqrt(limbs.length / v.subs.length); kCrown = clamp((Math.min(...limbs.map((sb) => sb.y)) - ya) / (yb - ya), 0, 1); limbReach = Math.min(0.6, 0.2 * v.crownR * s); }
   }
   // Both ends down, the whole length clear of bumps and of other pieces under it. Where something holds it up, the
   // log pivots over it: the end on the side that carries more of the log stays down, the other one rises onto it.
   // The horizontal span shrinks as it tilts so the log keeps its length. On a slope the axis sits r / cos(slope)
   // above the ground, so the bark touches the hillside instead of cutting into it.
   // (the search below can move it up to ~8 m, so every piece it could end up touching counts)
-  const lines = supportsNear(p, cx, cz, L / 2 + 12), ns = clamp(Math.ceil(L / 0.3), 2, 40), hs = [];
+  // (samples every ~30 cm while searching, every ~15 cm for the pose that is kept)
+  const lines = supportsNear(p, cx, cz, L / 2 + 12), hs = [];
+  let ns = clamp(Math.ceil(L / 0.3), 2, 40);
   // the trunk bows away from the straight line between its ends: where each sample really is relative to that line,
   // so the curved trunk (not the straight line) is what comes to rest on the ground
   const axis0 = new THREE.Vector3().subVectors(B, A).normalize(), offs = [], _bq = new THREE.Quaternion(), _bd = new THREE.Vector3(), _bo = new THREE.Vector3();
-  for (let i = 0; i <= ns; i++) offs.push(pieceWorldAt(p, lerp(ya, yb, i / ns), new THREE.Vector3()).sub(new THREE.Vector3().lerpVectors(A, B, i / ns)));
-  // How high the axis must be at each sample so no part of the bark is in the ground. Across the log the ground is
-  // checked under the whole bark circle (exact on any slope, cliffs included); a tilted log's section in that vertical
-  // plane is an ellipse r / cos(tilt) tall, so it needs that much more room.
-  const LAT = [-1, -0.75, -0.45, -0.15, 0.15, 0.45, 0.75, 1];
+  const bowAt = (k) => pieceWorldAt(p, lerp(ya, yb, k), new THREE.Vector3()).sub(new THREE.Vector3().lerpVectors(A, B, k));
+  const fillOffs = () => { offs.length = 0; for (let i = 0; i <= ns; i++) offs.push(bowAt(i / ns)); };
+  fillOffs();
+  // How high the axis must be at each sample so no part of the bark is in the ground: points around the lower half of
+  // the bark's real cross-section (the circle square to the log's axis, tilted with it) must each be above the ground
+  // under them. Exact on any slope, cliffs included.
+  const RING = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => { const a = Math.PI * (1 + i / 8); return [Math.cos(a), Math.sin(a)]; });
   const heights = (ax, az, bx, bz, ay, by, used) => {
     used.clear();
-    const dx = bx - ax, dy = by - ay, dz = bz - az, hl = Math.hypot(dx, dz) || 1, lx = -dz / hl, lz = dx / hl, cosA = Math.max(0.2, hl / (Math.hypot(dx, dy, dz) || 1));
+    const dx = bx - ax, dy = by - ay, dz = bz - az, dl = Math.hypot(dx, dy, dz) || 1, hl = Math.hypot(dx, dz) || 1;
+    const ux = -dz / hl, uz = dx / hl;                                     // across the log, level
+    const wx = -(dy / dl) * (dx / hl), wy = hl / dl, wz = -(dy / dl) * (dz / hl);   // square to the log and to u, upward
     _bq.setFromUnitVectors(axis0, _bd.set(dx, dy, dz).normalize());
     // the cabin's floors only matter near the cabin
     const gy = Math.min(cabinDist(ax, az), cabinDist(bx, bz), cabinDist((ax + bx) / 2, (az + bz) / 2)) < 25 ? groundY : heightAt;
     for (let i = 0; i <= ns; i++) {
       const k = i / ns, x = lerp(ax, bx, k), z = lerp(az, bz, k), r = spineAt(v.spine, lerp(ya, yb, k)).r * s;
       let h = i === ns ? gy(x, z) + prop : -Infinity;
-      for (const t of LAT) { const tt = t * r; h = Math.max(h, gy(x + lx * tt, z + lz * tt) + Math.sqrt(r * r - tt * tt) / cosA); }
+      for (const [c, sn] of RING) { const ox = r * (c * ux + sn * wx), oy = r * sn * wy, oz = r * (c * uz + sn * wz); h = Math.max(h, gy(x + ox, z + oz) - oy); }
       hs[i] = Math.max(h, restHeight(x, z, r, lines, used)) - _bo.copy(offs[i]).applyQuaternion(_bq).y;
     }
   };
@@ -4642,18 +4687,21 @@ function settle(p, stump = null, quick = false) {
     let sink = 0;
     for (let i = 0; i <= ns; i++) sink = Math.max(sink, hs[i] - lerp(ay, by, i / ns));
     ay += sink; by += sink;
-    // how far it hangs in the air over a hollow (the crown end of a top is carried by its limbs)
+    // how far it hangs in the air over a hollow (along the crown its limbs carry it up to about a limb's reach)
     let air = 0, airK = 0.5;
-    for (let i = 1; i < ns; i++) if (i / ns < kCrown) { const e = lerp(ay, by, i / ns) - hs[i]; if (e > air) { air = e; airK = i / ns; } }
+    for (let i = 1; i < ns; i++) { const e = lerp(ay, by, i / ns) - hs[i] - (i / ns >= kCrown ? limbReach : 0); if (e > air) { air = e; airK = i / ns; } }
     return { ax, az, bx, bz, ay, by, air, airK, onPiece: used.size > 0 };
   };
   // A log that would bridge a hollow rolls or slides a little into it instead: try nearby resting spots (along it,
   // across it, slightly turned) and keep the one where it lies best on the ground, preferring small moves.
   const used = new Set();
   // (a log lying across another one, one end on the ground, is leaning on it, not hanging in the air: it stays put,
-  // unless that leaves it propped up high over a hollow)
-  let best = rest(cx, cz, hx, hz, used), bestScore = best.air;
-  if (best.air > 0.08 && (!best.onPiece || best.air > 0.5)) {
+  // unless that leaves it propped up high over a hollow). A log can't rest steeper than about 34 degrees either: one
+  // that fell against a rock wall slides down and swings round to lie along the foot of it.
+  const tilt = (r) => Math.atan2(Math.abs(r.by - r.ay), Math.hypot(r.bx - r.ax, r.bz - r.az));
+  const unstable = (r) => 1.5 * Math.max(0, tilt(r) - 0.6);
+  let best = rest(cx, cz, hx, hz, used), bestScore = best.air + unstable(best);
+  if ((best.air > 0.08 && (!best.onPiece || best.air > 0.5)) || tilt(best) > 0.6) {
     const far = Math.min(2.5, L * 0.3), tryUsed = new Set();
     for (const fa of [0, -0.5, 0.5, -1, 1]) for (const dl of [0, -0.6, 0.6, -1.2, 1.2]) for (const dr of [0, -0.2, 0.2]) {
       if (!fa && !dl && !dr) continue;
@@ -4661,15 +4709,15 @@ function settle(p, stump = null, quick = false) {
       const x = cx + hx * da - hz * dl, z = cz + hz * da + hx * dl;
       if (heightAt(x, z) < -0.6) continue;
       if (stump && Math.hypot(x - hx2 * L / 2 - stump.x, z - hz2 * L / 2 - stump.z) < stump.r + rA + 0.05) continue;
-      const r = rest(x, z, hx2, hz2, tryUsed), score = r.air + 0.04 * Math.hypot(da, dl) + 0.15 * Math.abs(dr);
+      const r = rest(x, z, hx2, hz2, tryUsed), score = r.air + unstable(r) + 0.04 * Math.hypot(da, dl) + 0.15 * Math.abs(dr);
       if (score < bestScore - 0.02) { bestScore = score; best = { ...r, x, z, hx2, hz2 }; }
     }
     // a deep hollow: keep rolling and sliding down into it (and turning to lie along it) in shrinking steps,
     // up to about 8 m from where it fell
-    if (best.air > 0.08) {
+    if (best.air > 0.08 || tilt(best) > 0.6) {
       let cur = best.x !== undefined ? { x: best.x, z: best.z, a: Math.atan2(best.hz2, best.hx2) } : { x: cx, z: cz, a: Math.atan2(hz, hx) };
-      const a0 = Math.atan2(hz, hx), scoreOf = (r, c) => r.air + 0.02 * Math.hypot(c.x - cx, c.z - cz) + 0.05 * Math.abs(angDiff(a0, c.a));
-      for (const [st, sa] of [[3, 0.35], [2, 0.25], [1, 0.15], [0.5, 0.08]]) for (let it = 0; it < 6; it++) {
+      const a0 = Math.atan2(hz, hx), scoreOf = (r, c) => r.air + unstable(r) + 0.02 * Math.hypot(c.x - cx, c.z - cz) + 0.05 * Math.abs(angDiff(a0, c.a));
+      for (const [st, sa] of [[3, 0.8], [3, 0.35], [2, 0.25], [1, 0.15], [0.5, 0.08]]) for (let it = 0; it < 6; it++) {
         let moved = false;
         const ux = Math.cos(cur.a), uz = Math.sin(cur.a);
         for (const [da, dl, dr] of [[st, 0, 0], [-st, 0, 0], [0, st, 0], [0, -st, 0], [0, 0, sa], [0, 0, -sa], [st, st, 0], [st, -st, 0], [-st, st, 0], [-st, -st, 0]]) {
@@ -4683,8 +4731,10 @@ function settle(p, stump = null, quick = false) {
         if (!moved) break;
       }
     }
-    if (best.x !== undefined) best = rest(best.x, best.z, best.hx2, best.hz2, used);
   }
+  // the pose that is kept, sampled finely (the samples, hs, also drive the bend below)
+  ns = clamp(Math.ceil(L / 0.15), 2, 120); fillOffs();
+  best = best.x !== undefined ? rest(best.x, best.z, best.hx2, best.hz2, used) : rest(cx, cz, hx, hz, used);
   const { ax, az, bx, bz, ay, by } = best;
   // what is left hanging in the air (a felled tree still bridging a ravine snaps there when it lands)
   p.air = best.onPiece ? 0 : best.air; p.airY = lerp(ya, yb, best.airK);
@@ -4696,8 +4746,23 @@ function settle(p, stump = null, quick = false) {
   // the holder sits on the trunk's (bowed) centre line, not on the straight line between its ends: keep that offset
   const bow = new THREE.Vector3().addVectors(A, B).multiplyScalar(0.5).sub(p.holder.position).applyQuaternion(_sq);
   p.toPos = new THREE.Vector3((ax + bx) / 2, (ay + by) / 2, (az + bz) / 2).sub(bow);
+  // A rigid log can't touch bumpy ground everywhere: it is drawn bent a hair (it reads as the trunk's own crook) so it
+  // lies on the ground along its whole length. Each part goes down by at most the gap under it, never into the ground
+  // (the crown end stays on its limbs, which the shader bends along with the trunk).
+  // (never more than 5 % of its length, at most 0.5 m: a trunk's natural sweep, not a sag into a ravine)
+  const cap = Math.min(0.5, 0.05 * L), gapAt = (j) => clamp(lerp(ay, by, j / ns) - hs[j], 0, cap), N1 = BEND_N - 1, d = [];
+  for (let i = 0; i < BEND_N; i++) { const j = (i / N1) * ns, a = Math.min(ns - 1, Math.floor(j)); d.push(lerp(gapAt(a), gapAt(a + 1), j - a)); }
+  for (let it = 0; it < 12; it++) {
+    let ok = true;
+    for (let j = 0; j <= ns; j++) {
+      const t = (j / ns) * N1, a = Math.min(N1 - 1, Math.floor(t)), dj = lerp(d[a], d[a + 1], t - a), gj = gapAt(j);
+      if (dj > gj + 0.002) { ok = false; const k = gj / dj; d[a] *= k; d[a + 1] *= k; }
+    }
+    if (ok) break;
+  }
+  p.bendNext = { d, yEnd: yb };
   p.state = "settle"; p.t = quick ? 1 : 0;
-  if (quick) { p.holder.position.copy(p.toPos); p.holder.quaternion.copy(p.toQuat); p.state = "ground"; }
+  if (quick) { p.holder.position.copy(p.toPos); p.holder.quaternion.copy(p.toQuat); p.state = "ground"; setBend(p, p.bendNext); }
 }
 // distance from a point to a lying piece's trunk axis (world, horizontal), and the axis parameter there
 function pieceReach(p, x, z) {
@@ -4755,11 +4820,11 @@ function pickPieceAt(sx, sy) {
     p.inner.updateWorldMatrix(true, false);
     const M = p.inner.matrixWorld;
     let c = spineAt(S, ya);
-    _ca.set(c.x, ya, c.z).applyMatrix4(M);
+    _ca.set(c.x, ya, c.z).applyMatrix4(M); _ca.y -= bendOf(p.bend, p.s0, ya);
     for (let i = 1; i <= n; i++) {
       const y0 = lerp(ya, yb, (i - 1) / n), y1 = lerp(ya, yb, i / n);
       c = spineAt(S, y1);
-      _cb.set(c.x, y1, c.z).applyMatrix4(M);
+      _cb.set(c.x, y1, c.z).applyMatrix4(M); _cb.y -= bendOf(p.bend, p.s0, y1);
       // closest points between the ray (ro + t·rd, t >= 0) and this bit of the axis (A + u·(B - A), 0..1)
       _cd.subVectors(_cb, _ca); _cr.subVectors(_ro, _ca);
       const e = _cd.dot(_cd), b = _rd.dot(_cd), f = _cd.dot(_cr), cr = _rd.dot(_cr), den = e - b * b;
@@ -4938,7 +5003,7 @@ function pickUp(p) {
     p.backPos = (p.front === p.s0 ? B : A).clone();
     const c = spineAt(VARIANTS[p.d.v].spine, p.front); setPivot(p, c.x, p.front, c.z);
   }
-  carried = p; setPieceCarried(p, true); unsupport(p);
+  carried = p; setPieceCarried(p, true); setBend(p, null); unsupport(p);
   SFX.creak(1.6); SFX.pickup(); updateHUD();
 }
 // In the torso's frame: long logs ride on the right shoulder, short ones are hugged against the belly. A shouldered log
@@ -4975,7 +5040,7 @@ function updatePieces(dt) {
       const k = p.t * p.t;
       p.holder.position.lerpVectors(p.fromPos, p.toPos, k); p.holder.quaternion.slerpQuaternions(p.fromQuat, p.toQuat, ease(p.t));
       if (p.t >= 1) {
-        p.state = "ground";
+        p.state = "ground"; setBend(p, p.bendNext);
         const dist = Math.hypot(p.holder.position.x - player.pos.x, p.holder.position.z - player.pos.y);
         if (dist < 25) { SFX.thud(clamp(pieceKg(p) / 300, 0.15, 1)); emitPuff(p.holder.position, 3, { size: 0.8, spread: Math.min(2, pieceLen(p) * 0.3), up: 0.3, life: 1.2, alpha: 0.25, color: [0.6, 0.55, 0.45] }); }
       }
@@ -5091,6 +5156,7 @@ function restoreForest() {
     if (g.c) p.holder.position.set(player.pos.x + Math.sin(player.yaw) * 1.2, player.y + 1, player.pos.y + Math.cos(player.yaw) * 1.2);
     scene.add(p.holder); pieces.push(p);
     if (g.c || g.settle) settle(p, arr3(g.st) ? { x: g.st[0], z: g.st[1], r: g.st[2] } : null, true);
+    else if (arr3(g.b, BEND_N + 1)) setBend(p, { d: g.b.slice(0, BEND_N), yEnd: g.b[BEND_N] });
   }
 }
 function updateTrees(dt) {
@@ -5555,7 +5621,7 @@ function startWinch(p) {
   const why = canLoad(p);
   if (why) { toast(why); SFX.deny(); return; }
   truck.winching = { p, t: 0, from: p.holder.position.clone() };
-  p.state = "winch"; unsupport(p);
+  p.state = "winch"; setBend(p, null); unsupport(p);
   SFX.winch();
 }
 function updateWinch(dt) {
