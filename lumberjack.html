@@ -3834,7 +3834,7 @@ function updatePlayer(dt) {
   const wantRun = (keys.ShiftLeft || keys.ShiftRight || (joy.active && joy.mag > 0.92)) && mag > 0.1;
   // a load slows him down; light logs can still be run with, dragging is always a walk
   const kg = carried ? pieceKg(carried) : 0, dragging = carried && carried.mode === "drag";
-  player.running = wantRun && player.stamina > 0 && player.staminaLock <= 0 && !dragging && kg < 45;
+  player.running = wantRun && player.stamina > 0 && player.staminaLock <= 0 && !dragging && kg < 70;
   let speed = (player.running ? 5.8 : 2.4) * mag;
   if (carried) speed *= dragging ? 0.6 - 0.3 * kg / DRAG.kg : 1 - 0.2 * kg / HAND.kg;
   const h0 = heightAt(player.pos.x, player.pos.y);
@@ -3968,7 +3968,7 @@ function hitTree(t) {
    weight and price come from the piece's own wood (and, for a top, its crown).
    ============================================================ */
 const OPEN = 1e4;
-const HAND = { kg: 90, len: 3.5 }, DRAG = { kg: 400, len: 6 };
+const HAND = { kg: 150, len: 4 }, DRAG = { kg: 800, len: 7.5 };
 const pieces = [];
 let pieceSeq = 1;
 // everything needed to draw and price a felled tree, independent of the stump it left behind
