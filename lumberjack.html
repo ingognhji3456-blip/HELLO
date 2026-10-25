@@ -4573,34 +4573,63 @@ function settle(p, stump = null, quick = false) {
     if (quick) { p.holder.position.copy(p.toPos); p.holder.quaternion.copy(p.toQuat); p.state = "ground"; }
     return;
   }
-  // a top rests on its remaining limbs: the more crown it still has, the higher its end is held up, but it never
-  // tips up like a leaning tree (at most about 12 degrees)
-  let prop = rB;
-  if (pieceTop(p)) { const n = v.subs.filter((sb) => sb.y >= p.s0).length; if (n) prop = Math.max(rB, Math.min(v.crownR * s * 0.3 * Math.sqrt(n / v.subs.length), rA + L * 0.2)); }
+  // a top rests on its remaining limbs, crushed flat under the trunk: its end is held up a little (at most ~0.25 m), and
+  // from its lowest limb on the trunk counts as carried by the crown
+  let prop = rB, kCrown = 1;
+  if (pieceTop(p)) {
+    const limbs = v.subs.filter((sb) => sb.y >= p.s0);
+    if (limbs.length) { prop = rB + Math.min(0.25, 0.1 * v.crownR * s) * Math.sqrt(limbs.length / v.subs.length); kCrown = clamp((Math.min(...limbs.map((sb) => sb.y)) - ya) / (yb - ya), 0, 1); }
+  }
   // Both ends down, the whole length clear of bumps and of other pieces under it. Where something holds it up, the
   // log pivots over it: the end on the side that carries more of the log stays down, the other one rises onto it.
-  // The horizontal span shrinks as it tilts so the log keeps its length.
-  const lines = supportsNear(p, cx, cz, L / 2 + 1), used = new Set(), ns = clamp(Math.ceil(L / 0.3), 2, 40), hs = [];
-  let half = L / 2, ax, az, bx, bz, ay, by;
-  for (let it = 0; it < 4; it++) {
-    ax = cx - hx * half; az = cz - hz * half; bx = cx + hx * half; bz = cz + hz * half;
-    used.clear();
-    for (let i = 0; i <= ns; i++) {
-      const k = i / ns, x = lerp(ax, bx, k), z = lerp(az, bz, k), r = spineAt(v.spine, lerp(ya, yb, k)).r * s;
-      hs[i] = Math.max(groundY(x, z) + (i === ns ? prop : r), restHeight(x, z, r, lines, used));
+  // The horizontal span shrinks as it tilts so the log keeps its length. On a slope the axis sits r / cos(slope)
+  // above the ground, so the bark touches the hillside instead of cutting into it.
+  const lines = supportsNear(p, cx, cz, L / 2 + 4), ns = clamp(Math.ceil(L / 0.3), 2, 40), hs = [];
+  const rest = (cx, cz, hx, hz, used) => {
+    let half = L / 2, ax, az, bx, bz, ay, by;
+    for (let it = 0; it < 4; it++) {
+      ax = cx - hx * half; az = cz - hz * half; bx = cx + hx * half; bz = cz + hz * half;
+      used.clear();
+      for (let i = 0; i <= ns; i++) {
+        const k = i / ns, x = lerp(ax, bx, k), z = lerp(az, bz, k), r = spineAt(v.spine, lerp(ya, yb, k)).r * s;
+        const ny = platformHeight(x, z) > -Infinity ? 1 : clamp(gridSample(TNRM, x, z, 1), 0.5, 1);
+        hs[i] = Math.max(groundY(x, z) + (i === ns ? prop : r / ny), restHeight(x, z, r, lines, used));
+      }
+      ay = hs[0]; by = hs[ns];
+      for (let j = 0; j < 8; j++) {
+        let worst = 0.004, wi = -1;
+        for (let i = 1; i < ns; i++) { const e = hs[i] - lerp(ay, by, i / ns); if (e > worst) { worst = e; wi = i; } }
+        if (wi < 0) break;
+        const k = wi / ns;
+        if (Math.abs(k - 0.5) < 0.12) { ay += worst; by += worst; }
+        else if (k < 0.5) ay = by + (hs[wi] - by) / (1 - k);
+        else by = ay + (hs[wi] - ay) / k;
+      }
+      half = Math.sqrt(Math.max(L * L * 0.04, L * L - (by - ay) ** 2)) / 2;
     }
-    ay = hs[0]; by = hs[ns];
-    for (let j = 0; j < 8; j++) {
-      let worst = 0.004, wi = -1;
-      for (let i = 1; i < ns; i++) { const e = hs[i] - lerp(ay, by, i / ns); if (e > worst) { worst = e; wi = i; } }
-      if (wi < 0) break;
-      const k = wi / ns;
-      if (Math.abs(k - 0.5) < 0.12) { ay += worst; by += worst; }
-      else if (k < 0.5) ay = by + (hs[wi] - by) / (1 - k);
-      else by = ay + (hs[wi] - ay) / k;
+    // how far it hangs in the air over a hollow (the crown end of a top is carried by its limbs)
+    let air = 0;
+    for (let i = 1; i < ns; i++) if (i / ns < kCrown) air = Math.max(air, lerp(ay, by, i / ns) - hs[i]);
+    return { ax, az, bx, bz, ay, by, air };
+  };
+  // A log that would bridge a hollow rolls or slides a little into it instead: try nearby resting spots (along it,
+  // across it, slightly turned) and keep the one where it lies best on the ground, preferring small moves.
+  const used = new Set();
+  let best = rest(cx, cz, hx, hz, used), bestScore = best.air;
+  if (best.air > 0.12) {
+    const far = Math.min(2.5, L * 0.3), tryUsed = new Set();
+    for (const fa of [0, -0.5, 0.5, -1, 1]) for (const dl of [0, -0.6, 0.6, -1.2, 1.2]) for (const dr of [0, -0.2, 0.2]) {
+      if (!fa && !dl && !dr) continue;
+      const da = fa * far, c = Math.cos(dr), sn = Math.sin(dr), hx2 = hx * c - hz * sn, hz2 = hx * sn + hz * c;
+      const x = cx + hx * da - hz * dl, z = cz + hz * da + hx * dl;
+      if (heightAt(x, z) < -0.6) continue;
+      if (stump && Math.hypot(x - hx2 * L / 2 - stump.x, z - hz2 * L / 2 - stump.z) < stump.r + rA + 0.05) continue;
+      const r = rest(x, z, hx2, hz2, tryUsed), score = r.air + 0.04 * Math.hypot(da, dl) + 0.15 * Math.abs(dr);
+      if (score < bestScore - 0.02) { bestScore = score; best = { ...r, x, z, hx2, hz2 }; }
     }
-    half = Math.sqrt(Math.max(L * L * 0.04, L * L - (by - ay) ** 2)) / 2;
+    if (best.x !== undefined) best = rest(best.x, best.z, best.hx2, best.hz2, used);
   }
+  const { ax, az, bx, bz, ay, by } = best;
   p.upright = false; p.restsOn = used;
   const axisNow = _v.subVectors(B, A).normalize(), axisNew = _v2.set(bx - ax, by - ay, bz - az).normalize();
   _sq.setFromUnitVectors(axisNow, axisNew);
@@ -6417,7 +6446,7 @@ async function init() {
   mode = "title";
   $("#startBtn").focus();
 }
-window.__woodcutter = { state, player, gait, trees, cam, pieces, interact, truck, placeTruck, save, worldItems, SITES, ASSEMBLY, stepAnchor, buyBlueprint, currentInteraction, keys, enterTruck, exitVehicle, loadOnBed, startWinch, sellBed, makePlanks, sawTarget, startSaw, finishCut, splitPiece, pickUp, dropCarried, pieceKg, pieceLen, pieceValue, haulMode, setTool, buy, equip, openShop, closeShop, nearKeeper, get sawing() { return player.sawing; }, get cabinInside() { return cabin.inside; }, get carried() { return carried; }, get mode() { return mode; }, setHour: (h) => { state.hour = h; }, tryChop, teleport: (x, z) => { if (player.vehicle) exitVehicle(true); stopSawing(); player.pos.set(x, z); }, char, camera, scene, grassChunks, DEBUG, VARIANTS, fromCabinLocal, findTarget, buildAxeMesh, info: () => ({ ...renderer.info.render }), weather, setWeather, lightning, setTreeMut, U, fellTree, falling, setupTree };
+window.__woodcutter = { state, player, groundY, gait, trees, cam, pieces, interact, truck, placeTruck, save, worldItems, SITES, ASSEMBLY, stepAnchor, buyBlueprint, currentInteraction, keys, enterTruck, exitVehicle, loadOnBed, startWinch, sellBed, makePlanks, sawTarget, startSaw, finishCut, splitPiece, pickUp, dropCarried, pieceKg, pieceLen, pieceValue, haulMode, setTool, buy, equip, openShop, closeShop, nearKeeper, get sawing() { return player.sawing; }, get cabinInside() { return cabin.inside; }, get carried() { return carried; }, get mode() { return mode; }, setHour: (h) => { state.hour = h; }, tryChop, teleport: (x, z) => { if (player.vehicle) exitVehicle(true); stopSawing(); player.pos.set(x, z); }, char, camera, scene, grassChunks, DEBUG, VARIANTS, fromCabinLocal, findTarget, buildAxeMesh, info: () => ({ ...renderer.info.render }), weather, setWeather, lightning, setTreeMut, U, fellTree, falling, setupTree };
 requestAnimationFrame(frame);
 init().catch((err) => { console.error(err); $("#loadMsg").textContent = "숲을 만드는 중 오류가 났습니다: " + err.message; });
 </script>
