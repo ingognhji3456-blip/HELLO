@@ -258,7 +258,7 @@ body.touch #prompt { left: 164px; right: 202px; margin: 0 auto; transform: none;
   <div class="inner">
     <div class="kicker">WILD TIMBER</div>
     <h1>나무꾼의 숲</h1>
-    <p>호수와 언덕, 소나무·가문비나무·자작나무·참나무·단풍나무·벚나무·버드나무가 우거진 야생의 숲. 도끼로 나무를 쓰러뜨리고 톱으로 원하는 길이만큼 잘라 오두막에 팔아, 더 좋은 도끼와 톱을 사고 직접 트럭을 조립해 보세요.</p>
+    <p>호수와 언덕, 소나무·가문비나무·편백나무·자작나무·참나무·단풍나무·은행나무·밤나무·벚나무·버드나무가 우거진 야생의 숲. 도끼로 나무를 쓰러뜨리고 톱으로 원하는 길이만큼 잘라 오두막에 팔아, 더 좋은 도끼와 톱을 사고 직접 트럭을 조립해 보세요.</p>
     <button id="startBtn" class="btn">숲으로 들어가기</button>
     <div id="saveInfo"></div>
     <div id="controls">
@@ -489,15 +489,34 @@ function barkTextures(kind) {
       hf[y * W + x] = k * (0.6 + plates * 0.4) + fine * 0.15;
       o[0] = lerp(70, 116, plates) * sh; o[1] = lerp(56, 92, plates) * sh; o[2] = lerp(48, 80, plates) * sh;
     });
-  } else if (kind === "oak" || kind === "willow" || kind === "maple") {
-    // furrowed: deep criss-cross ridges (oak), long vertical ridges (willow), shallow grey furrows (maple)
-    const fx = kind === "oak" ? 10 : kind === "willow" ? 14 : 12, fy = kind === "oak" ? 3 : 2, lo = kind === "maple" ? 0.55 : 0.35;
-    const col = kind === "oak" ? [96, 84, 70] : kind === "willow" ? [98, 88, 72] : [118, 112, 104];
+  } else if (kind === "cypress") {
+    // red-brown bark that peels in long fibrous strips
+    c = pixelCanvas(W, H, (x, y, o) => {
+      const u = x / W, v = y / H;
+      const fib = tfbm(u, v, 40, 3, 4, 33), strip = tfbm(u, v, 9, 2, 3, 61), fine = tfbm(u, v, 64, 32, 2, 87);
+      const k = smooth(0.3, 0.7, fib), sh = (0.6 + 0.4 * k) * (0.88 + fine * 0.24);
+      hf[y * W + x] = k * 0.7 + strip * 0.3;
+      o[0] = lerp(104, 150, strip) * sh; o[1] = lerp(58, 84, strip) * sh; o[2] = lerp(42, 60, strip) * sh;
+    });
+  } else if (kind === "snag") {
+    // weathered grey wood where the bark has fallen off, dark bark patches still clinging on
+    c = pixelCanvas(W, H, (x, y, o) => {
+      const u = x / W, v = y / H;
+      const grain = tfbm(u, v, 30, 2, 4, 21), patch = tfbm(u, v, 5, 3, 4, 47), fine = tfbm(u, v, 64, 32, 2, 77);
+      const bark = smooth(0.55, 0.6, patch), l = (0.8 + grain * 0.3) * (0.9 + fine * 0.2);
+      hf[y * W + x] = grain * 0.6 + bark * 0.6;
+      o[0] = lerp(168, 74, bark) * l; o[1] = lerp(160, 64, bark) * l; o[2] = lerp(148, 54, bark) * l;
+    });
+  } else if (kind === "oak" || kind === "willow" || kind === "maple" || kind === "ginkgo" || kind === "chestnut") {
+    // furrowed: deep criss-cross ridges (oak), long vertical ridges (willow, chestnut), shallow grey furrows (maple,
+    // ginkgo)
+    const fx = { oak: 10, willow: 14, maple: 12, ginkgo: 11, chestnut: 13 }[kind], fy = kind === "oak" ? 3 : 2, lo = kind === "maple" || kind === "ginkgo" ? 0.55 : 0.35;
+    const col = { oak: [96, 84, 70], willow: [98, 88, 72], maple: [118, 112, 104], ginkgo: [112, 100, 86], chestnut: [82, 70, 60] }[kind];
     c = pixelCanvas(W, H, (x, y, o) => {
       const u = x / W, v = y / H;
       const n = tfbm(u, v, fx, fy, 5, 50), ridge = 1 - Math.abs(n * 2 - 1), fine = tfbm(u, v, 48, 24, 3, 90);
       const k = smooth(0.25, 0.75, ridge), sh = (lo + (1 - lo) * k) * (0.85 + fine * 0.3);
-      hf[y * W + x] = k * (kind === "maple" ? 0.5 : 1) + fine * 0.2;
+      hf[y * W + x] = k * (kind === "maple" || kind === "ginkgo" ? 0.5 : 1) + fine * 0.2;
       o[0] = col[0] * sh; o[1] = col[1] * sh; o[2] = col[2] * sh;
     });
   } else if (kind === "cherry") {
@@ -574,6 +593,10 @@ function leafHalfW(t, wid, shape) {
   if (shape === "maple") return wid * Math.pow(Math.sin(Math.PI * Math.pow(t, 0.8)), 0.45) * (0.45 + 0.55 * Math.pow(Math.abs(Math.cos(t * 2.5 * Math.PI)), 0.6));
   // willow: long and narrow
   if (shape === "willow") return wid * Math.pow(Math.sin(Math.PI * t), 1.3);
+  // ginkgo: a little fan, narrow at the stalk and wide and flat at its edge
+  if (shape === "ginkgo") return wid * Math.pow(t, 1.4);
+  // chestnut: long and pointed with a saw-toothed edge
+  if (shape === "chestnut") return wid * Math.pow(Math.sin(Math.PI * t), 0.8) * (0.86 + 0.14 * ((t * 22) % 1));
   if (shape === "birch") return wid * Math.sin(Math.PI * Math.pow(t, 0.7)) * (0.93 + 0.07 * ((t * 18) % 1));
   return wid * Math.sin(Math.PI * t);
 }
@@ -611,7 +634,15 @@ const LEAF_CFG = {
   maple: { seed: 12, pal: [6, 32, 70, 88, 38, 52], shape: "maple", LL: 17, LW: 10, tips: 3, step: 9 },
   cherry: { seed: 13, pal: [96, 120, 26, 40, 28, 40], shape: "plain", LL: 12, LW: 5, tips: 2, step: 8, blossom: true },
   willow: { seed: 14, pal: [64, 82, 38, 54, 32, 46], shape: "willow", LL: 24, LW: 3.2, tips: 2, step: 5 },
+  ginkgo: { seed: 15, pal: [40, 50, 86, 96, 52, 64], shape: "ginkgo", LL: 12, LW: 9, tips: 3, step: 7 },
+  chestnut: { seed: 16, pal: [86, 104, 36, 50, 22, 34], shape: "chestnut", LL: 22, LW: 5, tips: 4, step: 9, burrs: true },
 };
+// A chestnut burr: a green-gold ball bristling with spines.
+function drawBurr(g, x, y, r, R) {
+  g.strokeStyle = `hsl(${lerp(62, 74, R())},55%,40%)`; g.lineWidth = Math.max(1, r * 0.14);
+  for (let k = 0; k < 18; k++) { const a = R() * TAU; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * r * 1.45, y + Math.sin(a) * r * 1.45); g.stroke(); }
+  g.fillStyle = `hsl(${lerp(64, 76, R())},58%,${lerp(42, 50, R())}%)`; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+}
 function leafAtlas(kind) {
   const C = LEAF_CFG[kind], S = 2, c = cnv(512 * S, 256 * S), g = c.getContext("2d"), R = mulberry32(C.seed), pal = C.pal;
   const col = (dl = 0) => (R() < 0.04 ? [lerp(38, 52, R()), 52, pal[5] + 2 + dl] : [lerp(pal[0], pal[1], R()), lerp(pal[2], pal[3], R()), lerp(pal[4], pal[5], R()) + dl]);
@@ -619,6 +650,7 @@ function leafAtlas(kind) {
   g.fillStyle = C.blossom ? "hsl(342,45%,74%)" : `hsl(${pal[0] + 8},${pal[2]}%,${pal[4] - 8}%)`; g.fillRect(272 * S, 0, 240 * S, 256 * S);
   for (let i = 0; i < 1800; i++) drawLeaf(g, (272 + R() * 240) * S, R() * 256 * S, LL * (0.7 + R() * 0.6), LW * (0.7 + R() * 0.5), R() * TAU, col(-5 + (i / 1800) * 7), shape);
   if (C.blossom) for (let i = 0; i < 2600; i++) drawBlossom(g, (272 + R() * 240) * S, R() * 256 * S, (3.2 + R() * 2.4) * S, R);
+  if (C.burrs) for (let i = 0; i < 90; i++) drawBurr(g, (272 + R() * 240) * S, R() * 256 * S, (3.5 + R() * 2) * S, R);
   // cards region: a leafy branchlet growing from the left edge, so cards can sit on twigs like real sprays
   g.save(); g.beginPath(); g.rect(0, 0, 240 * S, 256 * S); g.clip(); g.lineCap = "round";
   const oak = shape === "oak" || shape === "maple";
@@ -643,6 +675,7 @@ function leafAtlas(kind) {
     const tipN = C.tips;
     for (let k = 0; k < tipN; k++) drawLeaf(g, x1, y1, LL * (oak ? 1.05 : 0.9), LW * (oak ? 1.0 : 0.85), ang + bendA * 0.5 + (k - (tipN - 1) / 2) * 0.55, col(4), shape);
     if (C.blossom) for (let k = 0; k < 4; k++) drawBlossom(g, x1 + (R() - 0.5) * 12 * S, y1 + (R() - 0.5) * 12 * S, (4 + R() * 2) * S, R);
+    if (C.burrs && R() < 0.7) drawBurr(g, x1 + (R() - 0.5) * 8 * S, y1 + (R() - 0.5) * 8 * S, (5 + R() * 2) * S, R);
   };
   shoot(4 * S, 128 * S, (R() - 0.5) * 0.08, 200 * S, 2.8 * S, 0);
   g.restore();
@@ -650,11 +683,13 @@ function leafAtlas(kind) {
   return t;
 }
 // Needle sprays: pine (long, warm green) or spruce (short, dense, dark blue-green).
+// Needle sprays: pine (long, warm green), spruce (short, dense, dark blue-green) or cypress (tiny scale leaves in
+// flat, feathery fans, deep green).
 function pineAtlas(kind = "pine") {
-  const spruce = kind === "spruce", S = 2, c = cnv(512 * S, 256 * S), g = c.getContext("2d"), R = mulberry32(spruce ? 22 : 21);
-  const needle = (dl = 0) => (spruce ? `hsl(${lerp(150, 175, R())},${lerp(18, 32, R())}%,${lerp(11, 21, R()) + dl}%)` : `hsl(${lerp(112, 140, R())},${lerp(22, 40, R())}%,${lerp(13, 25, R()) + dl}%)`);
-  const NL = spruce ? 0.6 : 1;
-  g.fillStyle = spruce ? "hsl(160,26%,9%)" : "hsl(130,28%,10%)"; g.fillRect(272 * S, 0, 240 * S, 256 * S); g.lineCap = "round";
+  const spruce = kind === "spruce", cyp = kind === "cypress", S = 2, c = cnv(512 * S, 256 * S), g = c.getContext("2d"), R = mulberry32(spruce ? 22 : cyp ? 23 : 21);
+  const needle = (dl = 0) => (spruce ? `hsl(${lerp(150, 175, R())},${lerp(18, 32, R())}%,${lerp(11, 21, R()) + dl}%)` : cyp ? `hsl(${lerp(118, 138, R())},${lerp(30, 44, R())}%,${lerp(14, 24, R()) + dl}%)` : `hsl(${lerp(112, 140, R())},${lerp(22, 40, R())}%,${lerp(13, 25, R()) + dl}%)`);
+  const NL = spruce ? 0.6 : cyp ? 0.32 : 1;
+  g.fillStyle = spruce ? "hsl(160,26%,9%)" : cyp ? "hsl(128,30%,11%)" : "hsl(130,28%,10%)"; g.fillRect(272 * S, 0, 240 * S, 256 * S); g.lineCap = "round";
   for (let i = 0; i < 7000; i++) {
     const x = (272 + R() * 240) * S, y = R() * 256 * S, a = R() * TAU, l = (6 + R() * 8) * S * NL;
     g.strokeStyle = needle(); g.lineWidth = 1.3 * S; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
@@ -665,7 +700,7 @@ function pineAtlas(kind = "pine") {
       const t = k / steps, px = x0 + (x1 - x0) * t, py = y0 + (y1 - y0) * t, nl = (10 + R() * 7) * S * (1 - t * 0.35) * (depth ? 0.85 : 1) * NL;
       for (const sd of [-1, 1]) {
         const a = ang + sd * (0.75 + R() * 0.35);
-        g.strokeStyle = needle(t * 7 + (t > 0.86 ? 7 : 0)); g.lineWidth = 1.2 * S;
+        g.strokeStyle = needle(t * 7 + (t > 0.86 ? 7 : 0)); g.lineWidth = (cyp ? 2.6 : 1.2) * S;
         g.beginPath(); g.moveTo(px, py); g.lineTo(px + Math.cos(a) * nl, py + Math.sin(a) * nl); g.stroke();
       }
     }
@@ -1521,6 +1556,10 @@ const SPECIES = {
   maple: { name: "단풍나무", hp: 10, price: 10, logR: 0.22 },
   cherry: { name: "벚나무", hp: 8, price: 14, logR: 0.18 },
   willow: { name: "버드나무", hp: 6, price: 4, logR: 0.26 },
+  ginkgo: { name: "은행나무", hp: 9, price: 9, logR: 0.21 },
+  chestnut: { name: "밤나무", hp: 11, price: 9, logR: 0.24 },
+  cypress: { name: "편백나무", hp: 8, price: 16, logR: 0.21 },
+  snag: { name: "고사목", hp: 4, price: 3, logR: 0.18 },
 };
 // Wood: density (kg/m³), price per kilo of log, end-grain colours (heartwood, sapwood), how hard it is to fell.
 const WOOD = {
@@ -1531,6 +1570,10 @@ const WOOD = {
   maple: { density: 700, perKg: 0.18, heart: "#b58a5e", sap: "#efdcb6", hpK: 12 },
   cherry: { density: 600, perKg: 0.24, heart: "#9b4e2c", sap: "#e4c29c", hpK: 10 },
   willow: { density: 420, perKg: 0.08, heart: "#a68d6c", sap: "#eadfc4", hpK: 6 },
+  ginkgo: { density: 550, perKg: 0.15, heart: "#c8a66a", sap: "#efe0b8", hpK: 9 },
+  chestnut: { density: 680, perKg: 0.15, heart: "#8a6a40", sap: "#dcc59a", hpK: 12 },
+  cypress: { density: 440, perKg: 0.3, heart: "#d8a676", sap: "#f3dcb4", hpK: 9 },
+  snag: { density: 380, perKg: 0.07, heart: "#b8a489", sap: "#d8ccb4", hpK: 5 },
 };
 const CUT_H = 0.7;   // felling cut (and chopping) height above the ground
 // Tree mutations. Values multiply together when a tree carries several.
@@ -1696,6 +1739,51 @@ const TREE_P = {
       { sections: 7, radial: 12, gnarl: 0.07, taper: 0.5, children: 6, childStart: 0.5, childEnd: 1.0, uRep: 4 },
       { lenRatio: 0.7, radRatio: 0.5, angle: 0.6, sections: 6, radial: 7, gnarl: 0.12, force: 0.15, taper: 0.3, children: 7, childStart: 0.3, lenFalloff: 0.2, uRep: 2 },
       { lenRatio: 0.85, radRatio: 0.35, angle: 1.1, sections: 6, radial: 3, gnarl: 0.08, force: -0.9, taper: 0.25, leaves: 10, leavesFar: 22 },
+    ],
+  },
+  // ginkgo: a tall straight trunk with stiff branches angled up, a loose crown of bright yellow fans
+  ginkgo: {
+    height: (R) => 10 + R() * 3, trunkR: 0.3, lean: 0.03, flare: 0.35, roots: 5, vTile: 2.0,
+    leafSize: 1.3, leafSizeFar: 2.2, cardAspect: 0.95, leafAngle: 0.7, leafDroop: 0.0, leafStart: 0.15,
+    barkCol: (p, level) => (level ? lerp(0.86, 1.0, level / 2) : lerp(0.66, 1.0, smooth(0, 1.3, p.y))),
+    levels: [
+      { sections: 10, radial: 11, gnarl: 0.03, taper: 0.2, children: 12, childStart: 0.28, childEnd: 0.97, lenFalloff: 0.6, uRep: 3 },
+      { lenRatio: 0.42, radRatio: 0.35, angle: (t) => lerp(0.85, 0.55, t), sections: 5, radial: 6, gnarl: 0.09, force: 0.08, taper: 0.3, children: 6, childStart: 0.2, lenFalloff: 0.3, leaves: 7, leavesFar: 26 },
+      { lenRatio: 0.45, radRatio: 0.5, angle: 0.7, sections: 2, radial: 3, gnarl: 0.14, taper: 0.2, leaves: 9, skipFar: true },
+    ],
+  },
+  // chestnut: a stout trunk, heavy limbs and a broad crown of long glossy leaves hung with spiny burrs
+  chestnut: {
+    height: (R) => 6 + R() * 1.5, trunkR: 0.36, lean: 0.07, flare: 0.42, roots: 6, vTile: 2.0,
+    leafSize: 1.3, leafSizeFar: 2.2, cardAspect: 0.95, leafAngle: 0.8, leafDroop: 0.05, leafStart: 0.3,
+    barkCol: (p, level) => (level ? lerp(0.85, 1.0, level / 3) : lerp(0.62, 1.0, smooth(0, 1.2, p.y))),
+    levels: [
+      { sections: 7, radial: 12, gnarl: 0.06, taper: 0.5, children: 6, childStart: 0.45, childEnd: 1.0, uRep: 4 },
+      { lenRatio: 0.85, radRatio: 0.55, angle: 0.85, sections: 6, radial: 7, gnarl: 0.15, force: 0.06, taper: 0.3, children: 5, childStart: 0.25, lenFalloff: 0.3, uRep: 2 },
+      { lenRatio: 0.5, radRatio: 0.55, angle: 0.8, sections: 3, radial: 4, gnarl: 0.2, force: 0.02, taper: 0.25, children: 4, childStart: 0.3, leaves: 4, leavesFar: 18 },
+      { lenRatio: 0.45, radRatio: 0.5, angle: 0.7, sections: 2, radial: 3, gnarl: 0.22, taper: 0.2, leaves: 6, skipFar: true },
+    ],
+  },
+  // hinoki cypress: very tall, narrow and straight, short branches all the way up, dense feathery foliage
+  cypress: {
+    height: (R) => 15 + R() * 4, trunkR: 0.32, lean: 0.02, flare: 0.35, roots: 5, vTile: 2.6, stubs: 6,
+    leafSize: 1.35, leafSizeFar: 2.2, cardAspect: 0.85, leafAngle: 0.4, leafDroop: 0.1, leafStart: 0.05,
+    barkCol: (p, level) => (level ? 0.75 : lerp(0.62, 1, smooth(0, 1.4, p.y))),
+    levels: [
+      { sections: 14, radial: 10, gnarl: 0.015, taper: 0.05, children: 36, childStart: 0.22, childEnd: 0.985, lenFalloff: 0.8, uRep: 3 },
+      { lenRatio: 0.2, radRatio: 0.24, angle: (t) => lerp(1.25, 0.9, t), sections: 4, radial: 5, gnarl: 0.08, force: 0.02, taper: 0.25, children: 6, childStart: 0.15, lenFalloff: 0.4, leaves: 10, leavesFar: 24 },
+      { lenRatio: 0.4, radRatio: 0.5, angle: 0.7, sections: 2, radial: 3, gnarl: 0.1, taper: 0.2, leaves: 9, skipFar: true },
+    ],
+  },
+  // snag: a dead tree, weathered grey, a few broken limbs and no leaves
+  snag: {
+    height: (R) => 7 + R() * 3, trunkR: 0.25, lean: 0.1, flare: 0.3, roots: 4, vTile: 2.0, stubs: 4,
+    leafSize: 1, leafSizeFar: 1.5, cardAspect: 0.9, leafAngle: 0.5, leafDroop: 0, leafStart: 0.5,
+    barkCol: (p, level) => (level ? 0.9 : lerp(0.7, 1, smooth(0, 1.2, p.y))),
+    levels: [
+      { sections: 9, radial: 9, gnarl: 0.06, taper: 0.3, children: 6, childStart: 0.35, childEnd: 0.9, lenFalloff: 0.4, uRep: 2 },
+      { lenRatio: 0.28, radRatio: 0.4, angle: 0.9, sections: 3, radial: 5, gnarl: 0.2, force: 0.05, taper: 0.45, children: 2, childStart: 0.4 },
+      { lenRatio: 0.4, radRatio: 0.5, angle: 0.8, sections: 2, radial: 3, gnarl: 0.25, taper: 0.4 },
     ],
   },
 };
@@ -1874,7 +1962,8 @@ function buildTreeAssets() {
   MAT.logBark = forSp((sp) => logBark(BT[sp]));
   MAT.endGrain = new THREE.MeshStandardMaterial({ map: endGrainTexture(), roughness: 0.85 });
   const oakLeaf = leafAtlas("oak");
-  const leafMaps = { pine: pineAtlas(), birch: leafAtlas("birch"), oak: oakLeaf, spruce: pineAtlas("spruce"), maple: leafAtlas("maple"), cherry: leafAtlas("cherry"), willow: leafAtlas("willow") };
+  const leafMaps = { pine: pineAtlas(), birch: leafAtlas("birch"), oak: oakLeaf, spruce: pineAtlas("spruce"), maple: leafAtlas("maple"), cherry: leafAtlas("cherry"), willow: leafAtlas("willow"),
+    ginkgo: leafAtlas("ginkgo"), chestnut: leafAtlas("chestnut"), cypress: pineAtlas("cypress"), snag: oakLeaf /* no leaves */ };
   MAT.leaf = {}; MAT.leafStill = {};
   for (const k in leafMaps) { MAT.leaf[k] = leafMaterial(leafMaps[k], true); MAT.leafStill[k] = leafMaterial(leafMaps[k], true, true); }
   MAT.oakLeafTex = oakLeaf;
@@ -1886,6 +1975,10 @@ function buildTreeAssets() {
   for (const s of [501, 502]) VARIANTS.push(makeVariant("maple", s));
   for (const s of [601, 602]) VARIANTS.push(makeVariant("cherry", s));
   for (const s of [701, 702]) VARIANTS.push(makeVariant("willow", s));
+  for (const s of [801, 802]) VARIANTS.push(makeVariant("ginkgo", s));
+  for (const s of [901, 902]) VARIANTS.push(makeVariant("chestnut", s));
+  for (const s of [1001, 1002]) VARIANTS.push(makeVariant("cypress", s));
+  for (const s of [1101, 1102]) VARIANTS.push(makeVariant("snag", s));
   const logGeo = (r) => new THREE.CylinderGeometry(r, r, 1.15, 12, 1);
   MAT.logGeo = forSp((sp) => logGeo(SPECIES[sp].logR));
   MAT.stumpGeo = new THREE.CylinderGeometry(1, 1.2, 1, 12, 1);
@@ -1894,18 +1987,18 @@ function buildTreeAssets() {
 // in the open, mixed woods by soil patches. One random draw per tree, so every tree keeps its place.
 function speciesAt(x, z, h, f, R) {
   const r = R(), pick = (list) => { let a = 0; for (const [sp, w] of list) { a += w; if (r < a) return sp; } return list[list.length - 1][0]; };
-  if (h > 12) return pick([["spruce", 0.5], ["pine", 0.38], ["birch", 0.12]]);
-  if (h < 2.6) return pick([["willow", 0.4], ["birch", 0.32], ["pine", 0.15], ["oak", 0.13]]);
-  if (f < 0.3) return pick([["oak", 0.35], ["cherry", 0.25], ["maple", 0.2], ["birch", 0.12], ["pine", 0.08]]);
+  if (h > 12) return pick([["spruce", 0.4], ["pine", 0.3], ["cypress", 0.18], ["birch", 0.08], ["snag", 0.04]]);
+  if (h < 2.6) return pick([["willow", 0.4], ["birch", 0.3], ["pine", 0.13], ["oak", 0.12], ["snag", 0.05]]);
+  if (f < 0.3) return pick([["oak", 0.28], ["cherry", 0.2], ["ginkgo", 0.18], ["maple", 0.16], ["birch", 0.1], ["pine", 0.05], ["snag", 0.03]]);
   const sn = nD(x * 0.015, z * 0.015);
-  if (sn > 0.25) return pick([["birch", 0.45], ["maple", 0.25], ["pine", 0.2], ["oak", 0.1]]);
-  if (sn < -0.2) return pick([["oak", 0.4], ["maple", 0.22], ["pine", 0.2], ["cherry", 0.1], ["birch", 0.08]]);
-  return pick([["pine", 0.45], ["spruce", 0.2], ["oak", 0.15], ["maple", 0.1], ["birch", 0.1]]);
+  if (sn > 0.25) return pick([["birch", 0.38], ["maple", 0.2], ["ginkgo", 0.14], ["pine", 0.16], ["oak", 0.08], ["snag", 0.04]]);
+  if (sn < -0.2) return pick([["oak", 0.3], ["chestnut", 0.24], ["maple", 0.16], ["pine", 0.14], ["cherry", 0.08], ["birch", 0.04], ["snag", 0.04]]);
+  return pick([["pine", 0.36], ["spruce", 0.15], ["cypress", 0.1], ["oak", 0.12], ["chestnut", 0.08], ["maple", 0.08], ["birch", 0.07], ["snag", 0.04]]);
 }
 const SPACE = { null: 2.6, big: 3.8, titan: 6 };
 function rollMaterialMut(t, R) {
   const r = R();
-  t.mut.gold = r < 0.006; t.mut.crystal = !t.mut.gold && r < 0.009;
+  t.mut.gold = r < 0.006; t.mut.crystal = !t.mut.gold && r < 0.009 && t.sp !== "snag";
 }
 function setupTree(t) {
   const M = t.mut.size ? MUTS[t.mut.size] : null, v = VARIANTS[t.v];
@@ -1949,7 +2042,7 @@ function placeTrees() {
     if (!fits(x, z, SPACE[size])) continue;
     const sp = speciesAt(x, z, h, f, R);
     const vs = VARIANTS.map((v, i) => i).filter((i) => VARIANTS[i].sp === sp), vi = vs[Math.floor(R() * vs.length)];
-    const baseS = 0.8 + R() * ({ oak: 0.5, pine: 0.45, spruce: 0.45, maple: 0.4, willow: 0.4 }[sp] || 0.35);
+    const baseS = 0.8 + R() * ({ oak: 0.5, pine: 0.45, spruce: 0.45, cypress: 0.4, maple: 0.4, willow: 0.4, ginkgo: 0.4, chestnut: 0.4 }[sp] || 0.35);
     const t = {
       kind: "tree", x, z, y: h - 0.1, sp, v: vi, baseS, rot: R() * TAU, state: "standing", shake: 0, shakeT: 0, shakeAxis: new THREE.Vector3(1, 0, 0), growT: 1, idx: 0, near: -1, stump: null, regrowAt: 0,
       mut: { size, gold: false, crystal: false, wet: false, frost: false, shock: false }, wetT: 0, frostT: 0, fx: null,
@@ -2068,7 +2161,7 @@ function updateLOD(dt, force) {
 function bakeTreeShade() {
   const col = terrainMesh.geometry.attributes.color;
   for (const t of trees) {
-    const v = VARIANTS[t.v], R = Math.max(1.8, v.crownR * t.s * (t.sp === "oak" || t.sp === "maple" ? 1.05 : 0.9)), strength = { birch: 0.22, cherry: 0.26, willow: 0.28 }[t.sp] || 0.34;
+    const v = VARIANTS[t.v], R = Math.max(1.8, v.crownR * t.s * (t.sp === "oak" || t.sp === "maple" ? 1.05 : 0.9)), strength = { birch: 0.22, cherry: 0.26, willow: 0.28, ginkgo: 0.28, snag: 0.08 }[t.sp] || 0.34;
     const i0 = clamp(Math.floor((t.x - R + HALF) / CELL), 0, SEG), i1 = clamp(Math.ceil((t.x + R + HALF) / CELL), 0, SEG);
     const j0 = clamp(Math.floor((t.z - R + HALF) / CELL), 0, SEG), j1 = clamp(Math.ceil((t.z + R + HALF) / CELL), 0, SEG);
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
@@ -3411,9 +3504,55 @@ function emitChips(p, n, dir, color = 0xd9b27a) {
     parts.chips.list.push({ p: p.clone(), v, c, r: new THREE.Euler(Math.random() * 6, Math.random() * 6, 0), w: (Math.random() - 0.5) * 20, life: 2.5 + Math.random(), s: 0.6 + Math.random() * 0.8 });
   }
 }
+/* ---------- chestnut burrs ---------- */
+// Chopping a chestnut shakes spiny burrs out of its crown (and a felled one drops the rest); walking over one picks
+// up the chestnuts inside for a few coins.
+const burrs = { list: [], im: null, max: 60 }, _be = new THREE.Euler();
+function burrMesh() {
+  if (burrs.im) return burrs.im;
+  const geo = new THREE.IcosahedronGeometry(0.075, 1), P = geo.attributes.position;
+  for (let i = 0; i < P.count; i++) { const k = i % 3 === 0 ? 1.6 : 1; P.setXYZ(i, P.getX(i) * k, P.getY(i) * k, P.getZ(i) * k); }
+  geo.computeVertexNormals();
+  const m = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color: 0x9aa23a, roughness: 0.8, flatShading: true }), burrs.max);
+  m.count = 0; m.castShadow = true; m.frustumCulled = false; scene.add(m);
+  return (burrs.im = m);
+}
+function addBurr(x, y, z) {
+  if (burrs.list.length >= burrs.max) burrs.list.shift();
+  burrs.list.push({ p: new THREE.Vector3(x, y, z), vy: 0, landed: false, spin: Math.random() * TAU, t: 0 });
+}
+function dropBurrs(t) {
+  if (t.burrsLeft == null) t.burrsLeft = 6 + Math.floor(Math.random() * 5);
+  const v = VARIANTS[t.v], n = Math.min(t.burrsLeft, Math.random() < 0.6 ? (Math.random() < 0.3 ? 2 : 1) : 0);
+  for (let i = 0; i < n; i++) { const a = Math.random() * TAU, r = Math.random() * v.crownR * t.s * 0.7; addBurr(t.x + Math.cos(a) * r, t.y + v.crownY * t.s, t.z + Math.sin(a) * r); }
+  t.burrsLeft -= n;
+}
+function updateBurrs(dt) {
+  if (!burrs.im && !burrs.list.length) return;
+  const m = burrMesh();
+  for (let i = burrs.list.length - 1; i >= 0; i--) {
+    const b = burrs.list[i];
+    b.t += dt;
+    if (!b.landed) {
+      b.vy -= 9.8 * dt; b.p.y += b.vy * dt; b.spin += dt * 6;
+      const gy = groundY(b.p.x, b.p.z) + 0.08;
+      if (b.p.y <= gy) { b.p.y = gy; if (b.vy < -2.5) b.vy *= -0.3; else b.landed = true; }
+    }
+    if (b.landed && mode === "play" && !player.vehicle && Math.hypot(b.p.x - player.pos.x, b.p.z - player.pos.y) < 0.9) {
+      burrs.list.splice(i, 1);
+      state.coins += 3; state.stats.earned += 3; state.stats.nuts = (state.stats.nuts || 0) + 1;
+      floater("+3 밤", b.p.clone().setY(b.p.y + 0.6)); SFX.coin(0);
+      if (state.stats.nuts === 1) toast("밤을 주웠어요! 밤송이 하나에 3코인 (밤나무를 찍으면 떨어져요)");
+      updateHUD();
+    } else if (b.t > 300) burrs.list.splice(i, 1);
+  }
+  burrs.list.forEach((b, i) => { _m.compose(b.p, _q.setFromEuler(_be.set(b.spin, b.spin * 0.7, 0)), _s.set(1, 1, 1)); m.setMatrixAt(i, _m); });
+  m.count = burrs.list.length; m.instanceMatrix.needsUpdate = true;
+}
 const LEAF_COLORS = {
   pine: [0x2f4d2a, 0x3c5f33, 0x6b5a33], birch: [0x8fb84a, 0xb5c44a, 0xd9c35a], oak: [0x4f7d31, 0x3f6b2a, 0x8a8a3a],
   spruce: [0x223f30, 0x2c4b3a, 0x55502e], maple: [0xc8401e, 0xe07a24, 0xd9a332], cherry: [0xf4b6c8, 0xf9d0dc, 0xe78aa8], willow: [0x9ab84a, 0xb7c75a, 0xd4c46a],
+  ginkgo: [0xf2c230, 0xf7d84a, 0xe0a820], chestnut: [0x3f6a2a, 0x557a32, 0x8a7a3a], cypress: [0x24402a, 0x2f5233, 0x4d5a30], snag: [0x8a7a68, 0x6f6252, 0xa49580],
 };
 const GOLD_LEAVES = [0xffd04a, 0xffb52e, 0xfff0a0];
 function emitLeaves(p, n, sp, spread = 2, palette = null) {
@@ -4351,7 +4490,8 @@ function hitTree(t) {
   emitLeaves(new THREE.Vector3(t.x, t.y + v.height * t.s * 0.7, t.z), 3 + Math.floor(Math.random() * 3), t.sp, v.crownR * t.s);
   if (U.snow.value > 0.3) emitPuff(new THREE.Vector3(t.x, t.y + v.crownY * t.s, t.z), Math.round(8 * U.snow.value), { color: [0.95, 0.97, 1], size: 1.2, spread: v.crownR * t.s * 0.6, up: -0.6, life: 1.6, alpha: 0.5, grow: 0.8 });
   t.shake = 1; t.shakeT = 0; t.shakeAxis.set(uz, 0, -ux).normalize();
-  if (t.mut.crystal) SFX.glass(); else SFX.chop(t.sp === "oak" || t.sp === "maple" || !!t.mut.size);
+  if (t.mut.crystal) SFX.glass(); else SFX.chop(t.sp === "oak" || t.sp === "maple" || t.sp === "chestnut" || !!t.mut.size);
+  if (t.sp === "chestnut") dropBurrs(t);
   if (t.mut.gold) SFX.coin(Math.floor(Math.random() * 4));
   if (t.mut.shock) SFX.zap();
   cam.shake = Math.max(cam.shake, 0.05);
@@ -4592,6 +4732,12 @@ function makeStump(t, d) {
   scene.add(p.holder); t.stump = p;
 }
 function fellTree(t, dirX, dirZ) {
+  // a falling chestnut shakes down the burrs it still has, where its crown comes down
+  if (t.sp === "chestnut") {
+    const v = VARIANTS[t.v], n = t.burrsLeft == null ? 8 : t.burrsLeft, H = v.crownY * t.s;
+    for (let i = 0; i < n; i++) { const d = H * (0.5 + Math.random() * 0.5), a = Math.random() * TAU, r = Math.random() * v.crownR * t.s * 0.6; addBurr(t.x + dirX * d + Math.cos(a) * r, t.y + 2 + Math.random() * 2, t.z + dirZ * d + Math.sin(a) * r); }
+    t.burrsLeft = 0;
+  }
   t.state = "falling"; t.shake = 0; setTreeMatrix(t); refreshMutFx(t);
   const v = VARIANTS[t.v], d = treeSnapshot(t);
   makeStump(t, d);
@@ -5417,7 +5563,7 @@ function updateTrees(dt) {
   for (const t of trees) {
     if (t.shake > 0.001) { t.shakeT += dt; t.shake *= Math.exp(-dt * 4.5); setTreeMatrix(t); if (t.shake <= 0.001) { t.shake = 0; setTreeMatrix(t); } }
     else if (t.state === "stump" && now > t.regrowAt && Math.hypot(t.x - player.pos.x, t.z - player.pos.y) > 16) {
-      disposeHolder(t.stump.holder); t.stump = null; t.state = "growing"; t.growT = 0;
+      disposeHolder(t.stump.holder); t.stump = null; t.state = "growing"; t.growT = 0; t.burrsLeft = null;
       // a new tree grows in the same spot: weather marks are gone, gold/crystal are rolled again
       Object.assign(t.mut, { wet: false, frost: false, shock: false });
       rollMaterialMut(t, Math.random);
@@ -6778,6 +6924,7 @@ function tick(dt) {
     updateItemGlints(dt);
     updateSelling();
     updateParticles(dt);
+    updateBurrs(dt);
     updateAmbience(dt);
     grassTimer -= dt; if (grassTimer <= 0) { grassTimer = 0.25; updateGrass(); }
     if (mode === "play") updateWeather(dt);
@@ -6843,7 +6990,7 @@ async function init() {
   mode = "title";
   $("#startBtn").focus();
 }
-window.__woodcutter = { state, player, groundY, aim, crownOf, gait, trees, cam, pieces, interact, truck, placeTruck, save, worldItems, SITES, ASSEMBLY, stepAnchor, buyBlueprint, currentInteraction, keys, enterTruck, exitVehicle, loadOnBed, startWinch, sellBed, makePlanks, sawTarget, startSaw, finishCut, splitPiece, pickUp, dropCarried, pieceKg, pieceLen, pieceValue, haulMode, setTool, buy, equip, openShop, closeShop, nearKeeper, get sawing() { return player.sawing; }, get cabinInside() { return cabin.inside; }, get carried() { return carried; }, get mode() { return mode; }, setHour: (h) => { state.hour = h; }, tryChop, teleport: (x, z) => { if (player.vehicle) exitVehicle(true); stopSawing(); player.pos.set(x, z); }, char, camera, scene, grassChunks, DEBUG, VARIANTS, fromCabinLocal, findTarget, buildAxeMesh, info: () => ({ ...renderer.info.render }), weather, setWeather, lightning, setTreeMut, U, fellTree, falling, setupTree };
+window.__woodcutter = { state, player, groundY, aim, crownOf, burrs, gait, trees, cam, pieces, interact, truck, placeTruck, save, worldItems, SITES, ASSEMBLY, stepAnchor, buyBlueprint, currentInteraction, keys, enterTruck, exitVehicle, loadOnBed, startWinch, sellBed, makePlanks, sawTarget, startSaw, finishCut, splitPiece, pickUp, dropCarried, pieceKg, pieceLen, pieceValue, haulMode, setTool, buy, equip, openShop, closeShop, nearKeeper, get sawing() { return player.sawing; }, get cabinInside() { return cabin.inside; }, get carried() { return carried; }, get mode() { return mode; }, setHour: (h) => { state.hour = h; }, tryChop, teleport: (x, z) => { if (player.vehicle) exitVehicle(true); stopSawing(); player.pos.set(x, z); }, char, camera, scene, grassChunks, DEBUG, VARIANTS, fromCabinLocal, findTarget, buildAxeMesh, info: () => ({ ...renderer.info.render }), weather, setWeather, lightning, setTreeMut, U, fellTree, falling, setupTree };
 requestAnimationFrame(frame);
 init().catch((err) => { console.error(err); $("#loadMsg").textContent = "숲을 만드는 중 오류가 났습니다: " + err.message; });
 </script>
