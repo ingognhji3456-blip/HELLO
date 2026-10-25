@@ -75,7 +75,7 @@ kbd {
 #cutInfo .bar { height: 6px; margin-top: 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
 #cutInfo .bar i { display: block; height: 100%; background: linear-gradient(90deg, #d9a441, #f3d27a); }
 .haul { font-style: normal; font-size: 11px; font-weight: 800; padding: 1px 6px; border-radius: 999px; margin-left: 4px; color: #1b1308; }
-.haul.carry { background: #9fe36a; } .haul.drag { background: #f3d27a; } .haul.truck { background: #f0a050; } .haul.slash { background: #8a8f86; }
+.haul.carry { background: #9fe36a; } .haul.drag { background: #f3d27a; } .haul.truck { background: #f0a050; } .haul.cut { background: #e06a52; }
 #toasts { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); display: grid; gap: 6px; justify-items: center; width: min(420px, calc(100vw - 380px)); }
 @media (max-width: 760px) { #toasts { top: 210px; width: calc(100vw - 32px); } }
 .toast { padding: 8px 14px; font-size: 14px; text-align: center; animation: toastIn 0.25s ease-out; }
@@ -243,7 +243,7 @@ body.touch .slot kbd { display: none; }
     <div id="saveInfo"></div>
     <div id="controls">
       <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>이동 (<kbd>Shift</kbd> 달리기)</span>
-      <span><kbd>Space</kbd> / 클릭</span><span>서 있는 나무는 도끼질 · 쓰러진 나무는 톱질 (누르고 있기)</span>
+      <span><kbd>Space</kbd> / 클릭</span><span>서 있는 나무는 도끼질 · 쓰러진 나무는 마우스로 가리킨 곳을 톱질 (누르고 있기)</span>
       <span><kbd>1</kbd> <kbd>2</kbd></span><span>도끼 / 톱 꺼내기</span>
       <span>마우스 드래그 · 휠</span><span>카메라 회전 · 확대</span>
       <span><kbd>E</kbd> / <kbd>Q</kbd></span><span>통나무 들기·끌기 · 내려놓기 · 말 걸기 · 줍기 · 조립(누르고 있기) · 트럭 타기</span>
@@ -315,6 +315,7 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 const angLerp = (a, b, t) => a + ((((b - a + Math.PI) % TAU) + TAU) % TAU - Math.PI) * t;
+const angDiff = (a, b) => (((b - a + Math.PI) % TAU) + TAU) % TAU - Math.PI;
 const step = (pct, msg) => new Promise((r) => {
   $("#loadBar").style.width = pct + "%";
   $("#loadMsg").textContent = msg;
@@ -1587,7 +1588,16 @@ function makeTreeLods(sp, seed) {
         // every limb on the trunk is a "subtree": its tubes, leaf cards and anchors are contiguous, in attach order
         const sub = level === 0 ? { y: cp.y, tube: [tubes.length, 0], card: [cards.length, 0], anc: [anchors.length, 0] } : null;
         grow(cp.clone().addScaledVector(cdir, -cr * 0.7), cdir, clen + cr * 0.7, Math.max(0.012, cr * next.radRatio), level + 1);
-        if (sub) { sub.tube[1] = tubes.length; sub.card[1] = cards.length; sub.anc[1] = anchors.length; subs.push(sub); }
+        if (sub) {
+          sub.tube[1] = tubes.length; sub.card[1] = cards.length; sub.anc[1] = anchors.length;
+          // wood in the limb and everything on it (local units), for the weight of a top that still has its crown
+          sub.vol = 0;
+          for (let j = sub.tube[0]; j < sub.tube[1]; j++) {
+            const tb = tubes[j];
+            for (let s = 1; s < tb.pts.length; s++) { const r = (tb.radii[s - 1] + tb.radii[s]) / 2; sub.vol += Math.PI * r * r * tb.pts[s].distanceTo(tb.pts[s - 1]); }
+          }
+          subs.push(sub);
+        }
       }
     }
     if (level >= 1 && level <= 2) for (const t of [0.35, 0.6, 0.85]) { const [hp, hr] = sampleAlong(pts, radii, t); hangs.push({ p: hp.setY(hp.y - hr), r: hr }); }
@@ -2360,9 +2370,9 @@ const SAWS = [
   { name: "녹슨 활톱", kind: "bow", speed: 0.06, maxD: 1.15, cost: 0, len: 0.7, frame: 0x8c3a24, blade: 0x7d6c5e, desc: "녹이 슨 활톱. 느리지만 보통 나무는 다 자를 수 있어요" },
   { name: "강철 활톱", kind: "bow", speed: 0.09, maxD: 1.2, cost: 400, len: 0.8, frame: 0xe0a21e, blade: 0xc4cad0, desc: "튼튼한 새 활톱" },
   { name: "일본식 당김톱", kind: "pull", speed: 0.13, maxD: 1.25, cost: 1100, len: 0.6, frame: 0xc9a86a, blade: 0xd6dbe0, desc: "당길 때 잘리는 얇고 날카로운 톱" },
-  { name: "2인용 대톱", kind: "crosscut", speed: 0.17, maxD: 2.1, cost: 2800, len: 1.45, frame: 0x6b4423, blade: 0xb8bfc6, desc: "옛 벌목꾼의 긴 대톱. 큰 나무도 잘려요" },
-  { name: "체인톱", kind: "chainsaw", speed: 0.4, maxD: 2.3, cost: 6500, len: 0.5, frame: 0xe2651c, blade: 0x9aa0a6, desc: "엔진으로 체인이 돌아가는 톱" },
-  { name: "대형 체인톱", kind: "chainsaw", speed: 0.55, maxD: 3.3, cost: 14000, len: 0.9, frame: 0xd9d9d6, accent: 0xd8301c, blade: 0xb0b6bc, desc: "긴 가이드바로 타이탄도 자르는 전문가용" },
+  { name: "2인용 대톱", kind: "crosscut", speed: 0.17, maxD: 1.45, cost: 2800, len: 1.45, frame: 0x6b4423, blade: 0xb8bfc6, desc: "옛 벌목꾼의 긴 대톱. 큰 나무도 밑동 조금 위부터는 잘려요" },
+  { name: "체인톱", kind: "chainsaw", speed: 0.4, maxD: 1.65, cost: 6500, len: 0.5, frame: 0xe2651c, blade: 0x9aa0a6, desc: "엔진으로 체인이 돌아가는 톱. 거대 참나무 밑동도 잘려요" },
+  { name: "대형 체인톱", kind: "chainsaw", speed: 0.55, maxD: 2.2, cost: 14000, len: 0.9, frame: 0xd9d9d6, accent: 0xd8301c, blade: 0xb0b6bc, desc: "긴 가이드바로 타이탄도 자르는 전문가용" },
 ];
 const metalMat = (color, metal, rough, extra = {}) => { const m = new THREE.MeshStandardMaterial({ color, metalness: metal, roughness: rough, envMap: envRT ? envRT.texture : null, ...extra }); envUsers.push(m); return m; };
 let damascusTex = null;
@@ -2664,7 +2674,7 @@ function localToWorld(lx, lz, out) {
 // where each foot belongs when standing: a relaxed stance, wider and staggered while chopping
 function footRest(side, out) {
   if (player.chop) return localToWorld(side * 0.22, side > 0 ? 0.26 : -0.12, out);
-  if (player.sawing) return localToWorld(side * 0.25, side > 0 ? 0.14 : -0.1, out);
+  if (player.sawing && player.sawing.ready) return localToWorld(side * 0.25, side > 0 ? 0.14 : -0.1, out);
   return localToWorld(side * (carried ? 0.15 : 0.12), 0.02, out);
 }
 function footSound(f) {
@@ -2826,8 +2836,8 @@ function animateCharacter(dt, time) {
     twist = lerp(twist, sk.twist, cw); lean = lerp(lean, sk.lean, cw); crouch = lerp(crouch, sk.crouch, cw); shift = sk.shift * cw;
   }
   if (kw > 0.001) { lean = lerp(lean, 0.14 + 0.06 * w, kw); crouch = lerp(crouch, 0.04 + 0.025 * w, kw); }
-  // sawing: bend over the log, squatting deeper the lower the cut is
-  char.sawW = lerp(char.sawW || 0, player.sawing ? 1 : 0, 1 - Math.exp(-dt * 8));
+  // sawing (once he has walked over to the cut): bend over the log, squatting deeper the lower the cut is
+  char.sawW = lerp(char.sawW || 0, player.sawing && player.sawing.ready ? 1 : 0, 1 - Math.exp(-dt * 8));
   const swW = char.sawW;
   if (swW > 0.001 && player.sawing) {
     const S = player.sawing, h = S.C.y + S.diam / 2 - player.y;
@@ -3650,7 +3660,10 @@ const r3 = (a) => a.map((x) => Math.round(x * 1000) / 1000);
 function pieceSave(p) {
   const settling = p.state === "settle", held = p === carried;
   const pos = settling ? p.toPos : p.holder.getWorldPosition(new THREE.Vector3()), q = settling ? p.toQuat : p.holder.getWorldQuaternion(new THREE.Quaternion());
-  return { d: p.d, s0: p.s0, s1: Math.min(p.s1, OPEN), piv: r3([p.pivot.x, p.pivot.y, p.pivot.z]), p: r3(pos.toArray()), q: r3(q.toArray()), f: p.fadeAt ? 1 : 0, c: held ? 1 : 0, settle: p.state === "falling" || p.state === "winch" ? 1 : 0 };
+  // a tree still falling is saved as it will land, with its stump, so it comes back lying beside the stump
+  const f = p.state === "falling" && falling.find((e) => e.p === p);
+  if (f) q.setFromAxisAngle(f.axis, Math.PI / 2);
+  return { d: p.d, s0: p.s0, s1: Math.min(p.s1, OPEN), piv: r3([p.pivot.x, p.pivot.y, p.pivot.z]), p: r3(pos.toArray()), q: r3(q.toArray()), c: held ? 1 : 0, settle: p.state === "falling" || p.state === "winch" ? 1 : 0, ...(f ? { st: r3([f.t.x, f.t.z, f.t.rc + 0.05]) } : {}) };
 }
 function save() {
   if (trees.length) {
@@ -3817,7 +3830,7 @@ function updatePlayer(dt) {
   let mag = Math.hypot(ix, iz);
   if (mag > 1) { ix /= mag; iz /= mag; mag = 1; }
   const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
-  const mx = fx * iz + rx * ix, mz = fz * iz + rz * ix;
+  let mx = fx * iz + rx * ix, mz = fz * iz + rz * ix;
   const wantRun = (keys.ShiftLeft || keys.ShiftRight || (joy.active && joy.mag > 0.92)) && mag > 0.1;
   // a load slows him down; light logs can still be run with, dragging is always a walk
   const kg = carried ? pieceKg(carried) : 0, dragging = carried && carried.mode === "drag";
@@ -3829,7 +3842,15 @@ function updatePlayer(dt) {
   if (player.inWater) speed *= 0.55;
   speed *= 1 - 0.2 * U.snow.value;
   if (player.chop) { speed = 0; if (mag > 0.2) player.chopQueued = false; }
-  if (player.sawing) { if (mag > 0.35) stopSawing(); else speed = 0; }
+  if (player.sawing) {
+    if (mag > 0.35) stopSawing();
+    else {
+      // walk over to the spot beside the cut
+      const S = player.sawing, dx = S.sx - player.pos.x, dz = S.sz - player.pos.y, d = Math.hypot(dx, dz);
+      speed = S.ready || d < 0.03 ? 0 : Math.min(2.4, d * 5);
+      if (speed > 0) { mx = dx / d; mz = dz / d; }
+    }
+  }
   const k = 1 - Math.exp(-dt * 6);
   player.vel.x = lerp(player.vel.x, mx * speed, k); player.vel.y = lerp(player.vel.y, mz * speed, k);
   const px0 = player.pos.x, pz0 = player.pos.y;
@@ -3882,21 +3903,25 @@ function findTarget() {
   return best;
 }
 // The action button: the axe for a standing tree, the saw for a felled one (the woodcutter swaps tools himself).
-function tryChop() {
+// aimFirst: the click came from the mouse, so a log under the cursor wins over the tree in front
+function tryChop(aimFirst = false) {
   if (mode !== "play") return;
   initAudio();
   if (carried) { if (msgCooldown <= 0) { toast(`통나무를 들고 있어요. ${isTouch ? "내려놓기 버튼으로" : "Q로"} 내려놓거나 오두막 옆 장작더미(노란 원)로 가져가 파세요.`); msgCooldown = 3; } return; }
   if (player.vehicle) return;
   if (player.chop) { player.chopQueued = true; return; }
   if (player.sawing) return;
+  const st = sawTarget(), saw = () => { if (st.ok && state.tool !== "saw") setTool("saw"); startSaw(st); };
   const t = findTarget();
+  // with the saw in hand, or when a spot on a log was clicked or tapped, the log comes before the tree in front
+  // (unless the pointed-at spot is out of reach and there is a tree to chop with the axe in hand)
+  if (st && (state.tool === "saw" || (st.aimed && (aimFirst || aim.pin))) && (st.reason !== "far" || !t || state.tool === "saw")) { saw(); return; }
   if (t) {
     if (state.tool !== "axe") setTool("axe");
     player.chop = { t: 0, tree: t, face: Math.atan2(t.x - player.pos.x, t.z - player.pos.y) };
     return;
   }
-  const st = sawTarget();
-  if (st) { if (state.tool !== "saw") setTool("saw"); startSaw(st); return; }
+  if (st) { saw(); return; }
   if (state.tool === "axe") player.chop = { t: 0, tree: null, face: null };
   else if (msgCooldown <= 0) { toast("톱은 쓰러진 나무를 자를 때 써요. 서 있는 나무는 도끼로 베세요."); msgCooldown = 2.5; }
 }
@@ -3938,8 +3963,9 @@ function hitTree(t) {
 /* ============================================================
    FELLED TREES & LOGS
    A felled tree is a "piece": its trunk between two local heights [s0, s1]. The saw splits a piece wherever the
-   woodcutter puts it. The piece holding the top of the tree keeps the limbs and leaves (the slash): it can't be
-   hauled or sold. Every other piece is a limbed log whose weight and price come from its own wood.
+   woodcutter points it. The piece holding the top of the tree keeps the limbs and leaves; every other piece is a
+   limbed log. Anything light and short enough is carried or dragged and sold, the top and a whole uncut tree too:
+   weight and price come from the piece's own wood (and, for a top, its crown).
    ============================================================ */
 const OPEN = 1e4;
 const HAND = { kg: 90, len: 3.5 }, DRAG = { kg: 400, len: 6 };
@@ -3954,13 +3980,22 @@ const pieceTop = (p) => p.s1 >= OPEN;
 const pieceEnd = (p) => Math.min(p.s1, VARIANTS[p.d.v].topY);
 const pieceLen = (p) => Math.max(0, pieceEnd(p) - p.s0) * p.d.s;
 function woodVolume(d, y0, y1) {
-  const S = VARIANTS[d.v].spine, n = 24, h = (y1 - y0) / n;
+  // fixed ~5 cm steps, so cutting a log into pieces never adds up to more wood than the log had
+  const S = VARIANTS[d.v].spine, n = Math.max(4, Math.ceil(((y1 - y0) * d.s) / 0.05)), h = (y1 - y0) / n;
   let v = 0;
   for (let i = 0; i < n; i++) { const r = spineAt(S, y0 + (i + 0.5) * h).r; v += Math.PI * r * r * h; }
   return Math.max(0, v) * d.s ** 3;
 }
 const pieceVol = (p) => woodVolume(p.d, p.s0, pieceEnd(p));
-const pieceKg = (p) => Math.round(pieceVol(p) * WOOD[p.d.sp].density);
+// limbs, twigs and foliage still on a top: every limb that grows above the bottom of the piece
+function crownVol(d, s0) {
+  let v = 0;
+  for (const sb of VARIANTS[d.v].subs) if (sb.y >= s0) v += sb.vol;
+  return v * 1.25 * d.s ** 3;
+}
+const pieceKg = (p) => Math.round((pieceVol(p) + (pieceTop(p) ? crownVol(p.d, p.s0) : 0)) * WOOD[p.d.sp].density);
+// a top is as long as the tree is tall above its bottom cut, crown included
+const haulLen = (p) => (pieceTop(p) ? Math.max(pieceLen(p), (VARIANTS[p.d.v].height - p.s0) * p.d.s) : pieceLen(p));
 const diamAt = (d, y) => 2 * spineAt(VARIANTS[d.v].spine, y).r * d.s;
 // bigger logs fetch a better price per kilo: firewood chunks are worth little, long thick sawlogs the most
 const woodGrade = (vol) => clamp(0.7 + 0.35 * Math.log10(Math.max(1e-4, vol) / 0.02), 0.6, 1.45);
@@ -3971,18 +4006,25 @@ function mutMult(tags) {
 }
 function woodValue(d, y0, y1) {
   const vol = woodVolume(d, y0, y1);
-  return Math.max(1, Math.round(vol * WOOD[d.sp].density * WOOD[d.sp].perKg * woodGrade(vol) * mutMult(d.tags)));
+  return Math.max(0, Math.round(vol * WOOD[d.sp].density * WOOD[d.sp].perKg * woodGrade(vol) * mutMult(d.tags)));
 }
-const pieceValue = (p) => (pieceTop(p) ? 0 : woodValue(p.d, p.s0, pieceEnd(p)));
-// how a piece can be moved: in the arms or on the shoulder, dragged with log tongs, or only by truck
+// a top with its limbs on sells for less: the mill has to limb it, and branch wood only goes for firewood
+function pieceValue(p) {
+  const trunk = woodValue(p.d, p.s0, pieceEnd(p));
+  if (!pieceTop(p)) return trunk;
+  const W = WOOD[p.d.sp];
+  return Math.max(0, Math.round(trunk * 0.8 + crownVol(p.d, p.s0) * W.density * W.perKg * 0.3 * mutMult(p.d.tags)));
+}
+// what to call a piece: a whole tree that was never cut, its top with the crown, or a limbed log
+const pieceKind = (p) => (!pieceTop(p) ? "통나무" : p.s0 <= p.d.cutY + 1e-3 ? "나무 (통째)" : "윗동 (가지째)");
+// how a piece can be moved: in the arms or on the shoulder, dragged with log tongs, by truck, or not until it's cut smaller
 function haulMode(p) {
-  if (pieceTop(p)) return "slash";
-  const kg = pieceKg(p), L = pieceLen(p);
+  const kg = pieceKg(p), L = haulLen(p);
   if (kg <= HAND.kg && L <= HAND.len) return "carry";
   if (kg <= DRAG.kg && L <= DRAG.len) return "drag";
-  return "truck";
+  return kg <= BED_KG && L <= BED_LEN ? "truck" : "cut";
 }
-const HAUL_NAME = { carry: "손", drag: "끌기", truck: "트럭", slash: "가지" };
+const HAUL_NAME = { carry: "손", drag: "끌기", truck: "트럭", cut: "더 잘라야" };
 
 // One-instance meshes over a variant's shared buffers; a draw range picks the stump, the log or the crown.
 const _id4 = new THREE.Matrix4();
@@ -4161,13 +4203,23 @@ function settle(p, stump = null, quick = false) {
     const bx = cx - hx * L / 2, bz = cz - hz * L / 2, dd = Math.hypot(bx - stump.x, bz - stump.z), need = stump.r + rA + 0.05;
     if (dd < need) { cx += hx * (need - dd); cz += hz * (need - dd); }
   }
-  const ax = cx - hx * L / 2, az = cz - hz * L / 2, bx = cx + hx * L / 2, bz = cz + hz * L / 2;
-  const ay = groundY(ax, az) + rA, by = groundY(bx, bz) + (pieceTop(p) ? Math.max(rB, v.crownR * s * 0.3) : rB);
+  // a top rests on its remaining limbs: the more crown it still has, the higher its end is held up
+  let prop = rB;
+  if (pieceTop(p)) { const n = v.subs.filter((sb) => sb.y >= p.s0).length; if (n) prop = Math.max(rB, v.crownR * s * 0.3 * Math.sqrt(n / v.subs.length)); }
+  // both ends on the ground: the horizontal span shrinks on a slope so the log keeps its length
+  let half = L / 2, ax, az, bx, bz, ay, by;
+  for (let k = 0; k < 3; k++) {
+    ax = cx - hx * half; az = cz - hz * half; bx = cx + hx * half; bz = cz + hz * half;
+    ay = groundY(ax, az) + rA; by = groundY(bx, bz) + prop;
+    half = Math.sqrt(Math.max(L * L * 0.04, L * L - (by - ay) ** 2)) / 2;
+  }
   const axisNow = _v.subVectors(B, A).normalize(), axisNew = _v2.set(bx - ax, by - ay, bz - az).normalize();
   _sq.setFromUnitVectors(axisNow, axisNew);
   p.fromPos = p.holder.position.clone(); p.fromQuat = p.holder.quaternion.clone();
   p.toQuat = _sq.clone().multiply(p.holder.quaternion);
-  p.toPos = new THREE.Vector3((ax + bx) / 2, (ay + by) / 2, (az + bz) / 2);
+  // the holder sits on the trunk's (bowed) centre line, not on the straight line between its ends: keep that offset
+  const bow = new THREE.Vector3().addVectors(A, B).multiplyScalar(0.5).sub(p.holder.position).applyQuaternion(_sq);
+  p.toPos = new THREE.Vector3((ax + bx) / 2, (ay + by) / 2, (az + bz) / 2).sub(bow);
   p.state = "settle"; p.t = quick ? 1 : 0;
   if (quick) { p.holder.position.copy(p.toPos); p.holder.quaternion.copy(p.toQuat); p.state = "ground"; }
 }
@@ -4177,18 +4229,22 @@ function pieceReach(p, x, z) {
   const dx = B.x - A.x, dz = B.z - A.z, k = clamp(((x - A.x) * dx + (z - A.z) * dz) / (dx * dx + dz * dz || 1), 0, 1);
   return { d: Math.hypot(x - A.x - dx * k, z - A.z - dz * k), k };
 }
+// how far the woodcutter stands from a piece's bark
+function pieceGap(p) {
+  const r = pieceReach(p, player.pos.x, player.pos.y);
+  return r.d - diamAt(p.d, lerp(p.s0, pieceEnd(p), r.k)) / 2;
+}
 function nearestPiece(range = 1.4) {
   let best = null, bd = 1e9;
   for (const p of pieces) {
     if (p.state !== "ground") continue;
-    const r = pieceReach(p, player.pos.x, player.pos.y), rad = diamAt(p.d, lerp(p.s0, pieceEnd(p), r.k)) / 2;
-    const d = r.d - rad;
+    const d = pieceGap(p);
     if (d < range && d < bd) { bd = d; best = p; }
   }
   return best;
 }
-// Too many pieces lying around: only crowns (slash) and untouched whole trees far from everyone are cleared;
-// a log the woodcutter has cut is never taken away from him.
+// Too many pieces lying around: only plain leftover tops (the crown end of a tree he already bucked logs from) far from
+// everyone are cleared. Whole felled trees, mutated wood and limbed logs are never taken away.
 function evictPieces() {
   const MAX = 80;
   const ground = pieces.filter((p) => p.state === "ground");
@@ -4197,39 +4253,120 @@ function evictPieces() {
   let n = ground.length;
   for (const p of ground) {
     if (n <= MAX) break;
-    if (pieceTop(p) && far(p)) { removePiece(p); n--; }
+    if (pieceTop(p) && p.s0 > p.d.cutY + 1e-3 && !p.d.tags.length && far(p)) { removePiece(p); n--; }
   }
 }
 
+/* ---------- aiming the saw ---------- */
+// The saw goes where the mouse points (or where a finger tapped): a ray from the camera through that pixel is tested
+// against every nearby lying piece's trunk, as a chain of tapered capsules along its centreline; the nearest hit
+// gives the log and the exact height on it.
+const AIM_REACH = 2.8;
+const aim = { x: 0, y: 0, on: false, pin: null };
+const _ndc = new THREE.Vector2(), _ro = new THREE.Vector3(), _rd = new THREE.Vector3(), _ca = new THREE.Vector3(), _cb = new THREE.Vector3(), _cd = new THREE.Vector3(), _cr = new THREE.Vector3();
+function pickPieceAt(sx, sy) {
+  const rect = canvas.getBoundingClientRect();
+  _ndc.set(((sx - rect.left) / rect.width) * 2 - 1, -((sy - rect.top) / rect.height) * 2 + 1);
+  camera.updateMatrixWorld();
+  _ro.setFromMatrixPosition(camera.matrixWorld);
+  _rd.set(_ndc.x, _ndc.y, 0.5).unproject(camera).sub(_ro).normalize();
+  let best = null, bt = 45;
+  for (const p of pieces) {
+    if (p.state !== "ground") continue;
+    const hp = p.holder.position;
+    if (Math.hypot(hp.x - player.pos.x, hp.z - player.pos.y) > 16 + haulLen(p) / 2) continue;
+    const S = VARIANTS[p.d.v].spine, ya = p.s0, yb = pieceEnd(p), n = clamp(Math.ceil(((yb - ya) * p.d.s) / 0.4), 2, 24);
+    p.inner.updateWorldMatrix(true, false);
+    const M = p.inner.matrixWorld;
+    let c = spineAt(S, ya);
+    _ca.set(c.x, ya, c.z).applyMatrix4(M);
+    for (let i = 1; i <= n; i++) {
+      const y0 = lerp(ya, yb, (i - 1) / n), y1 = lerp(ya, yb, i / n);
+      c = spineAt(S, y1);
+      _cb.set(c.x, y1, c.z).applyMatrix4(M);
+      // closest points between the ray (ro + t·rd, t >= 0) and this bit of the axis (A + u·(B - A), 0..1)
+      _cd.subVectors(_cb, _ca); _cr.subVectors(_ro, _ca);
+      const e = _cd.dot(_cd), b = _rd.dot(_cd), f = _cd.dot(_cr), cr = _rd.dot(_cr), den = e - b * b;
+      let t = den > 1e-9 ? Math.max(0, (b * f - cr * e) / den) : 0, u = e > 1e-12 ? (b * t + f) / e : 0;
+      if (u < 0) { u = 0; t = Math.max(0, -cr); } else if (u > 1) { u = 1; t = Math.max(0, b - cr); }
+      const dist = _v.copy(_ro).addScaledVector(_rd, t).sub(_cd.multiplyScalar(u).add(_ca)).length();
+      const y = lerp(y0, y1, u);
+      if (t < bt && dist < diamAt(p.d, y) / 2 + 0.05) { bt = t; best = { p, y }; }
+      _ca.copy(_cb);
+    }
+  }
+  return best;
+}
+// the spot the player picked on a log: a tapped pin (touch) or whatever the mouse is over right now
+function aimedCut() {
+  const q = aim.pin;
+  if (q) {
+    const hp = q.p.holder.position;
+    if (pieces.includes(q.p) && q.p.state === "ground" && Math.hypot(hp.x - player.pos.x, hp.z - player.pos.y) < 10 + haulLen(q.p) / 2) return q;
+    aim.pin = null;
+  }
+  return aim.on ? pickPieceAt(aim.x, aim.y) : null;
+}
+
 /* ---------- sawing ---------- */
-// Where the saw would cut: straight across the log in front of the woodcutter, anywhere along it.
+// Where the saw would cut: wherever the player points at a log, or else straight across the log in front of the woodcutter.
 function sawTarget() {
-  const p = nearestPiece(1.1);
-  if (!p) return null;
-  const v = VARIANTS[p.d.v], s = p.d.s, ya = p.s0, yb = pieceEnd(p);
-  const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
-  const r = pieceReach(p, player.pos.x + fx * 0.6, player.pos.y + fz * 0.6);
-  const minL = 0.25 / s;
-  let y = lerp(ya, yb, r.k), reason = null;
+  const h = aimedCut();
+  let p = h && h.p, y = h && h.y;
+  if (!h) {
+    p = nearestPiece(1.1);
+    if (!p) return null;
+    const r = pieceReach(p, player.pos.x + Math.sin(player.yaw) * 0.6, player.pos.y + Math.cos(player.yaw) * 0.6);
+    y = lerp(p.s0, pieceEnd(p), r.k);
+  }
+  const ya = p.s0, yb = pieceEnd(p), minL = 0.25 / p.d.s;
+  let reason = null;
   if (yb - ya < 2 * minL) reason = "short";
   y = clamp(y, ya + minL, yb - minL);
   const diam = diamAt(p.d, y);
   if (!reason && diam > SAWS[state.saw].maxD) reason = "thick";
-  return { p, y, diam, ok: !reason, reason };
+  // a pointed-at spot has to be within a few steps: the woodcutter walks over to it to saw
+  let far = 0;
+  if (h) {
+    const C = pieceWorldAt(p, y, _cb);
+    far = Math.max(0, Math.hypot(C.x - player.pos.x, C.z - player.pos.y) - diam / 2 - AIM_REACH);
+    if (!reason && far > 0) reason = "far";
+  }
+  return { p, y, diam, ok: !reason, reason, aimed: !!h, far };
 }
 function startSaw(st) {
   if (!st.ok) {
-    if (msgCooldown <= 0) { toast(st.reason === "thick" ? `${SAWS[state.saw].name}(으)로는 지름 ${Math.round(SAWS[state.saw].maxD * 100)}cm까지만 자를 수 있어요. 여기는 ${Math.round(st.diam * 100)}cm — 가는 쪽을 자르거나 상점에서 더 큰 톱을 사세요.` : "너무 짧아서 더 자를 수 없어요."); msgCooldown = 2.5; }
+    if (msgCooldown <= 0) {
+      toast(st.reason === "thick" ? `${SAWS[state.saw].name}(으)로는 지름 ${Math.round(SAWS[state.saw].maxD * 100)}cm까지만 자를 수 있어요. 여기는 ${Math.round(st.diam * 100)}cm — 가는 쪽을 자르거나 상점에서 더 큰 톱을 사세요.`
+        : st.reason === "far" ? `조금 더 가까이 가서 자르세요 (${st.far.toFixed(1)}m 더)` : "너무 짧아서 더 자를 수 없어요.");
+      msgCooldown = 2.5;
+    }
     SFX.deny(); return;
   }
   const p = st.p, C = pieceWorldAt(p, st.y, new THREE.Vector3()), A = pieceWorldAt(p, p.s0, _sa), B = pieceWorldAt(p, pieceEnd(p), _sb);
   let ax = B.x - A.x, az = B.z - A.z; const al = Math.hypot(ax, az) || 1; ax /= al; az /= al;
-  // stand beside the log, square to it, facing the cut
+  // stand beside the log, square to it, facing the cut: on the woodcutter's side unless a rock, post or tree is there
   let nx = -az, nz = ax;
   if ((player.pos.x - C.x) * nx + (player.pos.y - C.z) * nz < 0) { nx = -nx; nz = -nz; }
   const r = st.diam / 2, standD = r + 0.55;
+  // where he would actually end up standing on each side (pushed out of colliders), and how far that is off
+  const spot = (sgn) => {
+    const q = new THREE.Vector2(C.x + nx * sgn * standD, C.z + nz * sgn * standD), x0 = q.x, z0 = q.y;
+    collide(q, 0.36);
+    q.off = Math.hypot(q.x - x0, q.y - z0) + (blocked(x0, z0, Math.max(heightAt(player.pos.x, player.pos.y), 0)) ? 9 : 0);
+    return q;
+  };
+  let at = spot(1);
+  if (at.off > 0.1) {
+    const other = spot(-1);
+    if (other.off < at.off) { at = other; nx = -nx; nz = -nz; }
+    if (at.off > 0.6) {
+      if (msgCooldown <= 0) { toast("톱질할 자리가 막혀 있어요. 조금 옆을 잘라 보세요."); msgCooldown = 2.5; }
+      SFX.deny(); return;
+    }
+  }
   const prev = p.sawProg && Math.abs(p.sawProg.y - st.y) * p.d.s < 0.03 ? p.sawProg.prog : 0;
-  player.sawing = { p, y: st.y, diam: st.diam, prog: prev, C, ax, az, nx, nz, sx: C.x + nx * standD, sz: C.z + nz * standD, face: Math.atan2(-nx, -nz), stroke: 0, t: 0 };
+  player.sawing = { p, y: st.y, diam: st.diam, prog: prev, C, ax, az, nx, nz, sx: at.x, sz: at.y, face: Math.atan2(-nx, -nz), stroke: 0, t: 0 };
   player.chop = null; player.chopQueued = false;
 }
 function stopSawing() {
@@ -4241,12 +4378,19 @@ function stopSawing() {
 function updateSawing(dt) {
   const S = player.sawing; if (!S) return;
   if (!pieces.includes(S.p) || S.p.state !== "ground" || !player.chopHeld) { stopSawing(); return; }
-  const k = 1 - Math.exp(-dt * 10), dx = S.sx - player.pos.x, dz = S.sz - player.pos.y;
-  if (!blocked(player.pos.x + dx * k, player.pos.y + dz * k, Math.max(heightAt(player.pos.x, player.pos.y), 0))) { player.pos.x += dx * k; player.pos.y += dz * k; }
-  player.yaw = angLerp(player.yaw, S.face, 1 - Math.exp(-dt * 12));
-  const ready = Math.hypot(dx, dz) < 0.25, saw = SAWS[state.saw], chain = saw.kind === "chainsaw";
+  const dx = S.sx - player.pos.x, dz = S.sz - player.pos.y, d = Math.hypot(dx, dz), saw = SAWS[state.saw], chain = saw.kind === "chainsaw";
   S.t += dt;
-  if (!ready) return;
+  // face the way he walks, then square up to the log; a spot he can't quite reach is sawn from as close as he gets
+  player.yaw = angLerp(player.yaw, d > 0.5 && !S.ready ? Math.atan2(dx, dz) : S.face, 1 - Math.exp(-dt * 12));
+  if (!S.ready) S.ready = d < 0.25 || (S.t > 2.5 && d < 0.9 && Math.abs(angDiff(player.yaw, S.face)) < 0.3);
+  if (!S.ready) {
+    if (S.t > 4) { stopSawing(); toast("자를 자리에 설 수가 없어요. 다른 곳을 골라 보세요."); SFX.deny(); }
+    return;
+  }
+  if (d > 0.01 && d < 0.3) {
+    const k = 1 - Math.exp(-dt * 6), base = Math.max(heightAt(player.pos.x, player.pos.y), 0);
+    if (!blocked(player.pos.x + dx * k, player.pos.y + dz * k, base)) { player.pos.x += dx * k; player.pos.y += dz * k; }
+  }
   S.prog += (dt * saw.speed) / Math.max(0.05, S.diam);
   // strokes: a hand saw cuts on every push (pull saw: on the pull); a chainsaw just bites
   const rate = chain ? 0 : saw.kind === "crosscut" ? 1.3 : 1.9, prevStroke = S.stroke;
@@ -4264,7 +4408,7 @@ function finishCut(S) {
   const [a, b] = splitPiece(S.p, S.y);
   state.stats.cuts = (state.stats.cuts || 0) + 1;
   SFX.thunk();
-  const show = (q) => (pieceTop(q) ? "윗동 (가지)" : `${pieceLen(q).toFixed(1)}m · ${pieceKg(q)}kg · ${pieceValue(q)}코인`);
+  const show = (q) => `${pieceKind(q)} ${haulLen(q).toFixed(1)}m · ${pieceKg(q)}kg · ${pieceValue(q)}코인`;
   toast(`잘랐다! ${show(a)}  |  ${show(b)}`);
   checkQuest(); save();
 }
@@ -4287,16 +4431,15 @@ function splitPiece(p, y) {
   if (p.d.mut.gold || p.d.mut.crystal) for (let k = 0; k < 10; k++) emitSparkle(C.clone().add(randDir(Math.random).multiplyScalar(0.6)), p.d.mut.gold ? [1.6, 1.15, 0.45] : [0.7, 1.3, 1.8], 0.4, 0.8);
   removePiece(p);
   pieces.push(...parts);
-  for (const q of parts) { settle(q); if (pieceTop(q)) q.fadeAt = U.time.value + 90; }
+  for (const q of parts) settle(q);
   return parts;
 }
 
 /* ---------- carrying, dragging, selling ---------- */
 let carried = null;
 function pickUp(p) {
-  const how = haulMode(p), kg = pieceKg(p), L = pieceLen(p);
-  if (how === "slash") { toast("가지 달린 윗동은 팔 수 없어요. 톱으로 쓸 만한 통나무를 잘라 내세요."); SFX.deny(); return; }
-  if (how === "truck") { toast(`너무 무겁거나 길어요 (${kg}kg · ${L.toFixed(1)}m). 손으로는 ${HAND.kg}kg, 끌기로는 ${DRAG.kg}kg · ${DRAG.len}m까지 — 더 짧게 자르거나 트럭으로 실으세요.`); SFX.deny(); return; }
+  const how = haulMode(p), kg = pieceKg(p), L = haulLen(p);
+  if (how === "truck" || how === "cut") { toast(`너무 무겁거나 길어요 (${kg}kg · ${L.toFixed(1)}m). 손으로는 ${HAND.kg}kg, 끌기로는 ${DRAG.kg}kg · ${DRAG.len}m까지 — ${how === "cut" ? `트럭에도 못 실어요(${BED_KG}kg · ${BED_LEN}m까지). 더 짧게 자르세요.` : "더 짧게 자르거나 트럭으로 실으세요."}`); SFX.deny(); return; }
   player.chop = null; player.chopQueued = false; stopSawing();
   p.mode = how; p.state = "lift"; p.t = 0;
   if (how === "carry") {
@@ -4333,7 +4476,7 @@ function dropCarried() {
 }
 const _dh = new THREE.Vector3(), _dq = new THREE.Quaternion();
 function updatePieces(dt) {
-  const ease = (k) => k * k * (3 - 2 * k), now = U.time.value;
+  const ease = (k) => k * k * (3 - 2 * k);
   for (let i = pieces.length - 1; i >= 0; i--) {
     const p = pieces[i];
     if (p.state === "settle") {
@@ -4372,12 +4515,6 @@ function updatePieces(dt) {
         emitPuff(p.toPos, 8, { size: 1.2, spread: 1, up: 0.8, life: 1.3, alpha: 0.4, color: [0.65, 0.58, 0.45] });
         removePiece(p);
       }
-    } else if (p.state === "ground" && pieceTop(p) && p.fadeAt && now > p.fadeAt && Math.hypot(p.holder.position.x - player.pos.x, p.holder.position.z - player.pos.y) > 18) {
-      // the slash rots away out of sight
-      p.state = "fade"; p.t = 0;
-    } else if (p.state === "fade") {
-      p.t += dt / 4; p.holder.position.y -= dt * 0.5;
-      if (p.t >= 1) removePiece(p);
     }
   }
   // dragging: the gripped end follows the woodcutter's hand, the far end scrapes along behind
@@ -4415,7 +4552,7 @@ function sellPiece(p, fromBed = false) {
   for (let k = 0; k < 5; k++) setTimeout(() => SFX.coin(k), k * 70);
   if (fromBed) { p.t = -Math.random() * 0.5; return value; }
   floater(`+${value.toLocaleString("ko-KR")}`, new THREE.Vector3(player.pos.x, player.y + 2.4, player.pos.y));
-  toast(`${treeLabel(p.d)} 통나무 ${pieceLen(p).toFixed(1)}m · ${kg}kg 판매  +${value.toLocaleString("ko-KR")} 코인`);
+  toast(`${treeLabel(p.d)} ${pieceKind(p)} ${haulLen(p).toFixed(1)}m · ${kg}kg 판매  +${value.toLocaleString("ko-KR")} 코인`);
   updateHUD(); checkQuest(); save();
   return value;
 }
@@ -4442,9 +4579,8 @@ function restoreForest() {
     setPivot(p, g.piv[0], g.piv[1], g.piv[2]);
     p.holder.position.fromArray(g.p); p.holder.quaternion.fromArray(g.q);
     if (g.c) p.holder.position.set(player.pos.x + Math.sin(player.yaw) * 1.2, player.y + 1, player.pos.y + Math.cos(player.yaw) * 1.2);
-    if (g.f) p.fadeAt = U.time.value + 90;
     scene.add(p.holder); pieces.push(p);
-    if (g.c || g.settle) settle(p, null, true);
+    if (g.c || g.settle) settle(p, arr3(g.st) ? { x: g.st[0], z: g.st[1], r: g.st[2] } : null, true);
   }
 }
 function updateTrees(dt) {
@@ -4765,8 +4901,8 @@ function layoutBed() {
 }
 const bedKg = () => truck.bed.reduce((a, p) => a + pieceKg(p), 0);
 function canLoad(p) {
-  if (pieceTop(p)) return "가지 달린 윗동은 실을 수 없어요";
-  if (pieceLen(p) > BED_LEN) return `적재함에는 ${BED_LEN}m까지만 실을 수 있어요 (${pieceLen(p).toFixed(1)}m)`;
+  if (haulLen(p) > BED_LEN) return `적재함에는 ${BED_LEN}m까지만 실을 수 있어요 (${haulLen(p).toFixed(1)}m) — 더 짧게 자르세요`;
+  if (pieceKg(p) > BED_KG) return `트럭에 싣기엔 너무 무거워요 (${pieceKg(p).toLocaleString("ko-KR")}kg, 최대 ${BED_KG.toLocaleString("ko-KR")}kg) — 더 짧게 자르세요`;
   if (bedKg() + pieceKg(p) > BED_KG) return `적재함이 가득 찼어요 (${bedKg()}kg / ${BED_KG}kg)`;
   return null;
 }
@@ -4794,7 +4930,7 @@ function nearestWinchable() {
   let best = null, bd = 9;
   const tx = truck.x - Math.sin(truck.yaw) * 2.3, tz = truck.z - Math.cos(truck.yaw) * 2.3;
   for (const p of pieces) {
-    if (p.state !== "ground" || pieceTop(p)) continue;
+    if (p.state !== "ground") continue;
     const d = Math.hypot(p.holder.position.x - tx, p.holder.position.z - tz);
     if (d < bd) { bd = d; best = p; }
   }
@@ -5149,14 +5285,19 @@ function updateWorldHUD(dt) {
   const it = currentInteraction();
   let use = "들기";
   if (player.vehicle) { setPrompt(`${Math.round(Math.abs(truck.speed) * 3.6)} km/h · 짐 ${bedKg().toLocaleString("ko-KR")}/${BED_KG.toLocaleString("ko-KR")}kg${truck.bed.length ? " · 노란 원에 세우면 팔려요" : ""} · ${key("E", "내리기")} 내리기`); use = "내리기"; }
-  else if (player.task) setPrompt(`조립 중… ${Math.round(player.task.prog * 100)}% — ${touch ? "<b>조립</b> 버튼" : "<kbd>E</kbd>"}를 계속 누르고 있으세요`);
+  else if (player.task) { setPrompt(`조립 중… ${Math.round(player.task.prog * 100)}% — ${touch ? "<b>조립</b> 버튼을" : "<kbd>E</kbd>를"} 계속 누르고 있으세요`); use = "조립"; }
   else if (player.sawing) setPrompt(touch ? "<b>톱질</b> 버튼을 누르고 있으면 계속 잘려요" : "<kbd>Space</kbd> / 클릭을 누르고 있으면 계속 잘려요");
-  else if (it && !(cutView.st && (it.label === "윗동" || it.label === "무거움"))) { setPrompt(`${key(it.key || "E", it.label)} ${it.text}`); use = it.label; }
-  else if (target) setPrompt(touch ? "<b>도끼질</b> 버튼으로 나무 베기" : "<kbd>Space</kbd> / 클릭 — 나무 베기");
-  else if (cutView.st) setPrompt(touch ? "<b>톱질</b> 버튼을 누르고 있으면 표시한 곳을 잘라요 (움직이면 자를 곳이 바뀌어요)" : "<kbd>Space</kbd> / 클릭을 누르고 있으면 표시한 곳을 잘라요 · 움직이면 자를 곳이 바뀌어요");
+  // does the main button (Space / the chop button) saw right now, or chop the tree in front?
+  const cs = cutView.st, sawNext = cs && (state.tool === "saw" || (touch && aim.pin) || !target);
+  if (player.vehicle || player.task || player.sawing) { /* prompt set above */ }
+  else if (it && !(cs && cs.ok && it.label === "무거움")) { setPrompt(`${key(it.key || "E", it.label)} ${it.text}`); use = it.label; }
+  else if (sawNext && !cs.ok) setPrompt(cs.reason === "thick" ? `이 톱으로는 여기를 못 잘라요 — 더 가는 쪽을 ${touch ? "탭하거나" : "가리키거나"} 상점에서 더 큰 톱을 사세요` : cs.reason === "far" ? "조금 더 가까이 가야 자를 수 있어요" : "너무 짧아서 더 자를 수 없어요");
+  else if (sawNext) setPrompt(touch ? `<b>톱질</b> 버튼을 누르고 있으면 표시한 곳을 잘라요 · ${aim.pin ? "다른 곳을 탭하면 다시 골라요" : "통나무를 탭하면 자를 곳을 고를 수 있어요"}`
+    : cs.aimed ? "클릭(또는 <kbd>Space</kbd>)을 누르고 있으면 가리킨 곳을 잘라요" : "<kbd>Space</kbd> / 클릭을 누르고 있으면 표시한 곳을 잘라요 · 마우스로 통나무를 가리키면 그 자리를 잘라요");
+  else if (target) setPrompt(touch ? "<b>도끼질</b> 버튼으로 나무 베기" : cs && cs.aimed && cs.ok ? "<kbd>Space</kbd> — 나무 베기 · 클릭 — 가리킨 곳 톱질" : "<kbd>Space</kbd> / 클릭 — 나무 베기");
   else setPrompt("");
   if (touch && useBtn.textContent !== use) useBtn.textContent = use;
-  if (touch) { const want = player.vehicle ? "브레이크" : target ? "도끼질" : cutView.st || player.sawing ? "톱질" : state.tool === "axe" ? "도끼질" : "톱질"; if (chopBtn.textContent !== want) chopBtn.textContent = want; }
+  if (touch) { const want = player.vehicle ? "브레이크" : player.sawing || sawNext ? "톱질" : target ? "도끼질" : state.tool === "axe" ? "도끼질" : "톱질"; if (chopBtn.textContent !== want) chopBtn.textContent = want; }
   const h = Math.floor(state.hour) % 24, m = Math.floor((state.hour % 1) * 60);
   const W = WEATHER[weather.type];
   $("#clock").textContent = `${env.night > 0.5 ? "밤" : env.day > 0.5 ? "낮" : h < 12 ? "새벽" : "저녁"} ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")} · ${W.icon} ${W.name}`;
@@ -5170,9 +5311,15 @@ function updateCutMarker() {
   let st = null;
   if (mode === "play" && !carried && !player.vehicle && !player.chop) {
     if (player.sawing) st = { p: player.sawing.p, y: player.sawing.y, diam: player.sawing.diam, ok: true, prog: player.sawing.prog };
-    else if (!target) st = sawTarget();
+    else {
+      // the spot under the cursor (or a tapped one) always shows; the one in front only when no tree is in reach
+      st = sawTarget();
+      if (st && !st.aimed && target && state.tool !== "saw") st = null;
+    }
   }
   cutView.st = st;
+  const cur = st && st.aimed && !player.sawing ? (st.ok ? "crosshair" : "not-allowed") : "";
+  if (canvas.style.cursor !== cur) canvas.style.cursor = cur;
   if (!cutRing) {
     cutRing = new THREE.Mesh(new THREE.TorusGeometry(1, 0.035, 8, 48), new THREE.MeshBasicMaterial({ color: 0x9fe36a, transparent: true, opacity: 0.85, depthTest: false }));
     cutRing.renderOrder = 5; scene.add(cutRing);
@@ -5183,20 +5330,26 @@ function updateCutMarker() {
   cutRing.position.copy(C);
   cutRing.quaternion.setFromUnitVectors(_v.set(0, 0, 1), _v2.subVectors(B, A).normalize());
   cutRing.scale.setScalar(st.diam / 2 + 0.05);
-  cutRing.material.color.set(st.ok ? (player.sawing ? 0xffd36a : 0x9fe36a) : 0xff6a4a);
+  cutRing.material.color.set(st.ok ? (player.sawing ? 0xffd36a : 0x9fe36a) : st.reason === "far" ? 0xd9d6c4 : 0xff6a4a);
   const sp = screenPos(_v.copy(C).add(_v2.set(0, st.diam / 2 + 0.5, 0)));
   el.classList.toggle("hidden", !sp.ok);
   el.style.transform = `translate(${sp.x}px, ${sp.y}px) translate(-50%, -100%)`;
-  const key = [p.id, Math.round(st.y * 50), st.ok, state.saw, player.sawing ? Math.floor(st.prog * 40) : -1].join();
+  const key = [p.id, Math.round(st.y * 50), st.reason, Math.round((st.far || 0) * 5), state.saw, player.sawing ? Math.floor(st.prog * 40) : -1].join();
   if (cutView.key === key) return;
   cutView.key = key;
   const side = (s0, s1, name) => {
     const q = { d: p.d, s0, s1 }, how = haulMode(q);
-    return `<div class="row2"><span class="dim">${name}</span> ${how === "slash" ? "윗동 (가지) · 팔 수 없음" : `${pieceLen(q).toFixed(1)}m · ${pieceKg(q)}kg · Ø${Math.round(diamAt(p.d, s0) * 100)}cm · <b>${pieceValue(q).toLocaleString("ko-KR")}코인</b>`} <i class="haul ${how}">${HAUL_NAME[how]}</i></div>`;
+    return `<div class="row2"><span class="dim">${name}</span> ${pieceTop(q) ? "윗동 · " : ""}${haulLen(q).toFixed(1)}m · ${pieceKg(q)}kg · Ø${Math.round(diamAt(p.d, s0) * 100)}cm · <b>${pieceValue(q).toLocaleString("ko-KR")}코인</b> <i class="haul ${how}">${HAUL_NAME[how]}</i></div>`;
   };
   if (player.sawing) el.innerHTML = `<div>톱질 중… ${Math.round(st.prog * 100)}%</div><div class="bar"><i style="width:${Math.round(st.prog * 100)}%"></i></div>`;
-  else if (!st.ok) el.innerHTML = st.reason === "thick" ? `<div class="bad">여기 지름 ${Math.round(st.diam * 100)}cm — ${SAWS[state.saw].name} 한계 ${Math.round(SAWS[state.saw].maxD * 100)}cm</div><div class="dim">더 가는 쪽으로 가거나 더 큰 톱을 사세요</div>` : `<div class="bad">너무 짧아서 자를 수 없어요</div>`;
-  else el.innerHTML = side(p.s0, st.y, "밑동 쪽") + side(st.y, p.s1, "끝 쪽") + `<div class="dim">자르는 곳 지름 ${Math.round(st.diam * 100)}cm · 약 ${Math.ceil(st.diam / SAWS[state.saw].speed)}초</div>`;
+  else if (st.reason === "thick") el.innerHTML = `<div class="bad">여기 지름 ${Math.round(st.diam * 100)}cm — ${SAWS[state.saw].name} 한계 ${Math.round(SAWS[state.saw].maxD * 100)}cm</div><div class="dim">더 가는 쪽을 가리키거나 더 큰 톱을 사세요</div>`;
+  else if (st.reason === "short") el.innerHTML = `<div class="bad">너무 짧아서 자를 수 없어요</div>`;
+  else {
+    const how = isTouch ? "톱질 버튼을 누르고 있기" : st.aimed ? "클릭을 누르고 있기" : "Space / 클릭 누르고 있기";
+    el.innerHTML = side(p.s0, st.y, "밑동 쪽") + side(st.y, p.s1, "끝 쪽") + (st.reason === "far"
+      ? `<div class="bad">${st.far.toFixed(1)}m 더 가까이 가야 자를 수 있어요</div>`
+      : `<div class="dim">자르는 곳 지름 ${Math.round(st.diam * 100)}cm · 약 ${Math.ceil(st.diam / SAWS[state.saw].speed)}초 · ${how}</div>`);
+  }
 }
 
 /* ---------- minimap ---------- */
@@ -5329,7 +5482,7 @@ function renderShop() {
     const card = document.createElement("div"); card.className = "card";
     const stats = it.kind === "axe"
       ? bar("위력", D.dmg / 12, D.dmg) + bar("속도", (1 / D.speed) / 1.7, `${(1 / D.speed).toFixed(2)}회/초`) + bar("초당", D.dmg / D.speed / 19, (D.dmg / D.speed).toFixed(1))
-      : bar("속도", D.speed / 0.55, `${Math.round(D.speed * 100)}cm/초`) + bar("최대 지름", D.maxD / 3.3, `${D.maxD.toFixed(2)}m`);
+      : bar("속도", D.speed / 0.55, `${Math.round(D.speed * 100)}cm/초`) + bar("최대 지름", D.maxD / 2.2, `${D.maxD.toFixed(2)}m`);
     card.innerHTML = `<div class="t"><span class="num">${it.i ? (n + 1) % 10 : "·"}</span>${D.name}${own ? `<span class="own">${eq ? "· 사용 중" : "· 보유"}</span>` : ""}</div>
       <div class="d">${D.desc}</div><div class="bars">${stats}</div>`;
     const b = document.createElement("button"); b.className = "btn small";
@@ -5378,7 +5531,7 @@ function shopKey(code) {
   if (own) equip(it.kind, it.i); else buy(it.kind, it.i);
 }
 // Everything E (or the use button) can do right now, in one priority order: the prompt and the button use it too.
-const pieceLine = (p) => `${pieceLen(p).toFixed(1)}m · ${pieceKg(p)}kg · Ø${Math.round(diamAt(p.d, p.s0) * 100)}cm · ${pieceValue(p).toLocaleString("ko-KR")}코인`;
+const pieceLine = (p) => `${haulLen(p).toFixed(1)}m · ${pieceKg(p)}kg · Ø${Math.round(diamAt(p.d, p.s0) * 100)}cm · ${pieceValue(p).toLocaleString("ko-KR")}코인`;
 function currentInteraction() {
   if (mode !== "play" || player.sawing) return null;
   const extra = vehicleInteraction();
@@ -5388,12 +5541,11 @@ function currentInteraction() {
     if (carried.state !== "carried") return null;
     return { label: "내려놓기", key: "Q", text: `${carried.mode === "drag" ? "끌고 가는 중" : "들고 가는 중"} ${pieceLine(carried)} — 오두막 옆 장작더미(노란 원)로 가면 팔려요`, run: dropCarried };
   }
-  const p = nearestPiece(0.9);
+  const h = aimedCut(), p = (h && pieceGap(h.p) < 0.9 && h.p) || nearestPiece(0.9);
   if (p) {
     const how = haulMode(p);
-    if (how === "slash") return { label: "윗동", text: `${treeLabel(p.d)} 윗동 (가지) — 팔 수 없어요. 톱으로 원하는 곳을 잘라 통나무를 얻으세요`, run: () => pickUp(p) };
-    if (how === "truck") return { label: "무거움", text: `${treeLabel(p.d)} 통나무 ${pieceLine(p)} — 너무 무거워요. 더 짧게 자르거나 트럭으로`, run: () => pickUp(p) };
-    return { label: how === "drag" ? "끌기" : "들기", text: `${how === "drag" ? "끌기" : "들기"} — ${treeLabel(p.d)} 통나무 ${pieceLine(p)}`, run: () => pickUp(p) };
+    if (how === "truck" || how === "cut") return { label: "무거움", text: `${treeLabel(p.d)} ${pieceKind(p)} ${pieceLine(p)} — 너무 무거워요. ${how === "cut" ? "트럭에도 못 실으니 더 짧게 자르세요" : "더 짧게 자르거나 트럭으로"}`, run: () => pickUp(p) };
+    return { label: how === "drag" ? "끌기" : "들기", text: `${how === "drag" ? "끌기" : "들기"} — ${treeLabel(p.d)} ${pieceKind(p)} ${pieceLine(p)}`, run: () => pickUp(p) };
   }
   return null;
 }
@@ -5459,14 +5611,25 @@ addEventListener("keyup", (e) => {
   if (e.code === "KeyE") player.useHeld = false;
   if (e.code === "Space" || e.code === "KeyJ") player.chopHeld = false;
 });
-addEventListener("blur", () => { for (const k in keys) keys[k] = false; player.chopHeld = false; player.useHeld = false; if (mode === "play") setPaused(true); });
+addEventListener("blur", () => { for (const k in keys) keys[k] = false; player.chopHeld = false; player.useHeld = false; aim.on = false; if (mode === "play") setPaused(true); });
+// the mouse aims the saw just by hovering over a log
+addEventListener("pointermove", (e) => { if (e.pointerType === "touch") return; aim.x = e.clientX; aim.y = e.clientY; aim.on = e.target === canvas; });
+document.documentElement.addEventListener("pointerleave", () => { aim.on = false; });
 let drag = null;
 canvas.addEventListener("pointerdown", (e) => {
   canvas.focus();
   if (mode !== "play") return;
   drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0, button: e.button, type: e.pointerType };
   canvas.setPointerCapture(e.pointerId);
-  if (e.pointerType === "mouse" && e.button === 0) { player.chopHeld = true; drag.chopTimer = setTimeout(() => { if (!drag) return; drag.chopFired = true; if (drag.moved < 6) tryChop(); }, 140); }
+  if (e.pointerType !== "touch") { aim.x = e.clientX; aim.y = e.clientY; aim.on = true; }
+  if (e.pointerType === "mouse" && e.button === 0) { player.chopHeld = true; drag.chopTimer = setTimeout(() => { if (!drag) return; drag.chopFired = true; if (drag.moved < 6) tryChop(true); }, 140); }
+  // a finger held still on a log picks that spot and saws it while held
+  if (e.pointerType === "touch") drag.chopTimer = setTimeout(() => {
+    if (!drag || drag.moved >= 6) return;
+    const h = pickPieceAt(drag.x, drag.y);
+    if (!h) return;
+    drag.chopFired = true; aim.pin = h; player.chopHeld = true; tryChop(true);
+  }, 260);
 });
 canvas.addEventListener("pointermove", (e) => {
   if (!drag || drag.id !== e.pointerId) return;
@@ -5480,7 +5643,12 @@ canvas.addEventListener("pointermove", (e) => {
 });
 const endDrag = (e) => {
   if (!drag || drag.id !== e.pointerId) return;
-  if (drag.chopTimer && !drag.chopFired) { clearTimeout(drag.chopTimer); if (drag.moved < 6) tryChop(); }
+  if (drag.chopTimer && !drag.chopFired) {
+    clearTimeout(drag.chopTimer);
+    // a tap on a log picks where the saw goes (the saw button then cuts there); a click acts on what is pointed at
+    if (drag.moved < 6 && drag.type === "touch") aim.pin = mode === "play" ? pickPieceAt(drag.x, drag.y) : null;
+    else if (drag.moved < 6) tryChop(true);
+  }
   player.chopHeld = false; drag = null;
 };
 canvas.addEventListener("pointerup", endDrag);
