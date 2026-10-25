@@ -4475,6 +4475,14 @@ function updateFalling(dt) {
         // the butt slides off the stump and the trunk comes to rest on the ground
         pieces.push(f.p); f.p.state = "ground";
         settle(f.p, { x: t.x, z: t.z, r: t.rc + 0.05 });
+        // across a ravine it can't reach the bottom of, the trunk snaps where it hangs highest and both halves drop in
+        const P = f.p, minL = 1.2 / P.d.s;
+        if (P.air > 0.3 && pieceEnd(P) - P.s0 > 2.5 * minL) {
+          const y = clamp(P.airY, P.s0 + minL, pieceEnd(P) - minL), C = pieceWorldAt(P, y, new THREE.Vector3());
+          splitPiece(P, y);
+          SFX.crash(0.9); emitPuff(C, 10, { size: 1.2, spread: 0.6, up: 0.6, life: 1.6, alpha: 0.4, color: [0.62, 0.57, 0.46] });
+          if (Math.hypot(C.x - player.pos.x, C.z - player.pos.y) < 45) toast("우지끈! 나무가 골짜기에 걸려 두 동강 났어요");
+        }
         evictPieces();
         forestMark(t); save();
       }
@@ -4584,17 +4592,26 @@ function settle(p, stump = null, quick = false) {
   // log pivots over it: the end on the side that carries more of the log stays down, the other one rises onto it.
   // The horizontal span shrinks as it tilts so the log keeps its length. On a slope the axis sits r / cos(slope)
   // above the ground, so the bark touches the hillside instead of cutting into it.
-  const lines = supportsNear(p, cx, cz, L / 2 + 4), ns = clamp(Math.ceil(L / 0.3), 2, 40), hs = [];
+  // (the search below can move it up to ~8 m, so every piece it could end up touching counts)
+  const lines = supportsNear(p, cx, cz, L / 2 + 12), ns = clamp(Math.ceil(L / 0.3), 2, 40), hs = [];
+  // the trunk bows away from the straight line between its ends: where each sample really is relative to that line,
+  // so the curved trunk (not the straight line) is what comes to rest on the ground
+  const axis0 = new THREE.Vector3().subVectors(B, A).normalize(), offs = [], _bq = new THREE.Quaternion(), _bd = new THREE.Vector3(), _bo = new THREE.Vector3();
+  for (let i = 0; i <= ns; i++) offs.push(pieceWorldAt(p, lerp(ya, yb, i / ns), new THREE.Vector3()).sub(new THREE.Vector3().lerpVectors(A, B, i / ns)));
+  const heights = (ax, az, bx, bz, ay, by, used) => {
+    used.clear();
+    _bq.setFromUnitVectors(axis0, _bd.set(bx - ax, by - ay, bz - az).normalize());
+    for (let i = 0; i <= ns; i++) {
+      const k = i / ns, x = lerp(ax, bx, k), z = lerp(az, bz, k), r = spineAt(v.spine, lerp(ya, yb, k)).r * s;
+      const ny = platformHeight(x, z) > -Infinity ? 1 : clamp(gridSample(TNRM, x, z, 1), 0.5, 1);
+      hs[i] = Math.max(groundY(x, z) + (i === ns ? prop : r / ny), restHeight(x, z, r, lines, used)) - _bo.copy(offs[i]).applyQuaternion(_bq).y;
+    }
+  };
   const rest = (cx, cz, hx, hz, used) => {
-    let half = L / 2, ax, az, bx, bz, ay, by;
-    for (let it = 0; it < 4; it++) {
+    let half = L / 2, ax, az, bx, bz, ay = 0, by = 0;
+    for (let it = 0; it < 10; it++) {
       ax = cx - hx * half; az = cz - hz * half; bx = cx + hx * half; bz = cz + hz * half;
-      used.clear();
-      for (let i = 0; i <= ns; i++) {
-        const k = i / ns, x = lerp(ax, bx, k), z = lerp(az, bz, k), r = spineAt(v.spine, lerp(ya, yb, k)).r * s;
-        const ny = platformHeight(x, z) > -Infinity ? 1 : clamp(gridSample(TNRM, x, z, 1), 0.5, 1);
-        hs[i] = Math.max(groundY(x, z) + (i === ns ? prop : r / ny), restHeight(x, z, r, lines, used));
-      }
+      heights(ax, az, bx, bz, ay, by, used);
       ay = hs[0]; by = hs[ns];
       for (let j = 0; j < 8; j++) {
         let worst = 0.004, wi = -1;
@@ -4605,18 +4622,30 @@ function settle(p, stump = null, quick = false) {
         else if (k < 0.5) ay = by + (hs[wi] - by) / (1 - k);
         else by = ay + (hs[wi] - ay) / k;
       }
-      half = Math.sqrt(Math.max(L * L * 0.04, L * L - (by - ay) ** 2)) / 2;
+      const want = Math.sqrt(Math.max(L * L * 0.04, L * L - (by - ay) ** 2)) / 2;
+      if (Math.abs(want - half) < 0.01) break;
+      half = lerp(half, want, 0.6);   // damped: on steep ground the tilt and the span chase each other
     }
+    // the log's real ends: exactly its length along that line, through its middle; then check the ground there again
+    // and lift it if any part would still be in the hillside
+    const mx = (ax + bx) / 2, my = (ay + by) / 2, mz = (az + bz) / 2, dx = bx - ax, dy = by - ay, dz = bz - az, f = L / 2 / (Math.hypot(dx, dy, dz) || 1);
+    ax = mx - dx * f; bx = mx + dx * f; ay = my - dy * f; by = my + dy * f; az = mz - dz * f; bz = mz + dz * f;
+    heights(ax, az, bx, bz, ay, by, used);
+    let sink = 0;
+    for (let i = 0; i <= ns; i++) sink = Math.max(sink, hs[i] - lerp(ay, by, i / ns));
+    ay += sink; by += sink;
     // how far it hangs in the air over a hollow (the crown end of a top is carried by its limbs)
-    let air = 0;
-    for (let i = 1; i < ns; i++) if (i / ns < kCrown) air = Math.max(air, lerp(ay, by, i / ns) - hs[i]);
-    return { ax, az, bx, bz, ay, by, air };
+    let air = 0, airK = 0.5;
+    for (let i = 1; i < ns; i++) if (i / ns < kCrown) { const e = lerp(ay, by, i / ns) - hs[i]; if (e > air) { air = e; airK = i / ns; } }
+    return { ax, az, bx, bz, ay, by, air, airK, onPiece: used.size > 0 };
   };
   // A log that would bridge a hollow rolls or slides a little into it instead: try nearby resting spots (along it,
   // across it, slightly turned) and keep the one where it lies best on the ground, preferring small moves.
   const used = new Set();
+  // (a log lying across another one, one end on the ground, is leaning on it, not hanging in the air: it stays put,
+  // unless that leaves it propped up high over a hollow)
   let best = rest(cx, cz, hx, hz, used), bestScore = best.air;
-  if (best.air > 0.12) {
+  if (best.air > 0.12 && (!best.onPiece || best.air > 0.5)) {
     const far = Math.min(2.5, L * 0.3), tryUsed = new Set();
     for (const fa of [0, -0.5, 0.5, -1, 1]) for (const dl of [0, -0.6, 0.6, -1.2, 1.2]) for (const dr of [0, -0.2, 0.2]) {
       if (!fa && !dl && !dr) continue;
@@ -4627,9 +4656,30 @@ function settle(p, stump = null, quick = false) {
       const r = rest(x, z, hx2, hz2, tryUsed), score = r.air + 0.04 * Math.hypot(da, dl) + 0.15 * Math.abs(dr);
       if (score < bestScore - 0.02) { bestScore = score; best = { ...r, x, z, hx2, hz2 }; }
     }
+    // a deep hollow: keep rolling and sliding down into it (and turning to lie along it) in shrinking steps,
+    // up to about 8 m from where it fell
+    if (best.air > 0.15) {
+      let cur = best.x !== undefined ? { x: best.x, z: best.z, a: Math.atan2(best.hz2, best.hx2) } : { x: cx, z: cz, a: Math.atan2(hz, hx) };
+      const a0 = Math.atan2(hz, hx), scoreOf = (r, c) => r.air + 0.02 * Math.hypot(c.x - cx, c.z - cz) + 0.05 * Math.abs(angDiff(a0, c.a));
+      for (const [st, sa] of [[3, 0.35], [2, 0.25], [1, 0.15], [0.5, 0.08]]) for (let it = 0; it < 6; it++) {
+        let moved = false;
+        const ux = Math.cos(cur.a), uz = Math.sin(cur.a);
+        for (const [da, dl, dr] of [[st, 0, 0], [-st, 0, 0], [0, st, 0], [0, -st, 0], [0, 0, sa], [0, 0, -sa], [st, st, 0], [st, -st, 0], [-st, st, 0], [-st, -st, 0]]) {
+          const c = { x: cur.x + ux * da - uz * dl, z: cur.z + uz * da + ux * dl, a: cur.a + dr };
+          if (Math.hypot(c.x - cx, c.z - cz) > 8 || heightAt(c.x, c.z) < -0.6) continue;
+          const hx3 = Math.cos(c.a), hz3 = Math.sin(c.a);
+          if (stump && Math.hypot(c.x - hx3 * L / 2 - stump.x, c.z - hz3 * L / 2 - stump.z) < stump.r + rA + 0.05) continue;
+          const r = rest(c.x, c.z, hx3, hz3, tryUsed), sc = scoreOf(r, c);
+          if (sc < bestScore - 0.01) { bestScore = sc; best = { ...r, x: c.x, z: c.z, hx2: hx3, hz2: hz3 }; cur = c; moved = true; }
+        }
+        if (!moved) break;
+      }
+    }
     if (best.x !== undefined) best = rest(best.x, best.z, best.hx2, best.hz2, used);
   }
   const { ax, az, bx, bz, ay, by } = best;
+  // what is left hanging in the air (a felled tree still bridging a ravine snaps there when it lands)
+  p.air = best.onPiece ? 0 : best.air; p.airY = lerp(ya, yb, best.airK);
   p.upright = false; p.restsOn = used;
   const axisNow = _v.subVectors(B, A).normalize(), axisNew = _v2.set(bx - ax, by - ay, bz - az).normalize();
   _sq.setFromUnitVectors(axisNow, axisNew);
