@@ -879,7 +879,8 @@ const TREE_SURFACE = `#include <emissivemap_fragment>
 // aClip = (y0, y1, r0, r1) local cut heights and radii, aCtr = trunk centre (x, z) at y0 and y1.
 // Outside [y0, y1] the bark is discarded. The bark is double sided: an inside face seen through an opening is
 // shaded as the cut face at the point where the view ray crosses the cut plane (rings, heartwood, bark rim),
-// with that point's depth and shadow, so any cross-section gets an exact solid end without extra geometry.
+// with that point's depth and shadow. A ray that goes in one cut and out the other never meets the bark, so each
+// open end also gets a flat cap on the tube's outline (capGeo), wound so that it too is such an inside face.
 const PIECE_VERT_PARS = (depth) => `
 #if defined(TREE_PIECE) || defined(TREE_PIECE_BRANCH)
   attribute vec4 aClip;
@@ -944,6 +945,9 @@ vec2 capC = vec2(0.0);
 #endif
 #ifdef TREE_PIECE
   if (vPieceY < vClip.x || vPieceY > vClip.y) discard;
+  // the inner side of an end cap (its vertices carry a negative colour) is only seen from inside the log or through
+  // the near-camera fade, where it would show as a dark disc instead of what lies behind
+  if (gl_FrontFacing && vColor.r < 0.0) discard;
   gl_FragDepth = gl_FragCoord.z;
   if (!gl_FrontFacing) {
     vec3 rd = vLocalPos - vCamL;
@@ -1950,10 +1954,15 @@ function fernGeo() {
 const grassChunks = new Map();
 const GCH = 16;
 let grassGeo, grassMat;
+// the workshop behind the cabin stays bare: its gravel pad (where the truck stands) and the workbench, plus a margin
+function onWorkshop(x, z, m = 0.5) {
+  const [lx, lz] = toCabinLocal(x, z);
+  return (Math.abs(lx - PAD_LOCAL[0]) < 3.5 + m && Math.abs(lz - PAD_LOCAL[1]) < 2.3 + m) || (Math.abs(lx - BENCH_LOCAL[0]) < 0.8 + m && Math.abs(lz - BENCH_LOCAL[1]) < 0.35 + m);
+}
 function grassDensity(x, z) {
   const h = heightAt(x, z);
   if (h < 0.35 || h > 40 || slopeAt(x, z) > 0.3 || pathDist(x, z) < 1.3) return 0;
-  if (Math.abs(x - CABIN.x) < 9 && Math.abs(z - CABIN.z) < 8) return 0;
+  if ((Math.abs(x - CABIN.x) < 9 && Math.abs(z - CABIN.z) < 8) || onWorkshop(x, z)) return 0;
   return (1 - forestAt(x, z) * 0.72) * (0.55 + 0.45 * smooth(-0.4, 0.4, nA(x * 0.06, z * 0.06)));
 }
 function buildGrassChunk(cx, cz) {
@@ -2023,7 +2032,7 @@ function buildGroundCover() {
   fernMat.vertexColors = true;
   scatter(fernGeo(), fernMat, 2600, 901, (x, z, R) => forestAt(x, z) > 0.45 && heightAt(x, z) > 0.6 && slopeAt(x, z) < 0.3 && pathDist(x, z) > 1.6 && R() < 0.8,
     (R) => 0.7 + R() * 0.7, { colorFn: (x, z, R) => new THREE.Color().setHSL(0.27 + R() * 0.04, 0.5, 0.42 + R() * 0.1) });
-  scatter(crossQuadGeo(2), cardMaterial(flowerTexture()), 1800, 902, (x, z, R) => forestAt(x, z) < 0.25 && heightAt(x, z) > 1 && slopeAt(x, z) < 0.2 && pathDist(x, z) > 1.5 && nC(x * 0.04, z * 0.04) > 0.1 && cabinDist(x, z) > 9,
+  scatter(crossQuadGeo(2), cardMaterial(flowerTexture()), 1800, 902, (x, z, R) => forestAt(x, z) < 0.25 && heightAt(x, z) > 1 && slopeAt(x, z) < 0.2 && pathDist(x, z) > 1.5 && nC(x * 0.04, z * 0.04) > 0.1 && cabinDist(x, z) > 9 && !onWorkshop(x, z),
     (R) => 0.35 + R() * 0.25);
   // bushes: leaf cards around a core, sharing the oak foliage atlas
   const bgb = new GB(), BR = mulberry32(903);
@@ -2033,7 +2042,7 @@ function buildGroundCover() {
     leafCards(bgb, BR, c, rad, 12, 0.9, new THREE.Vector3(0, 0.3, 0));
   }
   const bushMat = leafMaterial(MAT.oakLeafTex);
-  scatter(bgb.build(), bushMat, 700, 904, (x, z, R) => { const f = forestAt(x, z); return f > 0.1 && f < 0.75 && heightAt(x, z) > 0.8 && slopeAt(x, z) < 0.3 && pathDist(x, z) > 2 && cabinDist(x, z) > 12; },
+  scatter(bgb.build(), bushMat, 700, 904, (x, z, R) => { const f = forestAt(x, z); return f > 0.1 && f < 0.75 && heightAt(x, z) > 0.8 && slopeAt(x, z) < 0.3 && pathDist(x, z) > 2 && cabinDist(x, z) > 12 && !onWorkshop(x, z, 1); },
     (R) => 0.7 + R() * 0.7, { shadow: true, depth: bushMat.userData.depth, colorFn: (x, z, R) => new THREE.Color().setHSL(0.24 + R() * 0.06, 0.25, 0.42 + R() * 0.12) });
   // rocks
   const rt = rockTextures();
@@ -2151,9 +2160,11 @@ function buildCabin() {
   cabin.door = door;
   const brass = new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: 0.9, roughness: 0.35 });
   envUsers.push(brass);
-  cabin.glass = new THREE.MeshStandardMaterial({ color: 0x1d2630, roughness: 0.15, emissive: 0xffb45a, emissiveIntensity: 0, side: THREE.DoubleSide });
+  // window glass: dark (glowing at night) from outside, and clear from inside the shop, where updateCabin fades it
+  // out; it casts no shadow, so the sun comes in through the windows
+  cabin.glass = new THREE.MeshStandardMaterial({ color: 0x1d2630, roughness: 0.15, emissive: 0xffb45a, emissiveIntensity: 0, side: THREE.DoubleSide, transparent: true, depthWrite: false, forceSinglePass: true });
   for (const wx of [-2.05, 2.05]) {
-    add(new THREE.PlaneGeometry(1.2, 1.1), cabin.glass, wx, 1.5, D2 - 0.04);
+    add(new THREE.PlaneGeometry(1.2, 1.1), cabin.glass, wx, 1.5, D2 - 0.04).castShadow = false;
     add(new THREE.BoxGeometry(1.32, 0.09, 0.12), plankMat, wx, 2.05, D2 + 0.06);
     add(new THREE.BoxGeometry(1.32, 0.09, 0.16), plankMat, wx, 0.95, D2 + 0.08);
     add(new THREE.BoxGeometry(0.06, 1.1, 0.06), plankMat, wx, 1.5, D2 + 0.02);
@@ -2278,7 +2289,9 @@ function buildInterior(g, { plankMat, darkMat }) {
   add(new THREE.CylinderGeometry(0.16, 0.22, 0.14, 12, 1, true), iron, 0, 2.2, 0.3);
   cabin.lampGlass = new THREE.MeshStandardMaterial({ color: 0x3a2a14, emissive: 0xffc070, emissiveIntensity: 2 });
   add(new THREE.SphereGeometry(0.07, 10, 8), cabin.lampGlass, 0, 2.14, 0.3);
-  cabin.lamp = new THREE.PointLight(0xffb468, 0, 9, 1.4); cabin.lamp.position.set(0, 2.0, 0.3); g.add(cabin.lamp);
+  // the light itself hangs in the always-visible cabin group: under the hidden interior it would drop out of the
+  // renderer's light count, and every lit material would recompile each time the woodcutter walks past 16 m
+  cabin.lamp = new THREE.PointLight(0xffb468, 0, 9, 1.4); cabin.lamp.position.set(0, 2.0, 0.3); cabin.group.add(cabin.lamp);
   // the shopkeeper: an old timber merchant in an apron and spectacles
   const M = {
     skin: stdMat(0xcf9a78, 0.62), nose: stdMat(0xc08066, 0.6), beard: stdMat(0xbfbab2, 1), shirt: stdMat(0xd9d2c0, 0.9),
@@ -2314,7 +2327,10 @@ function updateCabin(dt, time) {
   cabin.doorWas = cabin.doorOpen > 0 ? 1 : 0;
   cabin.door.rotation.y = da * 1.45;
   const near = 1 - smooth(8, 16, Math.hypot(lx, lz));
-  cabin.lamp.intensity = near * 5.5;
+  // the lamp casts no shadows, so it is lit only while the room can be seen (from inside, or through the open door);
+  // otherwise it would light the outside of the walls
+  cabin.lamp.intensity = Math.max(cabin.inside, cabin.doorOpen) * 5.5;
+  cabin.glass.opacity = 1 - 0.8 * cabin.inside;
   cabin.fire.emissiveIntensity = 1.3 + 0.5 * Math.sin(time * 9) * Math.sin(time * 5.3 + 1) + 0.2 * Math.sin(time * 23);
   updateKeeper(dt, time, lx, lz, near);
 }
@@ -2460,15 +2476,24 @@ function sawModel(i, into = new THREE.Group()) {
   into.userData.bar = k === "chainsaw" ? 0.3 : 0.05;
   return into;
 }
+// Free a tool model before building another into its group: every geometry and material in it is its own (a set,
+// since the double axe uses its blade twice), and its metals leave the env-map list; the cached damascus texture stays.
+function clearToolModel(g) {
+  const geos = new Set(), mats = new Set();
+  for (const o of g.children) if (o.isMesh) { geos.add(o.geometry); mats.add(o.material); }
+  for (const x of geos) x.dispose();
+  for (const m of mats) { m.dispose(); const k = envUsers.indexOf(m); if (k >= 0) envUsers.splice(k, 1); }
+  while (g.children.length) g.remove(g.children[0]);
+}
 function buildAxeMesh(i) {
   const axe = char.axe;
-  while (axe.children.length) axe.remove(axe.children[0]);
+  clearToolModel(axe);
   axeModel(i, axe);
   char.axeHeadY = axe.userData.headY;
 }
 function buildSawMesh(i) {
   const saw = char.saw;
-  while (saw.children.length) saw.remove(saw.children[0]);
+  clearToolModel(saw);
   sawModel(i, saw);
 }
 
@@ -4052,6 +4077,26 @@ function sharedRangeMesh(src, mat, a, b) {
   const m = new THREE.Mesh(g, mat); m.castShadow = true;
   return m;
 }
+// A solid end for a cut at local height y: a fan over the trunk tube's exact outline there (its triangles cut by
+// the plane), a hair inside the piece so the clip keeps it. It is wound so the side facing out of the piece
+// (sgn -1: bottom end, +1: top end) is a back face, which the piece shader already draws as the cut face; a
+// negative vertex colour marks it, so the shader drops its inner side. Short rounds and logs seen end-on need it: some view rays go in one cut and out the other without touching bark.
+function capGeo(v, y, sgn) {
+  const P = v.lod0.trunk.attributes.position, c = spineAt(v.spine, y), cx = c.x, cz = c.z, pts = [];
+  for (let i = v.ranges.trunk[0]; i < v.ranges.trunk[1]; i += 3) for (let e = 0; e < 3; e++) {
+    const a = i + e, b = i + ((e + 1) % 3), ya = P.getY(a), yb = P.getY(b);
+    if ((ya < y) === (yb < y)) continue;
+    const k = (y - ya) / (yb - ya), x = lerp(P.getX(a), P.getX(b), k), z = lerp(P.getZ(a), P.getZ(b), k);
+    pts.push([Math.atan2(z - cz, x - cx), x, z]);
+  }
+  // the section is star-shaped around the trunk centre, so sorting by angle walks its outline (each edge is shared)
+  pts.sort((p, q) => p[0] - q[0]);
+  const ring = pts.filter((p, i) => !i || p[0] - pts[i - 1][0] > 1e-5);
+  if (ring.length < 3) return null;
+  const gb = new GB(), yc = y - sgn * 1e-3, n = { x: 0, y: -sgn, z: 0 }, V = (x, z) => gb.vert({ x, y: yc, z }, n, x * 1.5, z * 1.5, -1);
+  ring.forEach((p, j) => { const q = ring[(j + 1) % ring.length]; V(cx, cz); if (sgn > 0) { V(p[1], p[2]); V(q[1], q[2]); } else { V(q[1], q[2]); V(p[1], p[2]); } });
+  return gb.build();
+}
 // holder (pose of the pivot, scale) → spin (the tree's own turn) → inner (pivot offset) → meshes in tree space
 function buildPiece(p) {
   const d = p.d, v = VARIANTS[d.v], R = v.ranges, stump = p.kind === "stump", top = pieceTop(p) && !stump;
@@ -4066,6 +4111,15 @@ function buildPiece(p) {
   trunk.boundingSphere = new THREE.Sphere(new THREE.Vector3(cm.x, (ya + yb) / 2, cm.z), (yb - ya) / 2 + Math.max(c0.r, c1.r) * 1.5 + (stump ? v.trunkR * 3.5 : 0.5));
   inner.add(trunk);
   const meshes = [trunk];
+  // cut faces: the bottom end unless it's a stump (roots), the top end unless it's a top (crown); same material
+  // and instance data as the bark, so they cast shadows, take mutations and the carried flag like it
+  for (const [y, sgn, open] of [[p.s0, -1, !stump], [p.s1, 1, !top]]) {
+    const cg = open && capGeo(v, y, sgn); if (!cg) continue;
+    const cap = pieceMesh(d, cg, MAT.pieceBark[d.sp], [0, cg.attributes.position.count], d.barkTint, clip, ctr);
+    // every buffer of a cap is its own, so disposeHolder frees them all with the piece
+    cap.geometry.userData.own = Object.keys(cap.geometry.attributes); cap.customDepthMaterial = MAT.pieceDepth;
+    inner.add(cap); meshes.push(cap);
+  }
   if (top) {
     // the crown: every limb that grows above the bottom of this piece, with its leaves (or crystals)
     const k = v.subs.findIndex((sb) => sb.y >= p.s0);
@@ -4120,6 +4174,19 @@ function removePiece(p) {
   const i = pieces.indexOf(p); if (i >= 0) pieces.splice(i, 1);
   disposeHolder(p.holder);
   if (carried === p) carried = null;
+}
+// Compile every material once behind the loading screen, with a throwaway stump and crowned top in the scene, so the
+// first tree to fall (or the first visit to the shop) doesn't stall on building shaders; compile also covers hidden
+// objects. Only the pieces' small shadow-pass shaders still build on first use: drawing a warm-up frame here to get
+// those too made software GL (SwiftShader) draw every frame after the first fall slowly in testing.
+async function warmShaders() {
+  const t = trees.find((u) => u.state === "standing" && !u.mut.crystal) || trees[0];
+  if (!t) return;
+  const d = treeSnapshot(t), ps = [buildPiece({ d, s0: -OPEN, s1: t.cutY, kind: "stump" }), buildPiece({ d, s0: t.cutY + 0.5, s1: OPEN, kind: "log" })];
+  for (const p of ps) scene.add(p.holder);
+  // without parallel compile (software GL) compileAsync only warns, so compile in one go there
+  if (renderer.extensions.has("KHR_parallel_shader_compile")) await renderer.compileAsync(scene, camera); else renderer.compile(scene, camera);
+  for (const p of ps) disposeHolder(p.holder);
 }
 
 /* ---------- felling ---------- */
@@ -5789,7 +5856,7 @@ function tick(dt) {
     if (Math.random() < dt * 3) emitPuff(cabin.chimneyTop.clone().applyMatrix4(cabin.group.matrixWorld), 1, { color: [0.62, 0.62, 0.64], size: 1.1, spread: 0.15, up: 0.9, life: 4.5, alpha: 0.32, grow: 2.2, vel: new THREE.Vector3(0.35, 0.4, 0.1) });
   }
   updateSky(state.hour);
-  cabin.glass.emissiveIntensity = env.night * 1.6 + env.golden * 0.3;
+  cabin.glass.emissiveIntensity = (env.night * 1.6 + env.golden * 0.3) * (1 - cabin.inside);
   cabin.lanternGlass.emissiveIntensity = env.night * 3;
   cabin.lantern.intensity = env.night * 9;
   cabin.ring.material.opacity = 0.35 + 0.25 * Math.sin(U.time.value * 3);
@@ -5838,6 +5905,7 @@ async function init() {
   buildMapBase();
   await buildAllGrass((f) => step(Math.round(90 + f * 9), "풀밭을 가꾸는 중…"));
   updateGrass();
+  await warmShaders();
   await step(100, "준비 완료!");
   if (isTouch) $("#controls").innerHTML = "<span>왼쪽 조이스틱</span><span>이동 · 운전 (끝까지 밀면 달리기)</span><span>도끼질 / 톱질 버튼</span><span>나무 베기 · 통나무 자르기 (누르고 있기)</span><span>화면 드래그</span><span>카메라 회전</span><span>들기 버튼</span><span>들기·끌기 · 내려놓기 · 말 걸기 · 조립 · 트럭 타기</span>";
   if (hadSave && state.stats.trees > 0) $("#saveInfo").textContent = `이어하기 — 코인 ${state.coins.toLocaleString("ko-KR")} · 벤 나무 ${state.stats.trees}그루 · ${AXES[state.axe].name}`;
