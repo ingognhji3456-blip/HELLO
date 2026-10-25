@@ -2815,27 +2815,73 @@ function setToolFromTorso(obj, P, tm, tq) {
   _U2.copy(P.u).applyQuaternion(tq); _E2.copy(P.e).applyQuaternion(tq);
   toolQuat(_U2, _E2, obj.quaternion);
 }
-// Driving: seated, hands on the wheel at ten to two, leaning a little into the turns.
-const SEAT = new THREE.Vector3(0.4, 1.2, 0.08), _seat = new THREE.Vector3(), _rim = new THREE.Vector3();
+// Driving: seated on the bench (hips a little above the cushion, head under the roof), feet flat on the footwell floor,
+// hands on the rim at ten to two turning with the wheel, head and shoulders turning into the bend (steer > 0 = left).
+// The axe and saw are stowed in the cab while he drives (on his back they would stick through the roof).
+const SEAT = new THREE.Vector3(0.4, 1.15, 0.08), FOOTWELL = 0.71, _seat = new THREE.Vector3(), _rim = new THREE.Vector3(), _pedal = { cur: new THREE.Vector3(), pitch: 0 };
 function animateDriver(dt, time) {
   truck.group.updateMatrixWorld(true);
-  _seat.copy(SEAT).applyMatrix4(truck.group.matrixWorld);
-  char.root.position.set(_seat.x, _seat.y - 1.0, _seat.z);
+  const M = truck.group.matrixWorld;
+  _seat.copy(SEAT).applyMatrix4(M);
   truck.group.getWorldQuaternion(char.root.quaternion);
+  char.root.position.copy(_seat).addScaledVector(_v.set(0, 1, 0).applyQuaternion(char.root.quaternion), -1.0);
   char.body.position.set(0, 0.0, 0);
   char.hips.rotation.set(0, 0, 0);
-  char.torso.rotation.set(0.04 + Math.sin(time * 9) * 0.004 * Math.min(1, Math.abs(truck.speed)), -truck.steer * 0.35, -truck.steer * 0.12);
-  for (const leg of [char.legL, char.legR]) { leg.g.rotation.set(-1.4, 0, leg.side * 0.1); leg.knee.rotation.x = 1.55; leg.boot.rotation.x = -0.12; }
-  char.head.rotation.set(0.05, -truck.steer * 0.6, 0);
+  char.torso.rotation.set(0.04 + Math.sin(time * 9) * 0.004 * Math.min(1, Math.abs(truck.speed)), truck.steer * 0.35, -truck.steer * 0.12);
+  char.head.rotation.set(0.05, truck.steer * 0.6, 0);
+  char.axe.visible = char.saw.visible = false;
+  char.root.updateMatrixWorld(true);
+  // legs: two-bone IK putting each ankle above the footwell floor in front of the bench, boots level with the floor
+  _hipsInv.copy(char.hips.matrixWorld).invert();
+  for (const leg of [char.legL, char.legR]) { _pedal.cur.set(SEAT.x + leg.side * 0.13, FOOTWELL + ANKLE_H, 0.72).applyMatrix4(M); _pedal.cur.y -= ANKLE_H; solveLeg(leg, _pedal); }
+  char.root.updateMatrixWorld(true);
+  truck.wheelMesh.updateMatrixWorld(true);
+  const q = char.root.quaternion;
+  solveArm(char.armL, _rim.set(0.15, 0.08, -0.03).applyMatrix4(truck.wheelMesh.matrixWorld), _pole.set(0.7, -0.6, -0.2).applyQuaternion(q));
+  solveArm(char.armR, _rim.set(-0.15, 0.08, -0.03).applyMatrix4(truck.wheelMesh.matrixWorld), _pole.set(-0.7, -0.6, -0.2).applyQuaternion(q));
+  gait.drop = 0;
+}
+// Assembling the truck: both tools go on the back and a wrench comes out. The right hand knocks on the part in time with
+// the clanks (the blow lands as T.hit wraps every 0.42 s), the left hand is braced on the body, and he crouches and
+// bends over to the low parts. Runs after the legs are solved, in place of the tool poses.
+const _asW = new THREE.Vector3(), _asS = new THREE.Vector3(), _asP = new THREE.Vector3(), _asQ = new THREE.Quaternion(), _asQ2 = new THREE.Quaternion();
+function animateAssembly(dt) {
+  const T = player.task, a = workSpot(_asW), h = a.y - player.y;
+  T.w = Math.min(1, (T.w || 0) + dt * 5);
+  const w = T.w * T.w * (3 - 2 * T.w), k = 1 - Math.exp(-dt * 14);
+  if (!char.wrench) {
+    const m = stdMat(0x8d939a, 0.35, { metalness: 0.7 }), g = new THREE.Group();
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.012, 0.24), m); bar.position.set(0, -0.04, 0.08);
+    const jaw = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.011, 6, 12, Math.PI * 1.4), m); jaw.position.set(0, -0.04, 0.225); jaw.rotation.set(-Math.PI / 2, 0, -Math.PI * 0.2);
+    g.add(bar, jaw); g.traverse((o) => { o.castShadow = true; }); char.armR.hand.add(g); char.wrench = g;
+  }
+  char.wrench.visible = true;
+  // crouch and lean toward low parts, then plant the feet again
+  char.body.position.y -= clamp((0.9 - h) * 0.45, 0, 0.22) * w;
+  char.torso.rotation.x = lerp(char.torso.rotation.x, clamp((1.2 - h) * 0.45, 0.05, 0.45), w);
+  char.root.updateMatrixWorld(true);
+  _hipsInv.copy(char.hips.matrixWorld).invert();
+  solveLeg(char.legL, gait.feet[0]); solveLeg(char.legR, gait.feet[1]);
   char.root.updateMatrixWorld(true);
   const tm = char.torso.matrix.clone().premultiply(char.hips.matrix).premultiply(char.body.matrix);
   _tq2.setFromRotationMatrix(tm);
-  setToolFromTorso(char.axe, TOOL_POSE.axeBack, tm, _tq2); setToolFromTorso(char.saw, TOOL_POSE.sawBack, tm, _tq2);
-  truck.wheelMesh.updateMatrixWorld(true);
-  const q = char.root.quaternion;
-  solveArm(char.armL, _rim.set(0.15, 0.08, 0.02).applyMatrix4(truck.wheelMesh.matrixWorld), _pole.set(0.7, -0.6, -0.2).applyQuaternion(q));
-  solveArm(char.armR, _rim.set(-0.15, 0.08, 0.02).applyMatrix4(truck.wheelMesh.matrixWorld), _pole.set(-0.7, -0.6, -0.2).applyQuaternion(q));
-  gait.drop = 0;
+  for (const [o, P] of [[char.axe, TOOL_POSE.axeBack], [char.saw, TOOL_POSE.sawBack]]) {
+    _asP.copy(o.position); _asQ.copy(o.quaternion); setToolFromTorso(o, P, tm, _tq2);
+    o.position.lerpVectors(_asP, o.position, k); _asQ2.copy(o.quaternion); o.quaternion.copy(_asQ).slerp(_asQ2, k);
+  }
+  // wind up slowly (up and back), strike fast onto the spot
+  const ph = clamp((T.hit || 0) / 0.42, 0, 1), up = ph < 0.65 ? Math.sin((ph / 0.65) * Math.PI / 2) : 1 - ((ph - 0.65) / 0.35) ** 2;
+  char.root.getWorldQuaternion(_rootQ);
+  char.armR.sh.getWorldPosition(_asS);
+  _asP.subVectors(a, _asS);
+  const reach = Math.min(0.5, _asP.length() - 0.05);
+  _hw.copy(_asS).addScaledVector(_asP.normalize(), reach - 0.12 * up); _hw.y += 0.24 * up;
+  solveArm(char.armR, _hw, _pole.set(-0.75, -0.55, -0.35).applyQuaternion(_rootQ), w);
+  char.armL.sh.getWorldPosition(_asS);
+  _asP.set(a.x + Math.cos(player.yaw) * 0.2, a.y, a.z - Math.sin(player.yaw) * 0.2).sub(_asS);
+  _hw.copy(_asS).addScaledVector(_asP, Math.min(1, 0.55 / _asP.length()));
+  solveArm(char.armL, _hw, _pole.set(0.7, -0.6, -0.2).applyQuaternion(_rootQ), w);
+  lookAt(a, w * 0.8);
 }
 function animateCharacter(dt, time) {
   if (player.vehicle) { animateDriver(dt, time); return; }
@@ -2901,6 +2947,7 @@ function animateCharacter(dt, time) {
   _hipsInv.copy(char.hips.matrixWorld).invert();
   solveLeg(char.legL, gait.feet[0]); solveLeg(char.legR, gait.feet[1]);
   char.root.updateMatrixWorld(true);
+  if (player.task) { animateAssembly(dt); return; }
   // tools (posed in the root frame): the one in use in the hands, the other on the back; both on the back under a load
   const tm = char.torso.matrix.clone().premultiply(char.hips.matrix).premultiply(char.body.matrix);   // torso -> root
   _tq2.setFromRotationMatrix(tm);
@@ -3695,10 +3742,14 @@ function save() {
     for (const i in state.forest) if (trees[i]) forestMark(trees[i]);
     state.pieces = pieces.filter((p) => p.state === "ground" || p.state === "settle" || p.state === "winch" || p === carried).concat(falling.map((f) => f.p)).map(pieceSave);
     state.car.bed = truck.bed.map((p) => ({ d: p.d, s0: p.s0, s1: Math.min(p.s1, OPEN), piv: r3([p.pivot.x, p.pivot.y, p.pivot.z]) }));
-    if (truck.built && !player.vehicle) state.car.pose = [truck.x, truck.z, truck.yaw].map((v) => Math.round(v * 100) / 100);
+    // where the truck is now, driven or parked, so a reload never sends it back to where he last got out
+    if (truck.built) state.car.pose = [truck.x, truck.z, truck.yaw].map((v) => Math.round(v * 100) / 100);
   }
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) { /* storage unavailable */ }
 }
+// closing the tab or switching apps (phones rarely get to unload) keeps the latest state; never before the save was loaded
+addEventListener("pagehide", () => { if (mode !== "loading") save(); });
+document.addEventListener("visibilitychange", () => { if (document.hidden && mode !== "loading") save(); });
 const validSnap = (c) => !!(c && SPECIES[c.sp] && VARIANTS[c.v] && Array.isArray(c.tags) && c.mut && Array.isArray(c.leafTint) && Array.isArray(c.barkTint) && c.s > 0);
 const arr3 = (a, n = 3) => Array.isArray(a) && a.length === n && a.every((x) => Number.isFinite(x));
 // Quest order of the first release, used to carry old saves (which stored a quest index) over to quest ids.
@@ -3876,6 +3927,8 @@ function updatePlayer(dt) {
       if (speed > 0) { mx = dx / d; mz = dz / d; }
     }
   }
+  // assembling the truck: he stays at the part (updateAssembly turns him to it); stepping away stops the work
+  if (player.task) { if (mag > 0.35) player.task = null; else speed = 0; }
   const k = 1 - Math.exp(-dt * 6);
   player.vel.x = lerp(player.vel.x, mx * speed, k); player.vel.y = lerp(player.vel.y, mz * speed, k);
   const px0 = player.pos.x, pz0 = player.pos.y;
@@ -4696,7 +4749,7 @@ const SITES = [
   { id: "junk", name: "호숫가 고물 더미", want: [30, 84], items: ["tire", "tire", "steel", "steel"] },
   { id: "camp", name: "버려진 야영지", want: [-70, -24], items: ["tire"] },
 ];
-const truck = { group: null, parts: {}, ghost: null, ghostMat: null, built: false, x: 0, z: 0, y: 0, yaw: 0, speed: 0, steer: 0, pitch: 0, roll: 0, wheels: [], bed: [], sellT: 0, engine: null, light: null, winch: null };
+const truck = { group: null, parts: {}, ghost: null, ghostMat: null, built: false, x: 0, z: 0, y: 0, yaw: 0, speed: 0, steer: 0, pitch: 0, roll: 0, wheels: [], bed: [], sellT: 0, engine: null, light: null, winch: null, over: 0, roof: null };
 const worldItems = [];
 const metalPaint = () => stdMat(0xb8432e, 0.45, { metalness: 0.12 });
 // The truck model, one group per assembly step (truck frame: +z forward, +x left, y up, origin on the ground)
@@ -4716,7 +4769,8 @@ function buildTruckModel() {
   add(fr, new THREE.BoxGeometry(1.8, 0.1, 0.14), dark, 0, 0.6, -2.3);
   truck.wheels = [];
   [[0.84, 1.45], [-0.84, 1.45], [0.84, -1.45], [-0.84, -1.45]].forEach(([x, z], i) => {
-    const w = part("w" + i), spin = new THREE.Group(); spin.position.set(x, 0.42, z); w.add(spin);
+    // YXZ: steer turns the wheel about the vertical, then it rolls about its own (steered) axle
+    const w = part("w" + i), spin = new THREE.Group(); spin.position.set(x, 0.42, z); spin.rotation.order = "YXZ"; w.add(spin);
     add(spin, new THREE.CylinderGeometry(0.42, 0.42, 0.28, 22), rubber, 0, 0, 0, 0, 0, Math.PI / 2);
     add(spin, new THREE.TorusGeometry(0.38, 0.06, 6, 22), rubber, 0, 0, 0, 0, Math.PI / 2, 0);
     add(spin, new THREE.CylinderGeometry(0.25, 0.25, 0.3, 16), chrome, 0, 0, 0, 0, 0, Math.PI / 2);
@@ -4731,17 +4785,26 @@ function buildTruckModel() {
   add(en, new THREE.BoxGeometry(0.26, 0.2, 0.18), stdMat(0x1f2a1f, 0.6), 0.45, 0.82, 1.25);
   const cab = part("cab");
   add(cab, new THREE.BoxGeometry(1.76, 0.42, 1.3), paint, 0, 1.18, 1.6);
-  add(cab, new THREE.BoxGeometry(1.78, 0.22, 1.4), paint, 0, 1.02, 0.35);
+  // the cab is sized around the seated woodcutter: footwell floor on the chassis (top 0.71), roof underside at 2.2.
+  // Doors and back wall are panels with real window openings, so he can be seen through the glass from outside.
+  const shape = (pts, hole) => { const s = new THREE.Shape(pts.map(([u, v]) => new THREE.Vector2(u, v))); if (hole) s.holes.push(new THREE.Path(hole.map(([u, v]) => new THREE.Vector2(u, v)))); return s; };
+  const ext = (s, d) => new THREE.ExtrudeGeometry(s, { depth: d, bevelEnabled: false });
+  add(cab, new THREE.BoxGeometry(1.72, 0.1, 1.36), paint, 0, 0.66, 0.34);
+  add(cab, new THREE.BoxGeometry(1.66, 0.3, 0.04), dark, 0, 0.85, 0.96);
+  // side outline in (z, y): under the hood line to its back, up the windshield slant, along the roof, down the back
+  const sideWin = [[-0.25, 1.45], [1.0, 1.45], [0.767, 2.1], [-0.25, 2.1]];
+  const sideGeo = ext(shape([[-0.35, 0.61], [0.95, 0.61], [0.95, 1.39], [1.17, 1.39], [0.88, 2.2], [-0.35, 2.2]], sideWin), 0.05);
+  const sideGlass = ext(shape(sideWin.map(([u, v], i) => [u + (i === 0 || i === 3 ? -0.02 : 0.02), v + (i < 2 ? -0.02 : 0.02)])), 0.006);
   for (const x of [-0.86, 0.86]) {
-    add(cab, new THREE.BoxGeometry(0.06, 0.72, 1.4), paint, x, 1.5, 0.35);
+    add(cab, sideGeo, paint, x > 0 ? 0.88 : -0.83, 0, 0, 0, -Math.PI / 2, 0);   // shape x -> truck z, extruded toward -x
+    add(cab, sideGlass, glass, x * 0.994 + 0.003, 0, 0, 0, -Math.PI / 2, 0);
     add(cab, new THREE.BoxGeometry(0.2, 0.18, 1.0), paint, x * 1.02, 0.78, 1.45);
     add(cab, new THREE.BoxGeometry(0.2, 0.18, 1.0), paint, x * 1.02, 0.78, -1.45);
-    add(cab, new THREE.BoxGeometry(0.02, 0.36, 0.7), glass, x * 1.01, 1.62, 0.32);
   }
-  add(cab, new THREE.BoxGeometry(1.78, 0.08, 1.45), paint, 0, 1.9, 0.33);
-  add(cab, new THREE.BoxGeometry(1.78, 0.72, 0.06), paint, 0, 1.5, -0.35);
-  add(cab, new THREE.BoxGeometry(1.6, 0.55, 0.03), glass, 0, 1.6, 1.08, -0.35, 0, 0);
-  add(cab, new THREE.BoxGeometry(1.6, 0.4, 0.02), glass, 0, 1.62, -0.38);
+  add(cab, ext(shape([[-0.88, 0.61], [0.88, 0.61], [0.88, 2.2], [-0.88, 2.2]], [[-0.62, 1.5], [0.62, 1.5], [0.62, 2.05], [-0.62, 2.05]]), 0.05), paint, 0, 0, -0.35);
+  add(cab, new THREE.BoxGeometry(1.28, 0.59, 0.01), glass, 0, 1.775, -0.325);
+  add(cab, new THREE.BoxGeometry(1.8, 0.08, 1.33), paint, 0, 2.24, 0.27);
+  add(cab, new THREE.BoxGeometry(1.66, 0.86, 0.02), glass, 0, 1.795, 1.025, -0.344, 0, 0);
   add(cab, new THREE.BoxGeometry(0.9, 0.26, 0.06), chrome, 0, 1.08, 2.27);
   for (let k = 0; k < 5; k++) add(cab, new THREE.BoxGeometry(0.82, 0.025, 0.02), dark, 0, 0.99 + k * 0.045, 2.305);
   for (const x of [-0.95, 0.95]) { add(cab, new THREE.BoxGeometry(0.04, 0.04, 0.22), dark, x, 1.62, 1.0); add(cab, new THREE.BoxGeometry(0.03, 0.14, 0.1), chrome, x * 1.06, 1.66, 1.1); }
@@ -4754,11 +4817,13 @@ function buildTruckModel() {
   for (const x of [-0.83, 0.83]) add(bed, new THREE.BoxGeometry(0.06, 0.42, 2.05), wood, x, 1.12, -1.27);
   add(bed, new THREE.BoxGeometry(1.7, 0.42, 0.06), wood, 0, 1.12, -0.27);
   add(bed, new THREE.BoxGeometry(1.7, 0.36, 0.06), wood, 0, 1.08, -2.28);
-  const st = part("steer");
-  add(st, new THREE.BoxGeometry(1.5, 0.12, 0.5), stdMat(0x5a3a22, 0.8), 0, 1.15, 0.1);
-  add(st, new THREE.BoxGeometry(1.5, 0.55, 0.1), stdMat(0x5a3a22, 0.8), 0, 1.45, -0.18, -0.15, 0, 0);
-  const sw = add(st, new THREE.TorusGeometry(0.17, 0.02, 8, 20), dark, 0.4, 1.52, 0.78, -0.95, 0, 0);
-  add(st, new THREE.CylinderGeometry(0.025, 0.025, 0.4, 6), dark, 0.4, 1.4, 0.9, -0.95 + Math.PI / 2, 0, 0);
+  // bench (cushion top 1.04) and a steering wheel tilted toward him, half a metre from his shoulders and above his knees
+  const st = part("steer"), seatMat = stdMat(0x5a3a22, 0.8);
+  add(st, new THREE.BoxGeometry(1.4, 0.22, 0.42), dark, 0, 0.82, 0.1);
+  add(st, new THREE.BoxGeometry(1.5, 0.12, 0.5), seatMat, 0, 0.98, 0.1);
+  add(st, new THREE.BoxGeometry(1.5, 0.62, 0.1), seatMat, 0, 1.35, -0.15, -0.15, 0, 0);
+  const sw = add(st, new THREE.TorusGeometry(0.17, 0.02, 8, 20), dark, 0.4, 1.53, 0.6, 0.45, 0, 0);
+  add(st, new THREE.CylinderGeometry(0.025, 0.025, 0.45, 6), dark, 0.4, 1.432, 0.803, 0.45 + Math.PI / 2, 0, 0);
   truck.wheelMesh = sw;
   // where things go: the bed's floor, and the driver's seat
   truck.bedGroup = new THREE.Group(); truck.bedGroup.position.set(0, 0.95, -1.27); g.add(truck.bedGroup);
@@ -4779,11 +4844,12 @@ function buildTruck() {
   scene.add(g);
   // the workshop: a gravel pad, a lean-to roof on posts and a workbench
   const ws = new THREE.Group(); ws.position.copy(cabin.group.position); ws.rotation.y = CABIN.rot; scene.add(ws);
-  const wood = stdMat(0x6b4a2c, 0.85), roof = stdMat(0x4a3b2e, 0.9);
+  // the roof material is transparent from the start (fading it later must not swap shader programs)
+  const wood = stdMat(0x6b4a2c, 0.85), roof = stdMat(0x4a3b2e, 0.9, { transparent: true });
   const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.castShadow = m.receiveShadow = true; ws.add(m); return m; };
   const gravel = add(new THREE.PlaneGeometry(7, 4.6), stdMat(0x7a7468, 1), PAD_LOCAL[0], 0.03, PAD_LOCAL[1], -Math.PI / 2); gravel.castShadow = false;
   for (const [x, z] of [[-3.2, -2.1], [3.2, -2.1], [-3.2, 2.1], [3.2, 2.1]]) { add(new THREE.CylinderGeometry(0.08, 0.09, 3.1, 8), wood, PAD_LOCAL[0] + x, 1.55, PAD_LOCAL[1] + z); cabin.posts.push([PAD_LOCAL[0] + x, PAD_LOCAL[1] + z]); }
-  add(new THREE.BoxGeometry(7, 0.1, 4.8), roof, PAD_LOCAL[0], 3.15, PAD_LOCAL[1], 0.08, 0, 0);
+  truck.roof = add(new THREE.BoxGeometry(7, 0.1, 4.8), roof, PAD_LOCAL[0], 3.15, PAD_LOCAL[1], 0.08, 0, 0);
   add(new THREE.BoxGeometry(1.6, 0.08, 0.7), wood, BENCH_LOCAL[0], 0.9, BENCH_LOCAL[1]);
   for (const [x, z] of [[-0.7, -0.28], [0.7, -0.28], [-0.7, 0.28], [0.7, 0.28]]) add(new THREE.BoxGeometry(0.07, 0.86, 0.07), wood, BENCH_LOCAL[0] + x, 0.45, BENCH_LOCAL[1] + z);
   add(new THREE.BoxGeometry(0.16, 0.12, 0.12), stdMat(0x3a5a7a, 0.5, { metalness: 0.4 }), BENCH_LOCAL[0] - 0.6, 1.0, BENCH_LOCAL[1]);
@@ -4791,10 +4857,12 @@ function buildTruck() {
   // the plank stack grows on the bench
   truck.planks = new THREE.InstancedMesh(new THREE.BoxGeometry(1.4, 0.03, 0.16), stdMat(0xc9a06a, 0.8), 12);
   for (let i = 0; i < 12; i++) { _m.compose(_v.set(BENCH_LOCAL[0] + 0.05, 0.96 + Math.floor(i / 3) * 0.035, BENCH_LOCAL[1] - 0.2 + (i % 3) * 0.18), _q.identity(), _s.set(1, 1, 1)); truck.planks.setMatrixAt(i, _m); }
-  truck.planks.count = 0; truck.planks.castShadow = true; ws.add(truck.planks);
-  // headlight: created once with zero intensity (adding lights later would recompile every material)
-  truck.light = new THREE.SpotLight(0xfff0d0, 0, 40, 0.6, 0.5, 1.2); truck.light.position.set(0, 1.15, 2.3); truck.light.target.position.set(0, 0.2, 12);
-  g.add(truck.light, truck.light.target);
+  // bounds over the full stack, or the culler keeps the empty sphere from when there were no planks
+  truck.planks.count = 12; truck.planks.computeBoundingSphere(); truck.planks.count = 0; truck.planks.castShadow = true; ws.add(truck.planks);
+  // headlight: created once with zero intensity (adding lights later would recompile every material), and kept in the
+  // scene itself so hiding the truck never changes the light count; poseTruck() moves it with the truck
+  truck.light = new THREE.SpotLight(0xfff0d0, 0, 40, 0.6, 0.5, 1.2);
+  scene.add(truck.light, truck.light.target);
   // winch cable
   truck.winch = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1, 5), stdMat(0x222222, 0.6, { metalness: 0.6 }));
   truck.winch.visible = false; scene.add(truck.winch);
@@ -4837,43 +4905,87 @@ function poseTruck(dt) {
   truck.group.position.set(truck.x, truck.y, truck.z);
   truck.group.rotation.set(truck.pitch, truck.yaw, truck.roll, "YXZ");
   truck.group.updateMatrixWorld(true);
+  truck.light.position.set(0, 1.15, 2.3).applyMatrix4(truck.group.matrixWorld); truck.light.target.position.set(0, 0.2, 12).applyMatrix4(truck.group.matrixWorld);
 }
-// truck footprint: three circles along its length
+// truck footprint: three circles along its length (the woodcutter keeps clear of these)
 const truckCircles = (x = truck.x, z = truck.z, yaw = truck.yaw) => [-1.5, 0, 1.5].map((o) => [x + Math.sin(yaw) * o, z + Math.cos(yaw) * o, 1.0]);
+// what the truck itself bumps with: those circles, its four corners (body 1.9 x 4.6 m) and the load hanging past the tailgate
+function truckFootprint(x, z, yaw) {
+  const c = Math.cos(yaw), s = Math.sin(yaw), out = truckCircles(x, z, yaw), at = (lx, lz, r) => out.push([x + c * lx + s * lz, z - s * lx + c * lz, r]);
+  for (const lx of [-0.6, 0.6]) for (const lz of [-1.9, 1.9]) at(lx, lz, 0.45);
+  for (let lz = -2.3 - truck.over + 0.55; lz < -2.4; lz += 0.8) at(0, lz, 0.65);
+  return out;
+}
+// uphill grade along the truck at a pose: how much higher the front axle is than the rear one, per metre
+function truckGrade(x, z, yaw) {
+  const c = Math.cos(yaw), s = Math.sin(yaw), hAt = (lx, lz) => groundY(x + c * lx + s * lz, z - s * lx + c * lz);
+  return (hAt(0.84, 1.45) + hAt(-0.84, 1.45) - hAt(0.84, -1.45) - hAt(-0.84, -1.45)) / 2 / 2.9;
+}
+// the deepest overlap at a pose ({ o } for a tree or rock, { wall } otherwise; depth = all overlaps added up), or null
 function truckHits(x, z, yaw) {
-  let hit = null;
-  for (const [cx, cz, r] of truckCircles(x, z, yaw)) {
-    if (edgeDist(cx, cz) > 172 || heightAt(cx, cz) < -0.7) return { wall: true };
-    gNear(cx, cz, 5, (o) => {
+  let hit = null, sum = 0;
+  const bump = (h, d) => { sum += d; if (!hit || d > hit.d) { h.d = d; hit = h; } hit.depth = sum; };
+  const F = truckFootprint(x, z, yaw);
+  for (let i = 0; i < F.length; i++) {
+    const [cx, cz, r] = F[i];
+    // the body stays on dry land inside the map; a load may hang out over the water
+    if (i < 7 && (edgeDist(cx, cz) > 172 || heightAt(cx, cz) < -0.7)) return { wall: true, depth: 9 };
+    gNear(cx, cz, r + 4, (o) => {
       if (o.kind === "tree" && !(o.state === "standing" || o.state === "growing" || o.state === "stump")) return;
-      const rr = (o.kind === "tree" ? (o.state === "growing" ? o.r * o.growT : o.r) : o.r) + r;
-      if (Math.hypot(cx - o.x, cz - o.z) < rr) hit = hit || { o };
+      const rr = (o.kind === "tree" ? (o.state === "growing" ? o.r * o.growT : o.r) : o.r) + r, d = Math.hypot(cx - o.x, cz - o.z);
+      if (d < rr) bump({ o }, rr - d);
     });
     const [lx, lz] = toCabinLocal(cx, cz);
-    for (const [x0, x1, z0, z1] of cabin.boxes) if (lx > x0 - r && lx < x1 + r && lz > z0 - r && lz < z1 + r) hit = hit || { wall: true };
-    for (const [px, pz] of cabin.posts) if (Math.hypot(lx - px, lz - pz) < r + 0.15) hit = hit || { wall: true };
+    for (const [x0, x1, z0, z1] of cabin.boxes) if (lx > x0 - r && lx < x1 + r && lz > z0 - r && lz < z1 + r) bump({ wall: true }, Math.min(lx - x0, x1 - lx, lz - z0, z1 - lz) + r);
+    for (const [px, pz] of cabin.posts) { const d = Math.hypot(lx - px, lz - pz); if (d < r + 0.15) bump({ wall: true }, r + 0.15 - d); }
   }
   return hit;
 }
 
 /* ---------- driving ---------- */
+// does a straight line cross a cabin wall (or the counter, woodpile, bench)? slab test in the cabin frame
+function wallBetween(x0, z0, x1, z1) {
+  const [ax, az] = toCabinLocal(x0, z0), [bx, bz] = toCabinLocal(x1, z1);
+  return cabin.boxes.some((b) => {
+    let t0 = 0, t1 = 1;
+    for (const [p, d, lo, hi] of [[ax, bx - ax, b[0], b[1]], [az, bz - az, b[2], b[3]]]) {
+      if (Math.abs(d) < 1e-9) { if (p < lo || p > hi) return false; continue; }
+      const ta = (lo - p) / d, tb = (hi - p) / d;
+      t0 = Math.max(t0, Math.min(ta, tb)); t1 = Math.min(t1, Math.max(ta, tb));
+    }
+    return t0 <= t1;
+  });
+}
+// room for the woodcutter to stand: dry ground, clear of walls, posts, trunks and rocks
+function standable(x, z) {
+  if (heightAt(x, z) < -0.6 || edgeDist(x, z) > 172) return false;
+  const [lx, lz] = toCabinLocal(x, z), r = 0.36;
+  if (cabin.boxes.some(([x0, x1, z0, z1]) => lx > x0 - r && lx < x1 + r && lz > z0 - r && lz < z1 + r) || cabin.posts.some(([px, pz]) => Math.hypot(lx - px, lz - pz) < r + 0.15)) return false;
+  let ok = true;
+  gNear(x, z, 3, (o) => { if (o.kind === "tree" && !(o.state === "standing" || o.state === "growing" || o.state === "stump")) return; if (Math.hypot(x - o.x, z - o.z) < (o.kind === "tree" && o.state === "growing" ? o.r * o.growT : o.r) + r) ok = false; });
+  return ok;
+}
 function enterTruck() {
   if (!truck.built) return;
   stopSawing(); player.chop = null;
   player.vehicle = truck; truck.speed = 0;
   SFX.door(); engineSound(true);
-  toast(isTouch ? "조이스틱으로 운전 · 톱질 버튼 = 브레이크 · 내리기 버튼으로 내려요" : "W/S 가속·후진 · A/D 핸들 · Space 브레이크 · E 내리기", false);
+  toast(isTouch ? "조이스틱으로 운전 · 브레이크 버튼으로 멈춰요 · 내리기 버튼으로 내려요" : "W/S 가속·후진 · A/D 핸들 · Space 브레이크 · E 내리기", false);
 }
 function exitVehicle(force = false) {
   if (!player.vehicle) return;
   if (!force && Math.abs(truck.speed) > 1.5) { toast("차를 멈추고 내리세요."); return; }
-  player.vehicle = null; truck.speed = 0;
-  // step out on the driver's side, or wherever there is room
+  // step out on the driver's side, else the other side, the front or behind the load: onto open ground, never through a wall
   const c = Math.cos(truck.yaw), s = Math.sin(truck.yaw);
-  for (const side of [1.7, -1.7, 3, -3]) {
-    const x = truck.x + c * side, z = truck.z - s * side;
-    if (!blocked(x, z, heightAt(truck.x, truck.z)) && heightAt(x, z) > -0.6) { player.pos.set(x, z); break; }
+  let spot = null;
+  for (const [lx, lz] of [[1.7, 0.4], [-1.7, 0.4], [3, 0], [-3, 0], [0, 3.3], [0, -3.3 - truck.over]]) {
+    const x = truck.x + c * lx + s * lz, z = truck.z - s * lx + c * lz;
+    if (!blocked(x, z, heightAt(truck.x, truck.z)) && standable(x, z) && !wallBetween(truck.x, truck.z, x, z)) { spot = [x, z]; break; }
   }
+  if (!spot && !force) { toast("내릴 자리가 없어요 — 트럭을 조금 옮겨 주세요."); SFX.deny(); return; }
+  player.vehicle = null; truck.speed = 0;
+  if (spot) player.pos.set(spot[0], spot[1]);
+  char.axe.visible = char.saw.visible = true;
   player.y = groundY(player.pos.x, player.pos.y); player.yaw = truck.yaw;
   if (gait.feet) for (const f of gait.feet) { footRest(f.side, f.pos); f.cur.copy(f.pos); f.swing = false; f.idle = -1; }
   SFX.door(); engineSound(false);
@@ -4891,7 +5003,18 @@ function engineSound(on) {
   }
   if (sfx.engine) sfx.engine.g.gain.setTargetAtTime(on ? 0.12 : 0, c.currentTime, 0.2);
 }
+// the workshop roof fades out while it stands between the camera and the woodcutter (or the truck he drives)
+function fadeRoof(dt) {
+  const m = truck.roof.material, cp = camera.position, hy = player.y + 1.5, ry = truck.roof.matrixWorld.elements[13];
+  let hide = false;
+  if ((cp.y - ry) * (hy - ry) < 0) {
+    const t = (ry - cp.y) / (hy - cp.y), [lx, lz] = toCabinLocal(lerp(cp.x, player.pos.x, t), lerp(cp.z, player.pos.y, t));
+    hide = Math.abs(lx - PAD_LOCAL[0]) < 3.6 && Math.abs(lz - PAD_LOCAL[1]) < 2.5;
+  }
+  m.opacity = lerp(m.opacity, hide ? 0.15 : 1, 1 - Math.exp(-dt * 8)); m.depthWrite = m.opacity > 0.97;
+}
 function updateTruck(dt) {
+  fadeRoof(dt);
   if (!truck.group || !truck.group.visible) return;
   const driving = player.vehicle === truck;
   if (driving) {
@@ -4903,10 +5026,11 @@ function updateTruck(dt) {
     if (joy.active) { thr += joy.y; st -= joy.x; }
     brake = !!(keys.Space || player.chopHeld);
     thr = clamp(thr, -1, 1); st = clamp(st, -1, 1);
-    // engine pulls up to ~16 m/s forward and 5 m/s back; slopes slow it; brake and rolling friction
-    const slope = Math.sin(truck.pitch);
+    // engine pulls up to ~16 m/s forward and 5 m/s back; full gravity along the slope under the wheels (so about 28
+    // degrees is the steepest it can climb), except at a standstill off the throttle, where the handbrake holds it
+    const g = truckGrade(truck.x, truck.z, truck.yaw), slope = thr !== 0 || Math.abs(truck.speed) > 0.5 ? -g / Math.hypot(1, g) : 0;
     let a = thr > 0 ? (truck.speed >= 0 ? 5 * thr : 9 * thr) : thr < 0 ? (truck.speed > 0.2 ? 9 * thr : 3.5 * thr) : 0;
-    a += slope * 9.8 * 0.6 - truck.speed * 0.25 - Math.sign(truck.speed) * 0.4 * (thr === 0 ? 1 : 0);
+    a += slope * 9.8 - truck.speed * 0.25 - Math.sign(truck.speed) * 0.4 * (thr === 0 ? 1 : 0);
     if (brake) a = -Math.sign(truck.speed) * Math.min(12, Math.abs(truck.speed) / Math.max(dt, 1e-3));
     truck.speed = clamp(truck.speed + a * dt, -5, 16);
     if (Math.abs(truck.speed) < 0.05 && thr === 0) truck.speed = 0;
@@ -4919,8 +5043,14 @@ function updateTruck(dt) {
   if (truck.speed !== 0) {
     const yaw = truck.yaw + (truck.speed * Math.tan(truck.steer) / 2.9) * dt;
     const nx = truck.x + Math.sin(yaw) * truck.speed * dt, nz = truck.z + Math.cos(yaw) * truck.speed * dt;
-    const hit = truckHits(nx, nz, yaw);
-    if (!hit) { truck.x = nx; truck.z = nz; truck.yaw = yaw; }
+    const hit = truckHits(nx, nz, yaw), now = hit && truckHits(truck.x, truck.z, truck.yaw);
+    // no climbing grades over 0.65 (33 degrees), not even with a run-up: it stops and rolls back a little
+    if (truckGrade(nx, nz, yaw) * Math.sign(truck.speed) > 0.65) {
+      truck.speed *= -0.2;
+      if (driving && msgCooldown <= 0) { toast("너무 가팔라서 못 올라가요."); msgCooldown = 3; }
+    }
+    // already touching something (a log just loaded overhangs a tree): any move that doesn't push in deeper is fine
+    else if (!hit || (now && hit.depth <= now.depth + 1e-4)) { truck.x = nx; truck.z = nz; truck.yaw = yaw; }
     else {
       if (Math.abs(truck.speed) > 4) { SFX.crash(clamp(Math.abs(truck.speed) / 16, 0.2, 0.8)); cam.shake = Math.max(cam.shake, Math.abs(truck.speed) / 30); }
       if (hit.o && hit.o.kind === "tree" && hit.o.state === "standing") { hit.o.shake = clamp(Math.abs(truck.speed) / 10, 0.3, 1); hit.o.shakeT = 0; hit.o.shakeAxis.set(Math.cos(yaw), 0, -Math.sin(yaw)); }
@@ -4928,12 +5058,12 @@ function updateTruck(dt) {
     }
   }
   for (const w of truck.wheels) {
-    w.spin.children.forEach((m) => { m.rotation.x += 0; });
-    w.spin.rotation.x += (truck.speed * dt) / 0.42;
+    w.spin.rotation.x = (w.spin.rotation.x + (truck.speed * dt) / 0.42) % TAU;
     w.spin.rotation.y = w.steer ? truck.steer : 0;
   }
   poseTruck(dt);
-  if (truck.wheelMesh) truck.wheelMesh.rotation.z = -truck.steer * 3;
+  // the wheel turns up to 1.2 rad at full lock, a range both hands can follow on the rim
+  if (truck.wheelMesh) truck.wheelMesh.rotation.z = -truck.steer * 2;
   if (sfx.engine && engineOn) {
     const rpm = 38 + Math.abs(truck.speed) * 5.5;
     sfx.engine.o.frequency.setTargetAtTime(rpm, sfx.ctx.currentTime, 0.1); sfx.engine.o2.frequency.setTargetAtTime(rpm * 2, sfx.ctx.currentTime, 0.1);
@@ -4953,15 +5083,19 @@ function updateTruck(dt) {
   }
   updateWinch(dt);
 }
-// bed layout: logs lie lengthwise, side by side, stacking up when a layer is full
+// bed layout: logs lie lengthwise, side by side, stacking up when a layer is full. The butt rests against the front
+// board (inner face at bed z 0.97) and anything longer than the 2 m bed hangs out past the tailgate, never into the cab.
 function layoutBed() {
   let x = -0.7, layer = 0, rowH = 0, kg = 0;
+  truck.over = 0;
   for (const p of truck.bed) {
     const r = diamAt(p.d, (p.s0 + pieceEnd(p)) / 2) / 2, L = pieceLen(p);
     if (x + 2 * r > 0.72) { x = -0.7; layer += rowH; rowH = 0; }
-    const cx = x + r, cy = layer + r, cz = -1.0 + L / 2;
+    const cx = x + r, cy = layer + r, cz = 0.95 - L / 2;
     x += 2 * r + 0.02; rowH = Math.max(rowH, 2 * r);
-    p.bedPose = { pos: new THREE.Vector3(cx, cy, Math.min(cz, 0.9 - L / 2 + 1.0)), quat: new THREE.Quaternion().setFromUnitVectors(UP, _v.set(0, 0, -1)) };
+    p.bedPose = { pos: new THREE.Vector3(cx, cy, cz), quat: new THREE.Quaternion().setFromUnitVectors(UP, _v.set(0, 0, -1)) };
+    // how far the load reaches past the tailgate (outer face at bed z -1.04), crown included: the truck bumps with it
+    truck.over = Math.max(truck.over, haulLen(p) - 1.99);
     kg += pieceKg(p);
   }
   return kg;
@@ -4970,7 +5104,9 @@ const bedKg = () => truck.bed.reduce((a, p) => a + pieceKg(p), 0);
 function canLoad(p) {
   if (haulLen(p) > BED_LEN) return `적재함에는 ${BED_LEN}m까지만 실을 수 있어요 (${haulLen(p).toFixed(1)}m) — 더 짧게 자르세요`;
   if (pieceKg(p) > BED_KG) return `트럭에 싣기엔 너무 무거워요 (${pieceKg(p).toLocaleString("ko-KR")}kg, 최대 ${BED_KG.toLocaleString("ko-KR")}kg) — 더 짧게 자르세요`;
-  if (bedKg() + pieceKg(p) > BED_KG) return `적재함이 가득 찼어요 (${bedKg()}kg / ${BED_KG}kg)`;
+  // the log the winch is still pulling in already has its place on the bed
+  const inbound = truck.winching && truck.winching.p !== p ? pieceKg(truck.winching.p) : 0;
+  if (bedKg() + inbound + pieceKg(p) > BED_KG) return `적재함이 가득 찼어요 (${bedKg() + inbound}kg / ${BED_KG}kg)`;
   return null;
 }
 function loadOnBed(p) {
@@ -4987,19 +5123,19 @@ function loadOnBed(p) {
 function sellBed() {
   let total = 0, n = 0;
   for (const p of truck.bed.slice()) { total += sellPiece(p, true); n++; }
-  truck.bed.length = 0;
+  truck.bed.length = 0; truck.over = 0;
   state.stats.truckSales = (state.stats.truckSales || 0) + 1;
   toast(`트럭 짐 ${n}개 판매  +${total.toLocaleString("ko-KR")} 코인`, true);
   checkQuest(); save();
 }
-// the winch drags a log to the tailgate and hauls it onto the bed
+// the winch drags a log to the tailgate and hauls it onto the bed: the nearest one within 9 m that the bed will take
+const tailDist = (p) => Math.hypot(p.holder.position.x - truck.x + Math.sin(truck.yaw) * 2.3, p.holder.position.z - truck.z + Math.cos(truck.yaw) * 2.3);
 function nearestWinchable() {
   let best = null, bd = 9;
-  const tx = truck.x - Math.sin(truck.yaw) * 2.3, tz = truck.z - Math.cos(truck.yaw) * 2.3;
   for (const p of pieces) {
     if (p.state !== "ground") continue;
-    const d = Math.hypot(p.holder.position.x - tx, p.holder.position.z - tz);
-    if (d < bd) { bd = d; best = p; }
+    const d = tailDist(p);
+    if (d < bd && !canLoad(p)) { bd = d; best = p; }
   }
   return best;
 }
@@ -5015,6 +5151,8 @@ function updateWinch(dt) {
   truck.winch.visible = !!W;
   if (!W) return;
   const p = W.p, tail = _v.set(0, 0.95, -2.35).applyMatrix4(truck.group.matrixWorld);
+  // driving off (or the tailgate ending up out of cable reach) drops the log where it is
+  if (Math.abs(truck.speed) > 0.3 || p.holder.position.distanceTo(tail) > 11) { truck.winching = null; truck.winch.visible = false; settle(p); return; }
   W.t = Math.min(1, W.t + dt / 1.6);
   const k = W.t * W.t * (3 - 2 * W.t);
   p.holder.position.lerpVectors(W.from, tail, k * 0.85);
@@ -5022,28 +5160,44 @@ function updateWinch(dt) {
   const a = _v2.copy(p.holder.position), d = tail.clone().sub(a), len = d.length();
   truck.winch.position.copy(a).addScaledVector(d, 0.5); truck.winch.scale.set(1, Math.max(0.01, len), 1);
   truck.winch.quaternion.setFromUnitVectors(UP, d.normalize());
-  if (W.t >= 1) { truck.winching = null; p.state = "ground"; loadOnBed(p); }
+  // a refused log (the bed filled up meanwhile) comes to rest on the ground instead of hanging in the air
+  if (W.t >= 1) { truck.winching = null; p.state = "ground"; if (!loadOnBed(p)) settle(p); }
 }
 
 /* ---------- assembly ---------- */
 const haveMats = (need) => Object.entries(need).every(([k, n]) => (state.mats[k] || 0) >= n);
 const missingText = (need) => Object.entries(need).filter(([k, n]) => (state.mats[k] || 0) < n).map(([k, n]) => `${MATS[k].name} ${state.mats[k] || 0}/${n}`).join(", ");
+// where he works on the next part: its anchor, moved out along his line to the surface of the body box (1.9 x 4.6 m)
+function workSpot(out) {
+  stepAnchor(state.car.step, out);
+  const c = Math.cos(truck.yaw), s = Math.sin(truck.yaw), dx = out.x - truck.x, dz = out.z - truck.z, px = player.pos.x - truck.x, pz = player.pos.y - truck.z;
+  const lx = c * dx - s * dz, lz = s * dx + c * dz, qx = c * px - s * pz - lx, qz = s * px + c * pz - lz;
+  const t = clamp(Math.min(qx ? ((qx > 0 ? 0.95 : -0.95) - lx) / qx : 1, qz ? ((qz > 0 ? 2.3 : -2.3) - lz) / qz : 1), 0, 1), wx = lx + qx * t, wz = lz + qz * t;
+  return out.set(truck.x + c * wx + s * wz, out.y, truck.z - s * wx + c * wz);
+}
+const _asA = new THREE.Vector3();
 function updateAssembly(dt) {
   const T = player.task;
+  if (char.wrench) char.wrench.visible = !!T;
   if (!T) return;
-  if (!player.useHeld || player.vehicle || carried || mode !== "play") { player.task = null; return; }
+  if (!player.useHeld || player.vehicle || carried || player.chop || player.sawing || mode !== "play") { player.task = null; return; }
   const step = ASSEMBLY[state.car.step];
   if (!step || !haveMats(step.need)) { player.task = null; return; }
+  // the work is done at the part: once he is away from it, it stops; while it goes on he faces it
+  const a = stepAnchor(state.car.step, _asA);
+  if (Math.hypot(player.pos.x - a.x, player.pos.y - a.z) > 2.4) { player.task = null; return; }
+  player.yaw = angLerp(player.yaw, Math.atan2(a.x - player.pos.x, a.z - player.pos.y), 1 - Math.exp(-dt * 10));
   T.prog += dt / 2.6;
   T.hit = (T.hit || 0) + dt;
   if (T.hit > 0.42) {
     T.hit = 0;
     SFX.clank();
-    const a = stepAnchor(state.car.step, new THREE.Vector3());
-    for (let k = 0; k < 4; k++) emitSparkle(a.clone().add(randDir(Math.random).multiplyScalar(0.25)), [1.8, 1.3, 0.6], 0.25, 0.4);
+    workSpot(a);
+    for (let k = 0; k < 4; k++) emitSparkle(a.clone().add(randDir(Math.random).multiplyScalar(0.12)), [1.8, 1.3, 0.6], 0.25, 0.4);
   }
   if (T.prog >= 1) {
     for (const [k, n] of Object.entries(step.need)) state.mats[k] -= n;
+    if (truck.planks) truck.planks.count = Math.min(12, state.mats.plank || 0);
     state.car.step++;
     player.task = null;
     truck.parts[step.id].visible = true;
@@ -5053,7 +5207,7 @@ function updateAssembly(dt) {
     updateGhost();
     if (state.car.step >= ASSEMBLY.length) {
       truck.built = true; state.car.pose = [truck.x, truck.z, truck.yaw].map((v) => Math.round(v * 100) / 100);
-      toast("트럭 완성! 운전석 옆에서 E를 눌러 타세요.", true);
+      toast(`트럭 완성! 운전석 옆에서 ${isTouch ? "타기 버튼을" : "E를"} 눌러 타세요.`, true);
     } else toast(`${step.name} 조립 완료! 다음: ${ASSEMBLY[state.car.step].name}`);
     checkQuest(); save();
   }
@@ -5137,8 +5291,9 @@ function pickItem(it) {
   state.picked.push(it.id); it.mesh.visible = false;
   state.mats[it.kind] = (state.mats[it.kind] || 0) + 1;
   SFX.pickup(); SFX.clank();
-  const M = MATS[it.kind];
-  toast(`${M.name} 획득 (${state.mats[it.kind]}/${M.need})${state.bp ? "" : " — 상점의 트럭 설계도로 쓸 수 있어요"}`);
+  // count the parts already bolted onto the truck too, as the blueprint tab does
+  const M = MATS[it.kind], used = ASSEMBLY.slice(0, state.car.step).reduce((a, s) => a + (s.need[it.kind] || 0), 0);
+  toast(`${M.name} 획득 (${Math.min(M.need, state.mats[it.kind] + used)}/${M.need})${state.bp ? "" : " — 상점의 트럭 설계도로 쓸 수 있어요"}`);
   checkQuest(); save();
 }
 // a log brought to the workbench is sawn into planks for the truck bed
@@ -5169,7 +5324,7 @@ function renderBlueprintTab(box) {
     card.appendChild(b); box.appendChild(card);
   } else {
     const step = ASSEMBLY[state.car.step];
-    card.innerHTML = `<div class="t">픽업트럭 설계도 <span class="own">· 보유</span></div><div class="d">${step ? `조립 ${state.car.step}/${ASSEMBLY.length} — 다음: <b>${step.name}</b> (${Object.entries(step.need).map(([k, n]) => `${MATS[k].name} ${n}`).join(", ")}) · 오두막 뒤 작업장에서 파란 부품 앞에 서서 E를 꾹 누르세요` : "트럭 완성! 운전석 옆에서 E로 타고, 적재함에 통나무를 실어 노란 원에 세우면 한꺼번에 팔려요."}</div>`;
+    card.innerHTML = `<div class="t">픽업트럭 설계도 <span class="own">· 보유</span></div><div class="d">${step ? `조립 ${state.car.step}/${ASSEMBLY.length} — 다음: <b>${step.name}</b> (${Object.entries(step.need).map(([k, n]) => `${MATS[k].name} ${n}`).join(", ")}) · 오두막 뒤 작업장에서 파란 부품 앞에 서서 ${isTouch ? "조립 버튼을" : "E를"} 꾹 누르세요` : `트럭 완성! 운전석 옆에서 ${isTouch ? "타기 버튼으로" : "E로"} 타고, 적재함에 통나무를 실어 노란 원에 세우면 한꺼번에 팔려요.`}</div>`;
     box.appendChild(card);
   }
   const mats = document.createElement("div"); mats.className = "card";
@@ -5196,14 +5351,22 @@ function vehicleInteraction() {
   }
   const dTruck = Math.hypot(player.pos.x - truck.x, player.pos.y - truck.z);
   if (truck.built && !carried) {
-    const c = Math.cos(truck.yaw), s = Math.sin(truck.yaw), dx = truck.x + c * 1.2 + s * 0.4, dz = truck.z - s * 1.2 + c * 0.4;
-    if (Math.hypot(player.pos.x - dx, player.pos.y - dz) < 1.6) return { label: "타기", text: "트럭 타기", run: enterTruck };
+    // either door (he slides across the bench from the passenger side), reached from his side of any wall: not from
+    // inside the cabin through its back wall, and not at a door parked up against a wall
+    const c = Math.cos(truck.yaw), s = Math.sin(truck.yaw);
+    for (const side of [1.2, -1.2]) {
+      const dx = truck.x + c * side + s * 0.4, dz = truck.z - s * side + c * 0.4;
+      if (Math.hypot(player.pos.x - dx, player.pos.y - dz) < 1.6 && !wallBetween(player.pos.x, player.pos.y, dx, dz)) return { label: "타기", text: "트럭 타기", run: enterTruck };
+    }
   }
   if (truck.built && carried && carried.state === "carried" && dTruck < 3.4) {
+    // a log the bed refuses can still be put down here (on touch the use button is the only way to drop it)
     const why = canLoad(carried);
-    return { label: "싣기", text: why || `적재함에 싣기 (${bedKg() + pieceKg(carried)}/${BED_KG}kg)`, run: () => loadOnBed(carried) };
+    return why ? { label: "내려놓기", key: "Q", text: why, run: dropCarried } : { label: "싣기", text: `적재함에 싣기 (${bedKg() + pieceKg(carried)}/${BED_KG}kg)`, run: () => loadOnBed(carried) };
   }
-  if (carried && carried.state === "carried" && nearBench() && !pieceTop(carried)) return { label: "판자", text: `작업대에서 판자 켜기 (약 ${Math.max(1, Math.floor(pieceVol(carried) / 0.025))}장)`, run: () => makePlanks(carried) };
+  // planks only while the truck bed still needs them, so a good log is never turned into useless planks
+  const plankNeed = state.car.step <= ASSEMBLY.findIndex((a) => a.id === "bed") && (state.mats.plank || 0) < MATS.plank.need;
+  if (plankNeed && carried && carried.state === "carried" && nearBench() && !pieceTop(carried)) return { label: "판자", text: `작업대에서 판자 켜기 (약 ${Math.max(1, Math.floor(pieceVol(carried) / 0.025))}장)`, run: () => makePlanks(carried) };
   const step = ASSEMBLY[state.car.step];
   if (state.bp && step && !carried && dTruck < 3.6) {
     const a = stepAnchor(state.car.step, _v3), near = Math.hypot(player.pos.x - a.x, player.pos.y - a.z) < 2.2;
@@ -5212,7 +5375,10 @@ function vehicleInteraction() {
       : { label: "재료", text: `${step.name}에 필요한 재료: ${missingText(step.need)}`, run: () => { toast(`재료가 모자라요: ${missingText(step.need)}`); SFX.deny(); } };
   }
   if (truck.built && !carried && dTruck < 4.5 && !truck.winching) {
-    const p = nearestWinchable();
+    // a log at his feet is lifted by hand if it can be; one too heavy for that is the one the winch takes; otherwise
+    // the winch takes the nearest log the bed will hold
+    const h = aimedCut(), near = (h && pieceGap(h.p) < 0.9 && h.p) || nearestPiece(0.9), how = near && haulMode(near);
+    const p = !near ? nearestWinchable() : how !== "carry" && how !== "drag" && tailDist(near) < 9 && !canLoad(near) ? near : null;
     if (p) return { label: "윈치", text: `윈치로 통나무 싣기 — ${pieceLen(p).toFixed(1)}m · ${pieceKg(p)}kg (${bedKg()}/${BED_KG}kg)`, run: () => startWinch(p) };
   }
   const it = nearestItem();
