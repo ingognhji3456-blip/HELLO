@@ -258,7 +258,7 @@ body.touch #prompt { left: 164px; right: 202px; margin: 0 auto; transform: none;
   <div class="inner">
     <div class="kicker">WILD TIMBER</div>
     <h1>나무꾼의 숲</h1>
-    <p>호수와 언덕, 소나무와 자작나무, 참나무가 우거진 야생의 숲. 도끼로 나무를 쓰러뜨리고 톱으로 원하는 길이만큼 잘라 오두막에 팔아, 더 좋은 도끼와 톱을 사고 직접 트럭을 조립해 보세요.</p>
+    <p>호수와 언덕, 소나무·가문비나무·자작나무·참나무·단풍나무·벚나무·버드나무가 우거진 야생의 숲. 도끼로 나무를 쓰러뜨리고 톱으로 원하는 길이만큼 잘라 오두막에 팔아, 더 좋은 도끼와 톱을 사고 직접 트럭을 조립해 보세요.</p>
     <button id="startBtn" class="btn">숲으로 들어가기</button>
     <div id="saveInfo"></div>
     <div id="controls">
@@ -480,14 +480,39 @@ function barkTextures(kind) {
       hf[y * W + x] = k * (0.6 + plates * 0.4) + fine * 0.15;
       o[0] = lerp(60, 128, plates) * sh; o[1] = lerp(38, 76, plates) * sh; o[2] = lerp(28, 52, plates) * sh;
     });
-  } else if (kind === "oak") {
+  } else if (kind === "spruce") {
+    // small thin scales, grey-brown
     c = pixelCanvas(W, H, (x, y, o) => {
       const u = x / W, v = y / H;
-      const n = tfbm(u, v, 10, 3, 5, 50), ridge = 1 - Math.abs(n * 2 - 1), fine = tfbm(u, v, 48, 24, 3, 90);
-      const k = smooth(0.25, 0.75, ridge), sh = (0.35 + 0.65 * k) * (0.85 + fine * 0.3);
-      hf[y * W + x] = k + fine * 0.2;
-      o[0] = 96 * sh; o[1] = 84 * sh; o[2] = 70 * sh;
+      const plates = tfbm(u, v, 14, 10, 4, 12), crack = Math.abs(tfbm(u, v, 18, 12, 4, 44) - 0.5), fine = tfbm(u, v, 64, 32, 3, 82);
+      const k = smooth(0.012, 0.05, crack), sh = (0.45 + 0.55 * k) * (0.85 + fine * 0.3);
+      hf[y * W + x] = k * (0.6 + plates * 0.4) + fine * 0.15;
+      o[0] = lerp(70, 116, plates) * sh; o[1] = lerp(56, 92, plates) * sh; o[2] = lerp(48, 80, plates) * sh;
     });
+  } else if (kind === "oak" || kind === "willow" || kind === "maple") {
+    // furrowed: deep criss-cross ridges (oak), long vertical ridges (willow), shallow grey furrows (maple)
+    const fx = kind === "oak" ? 10 : kind === "willow" ? 14 : 12, fy = kind === "oak" ? 3 : 2, lo = kind === "maple" ? 0.55 : 0.35;
+    const col = kind === "oak" ? [96, 84, 70] : kind === "willow" ? [98, 88, 72] : [118, 112, 104];
+    c = pixelCanvas(W, H, (x, y, o) => {
+      const u = x / W, v = y / H;
+      const n = tfbm(u, v, fx, fy, 5, 50), ridge = 1 - Math.abs(n * 2 - 1), fine = tfbm(u, v, 48, 24, 3, 90);
+      const k = smooth(0.25, 0.75, ridge), sh = (lo + (1 - lo) * k) * (0.85 + fine * 0.3);
+      hf[y * W + x] = k * (kind === "maple" ? 0.5 : 1) + fine * 0.2;
+      o[0] = col[0] * sh; o[1] = col[1] * sh; o[2] = col[2] * sh;
+    });
+  } else if (kind === "cherry") {
+    // smooth, glossy red-brown bark ringed by pale horizontal lenticels
+    c = pixelCanvas(W, H, (x, y, o) => {
+      const u = x / W, v = y / H, n = tfbm(u, v, 3, 12, 3, 130), l = 0.85 + (n - 0.5) * 0.3;
+      o[0] = 112 * l; o[1] = 56 * l; o[2] = 46 * l;
+    });
+    const g = c.getContext("2d");
+    for (let i = 0; i < 700; i++) {
+      const x = R() * W, y = R() * H, w = 14 + R() * 46, h = 1.5 + R() * 2.5;
+      g.fillStyle = `rgba(${(176 + R() * 30) | 0},${(130 + R() * 26) | 0},${(104 + R() * 20) | 0},${0.45 + R() * 0.35})`;
+      g.fillRect(x, y, w, h); if (x + w > W) g.fillRect(x - W, y, w, h);
+    }
+    hf = lumaField(c);
   } else {
     c = pixelCanvas(W, H, (x, y, o) => {
       const u = x / W, v = y / H, n = tfbm(u, v, 4, 16, 3, 120), l = 224 + (n - 0.5) * 38;
@@ -506,7 +531,7 @@ function barkTextures(kind) {
     }
     hf = lumaField(c);
   }
-  return { map: tex(c), normal: tex(normalCanvas(hf, W, H, kind === "birch" ? 3.5 : 8), { srgb: false }) };
+  return { map: tex(c), normal: tex(normalCanvas(hf, W, H, kind === "birch" || kind === "cherry" ? 3.5 : 8), { srgb: false }) };
 }
 function endGrainTexture() {
   const S = 256;
@@ -545,6 +570,10 @@ function rockTextures() {
 // Half-width of a leaf at t∈[0,1] along its length: lobed oak, finely toothed birch, or a plain ellipse.
 function leafHalfW(t, wid, shape) {
   if (shape === "oak") return wid * Math.pow(Math.sin(Math.PI * t), 0.6) * (0.66 + 0.34 * Math.abs(Math.cos(t * 3.5 * Math.PI)));
+  // maple: a broad palm with sharp lobes
+  if (shape === "maple") return wid * Math.pow(Math.sin(Math.PI * Math.pow(t, 0.8)), 0.45) * (0.45 + 0.55 * Math.pow(Math.abs(Math.cos(t * 2.5 * Math.PI)), 0.6));
+  // willow: long and narrow
+  if (shape === "willow") return wid * Math.pow(Math.sin(Math.PI * t), 1.3);
   if (shape === "birch") return wid * Math.sin(Math.PI * Math.pow(t, 0.7)) * (0.93 + 0.07 * ((t * 18) % 1));
   return wid * Math.sin(Math.PI * t);
 }
@@ -563,18 +592,36 @@ function drawLeaf(g, x, y, len, wid, ang, col, shape = "plain") {
   g.beginPath(); g.moveTo(0, 0); g.lineTo(len * 0.9, 0); g.stroke();
   g.restore();
 }
+// A cherry blossom: five pale pink petals around a deeper centre.
+function drawBlossom(g, x, y, r, R) {
+  const a0 = R() * TAU, l = 82 + R() * 8;
+  for (let k = 0; k < 5; k++) {
+    const a = a0 + (k / 5) * TAU;
+    g.fillStyle = `hsl(${lerp(335, 350, R())},${lerp(55, 80, R())}%,${l}%)`;
+    g.beginPath(); g.ellipse(x + Math.cos(a) * r * 0.55, y + Math.sin(a) * r * 0.55, r * 0.55, r * 0.38, a, 0, TAU); g.fill();
+  }
+  g.fillStyle = `hsl(340,60%,${l - 22}%)`; g.beginPath(); g.arc(x, y, r * 0.22, 0, TAU); g.fill();
+}
 // Leaf atlas (1024x512): cards region u∈[0,0.47] (alpha sprigs), core region u∈[0.55,0.98] (opaque foliage).
 const CARD_U = 240 / 512, CORE_U0 = 284 / 512, CORE_U1 = 504 / 512;
+// per species: palette [hue lo, hue hi, sat lo, sat hi, light lo, light hi], leaf shape and size, rosettes at the tips
+const LEAF_CFG = {
+  oak: { seed: 10, pal: [84, 108, 30, 48, 19, 34], shape: "oak", LL: 18, LW: 7, tips: 5, step: 10 },
+  birch: { seed: 11, pal: [70, 92, 40, 58, 30, 46], shape: "birch", LL: 13, LW: 5, tips: 2, step: 6.5 },
+  maple: { seed: 12, pal: [6, 32, 70, 88, 38, 52], shape: "maple", LL: 17, LW: 10, tips: 3, step: 9 },
+  cherry: { seed: 13, pal: [96, 120, 26, 40, 28, 40], shape: "plain", LL: 12, LW: 5, tips: 2, step: 8, blossom: true },
+  willow: { seed: 14, pal: [64, 82, 38, 54, 32, 46], shape: "willow", LL: 24, LW: 3.2, tips: 2, step: 5 },
+};
 function leafAtlas(kind) {
-  const S = 2, c = cnv(512 * S, 256 * S), g = c.getContext("2d"), R = mulberry32(kind === "birch" ? 11 : 10);
-  const pal = kind === "birch" ? [70, 92, 40, 58, 30, 46] : [84, 108, 30, 48, 19, 34];
+  const C = LEAF_CFG[kind], S = 2, c = cnv(512 * S, 256 * S), g = c.getContext("2d"), R = mulberry32(C.seed), pal = C.pal;
   const col = (dl = 0) => (R() < 0.04 ? [lerp(38, 52, R()), 52, pal[5] + 2 + dl] : [lerp(pal[0], pal[1], R()), lerp(pal[2], pal[3], R()), lerp(pal[4], pal[5], R()) + dl]);
-  const shape = kind === "birch" ? "birch" : "oak", LL = (kind === "birch" ? 13 : 18) * S, LW = (kind === "birch" ? 5 : 7) * S;
-  g.fillStyle = `hsl(${pal[0] + 8},${pal[2]}%,${pal[4] - 8}%)`; g.fillRect(272 * S, 0, 240 * S, 256 * S);
+  const shape = C.shape, LL = C.LL * S, LW = C.LW * S;
+  g.fillStyle = C.blossom ? "hsl(342,45%,74%)" : `hsl(${pal[0] + 8},${pal[2]}%,${pal[4] - 8}%)`; g.fillRect(272 * S, 0, 240 * S, 256 * S);
   for (let i = 0; i < 1800; i++) drawLeaf(g, (272 + R() * 240) * S, R() * 256 * S, LL * (0.7 + R() * 0.6), LW * (0.7 + R() * 0.5), R() * TAU, col(-5 + (i / 1800) * 7), shape);
+  if (C.blossom) for (let i = 0; i < 2600; i++) drawBlossom(g, (272 + R() * 240) * S, R() * 256 * S, (3.2 + R() * 2.4) * S, R);
   // cards region: a leafy branchlet growing from the left edge, so cards can sit on twigs like real sprays
   g.save(); g.beginPath(); g.rect(0, 0, 240 * S, 256 * S); g.clip(); g.lineCap = "round";
-  const oak = kind !== "birch";
+  const oak = shape === "oak" || shape === "maple";
   const shoot = (x0, y0, ang, len, w, depth) => {
     const bendA = (R() - 0.5) * 0.35, cx = x0 + Math.cos(ang) * len * 0.5 + Math.cos(ang + Math.PI / 2) * len * bendA * 0.3, cy = y0 + Math.sin(ang) * len * 0.5 + Math.sin(ang + Math.PI / 2) * len * bendA * 0.3;
     const x1 = x0 + Math.cos(ang + bendA * 0.5) * len, y1 = y0 + Math.sin(ang + bendA * 0.5) * len;
@@ -585,32 +632,37 @@ function leafAtlas(kind) {
       const t = k / 7.2, [px, py] = at(t), sd = k % 2 ? 1 : -1;
       shoot(px, py, ang + sd * (0.5 + R() * 0.3), len * (0.5 - t * 0.24), w * 0.6, depth + 1);
     }
-    const n = Math.floor(len / ((oak ? 10 : 6.5) * S));
+    const n = Math.floor(len / (C.step * S));
     for (let i = 0; i < n; i++) {
       const t = (i + 0.6) / (n + 0.4), [px, py] = at(t), sd = i % 2 ? 1 : -1, big = oak ? 0.7 + t * 0.5 : 1;
-      drawLeaf(g, px, py, LL * big * (0.75 + R() * 0.4), LW * big * (0.8 + R() * 0.3), ang + sd * (0.65 + R() * 0.5), col(-4 + t * 8 + depth * 2), shape);
+      // willow leaves lie close along their hanging twig
+      drawLeaf(g, px, py, LL * big * (0.75 + R() * 0.4), LW * big * (0.8 + R() * 0.3), ang + sd * (shape === "willow" ? 0.2 + R() * 0.2 : 0.65 + R() * 0.5), col(-4 + t * 8 + depth * 2), shape);
+      if (C.blossom && R() < 0.8) for (let k = 0; k < 3; k++) drawBlossom(g, px + (R() - 0.5) * 10 * S, py + (R() - 0.5) * 10 * S, (3.6 + R() * 2) * S, R);
     }
     // oaks bunch their leaves in rosettes at the shoot tips; birches end in a single drooping leaf
-    const tipN = oak ? 5 : 2;
+    const tipN = C.tips;
     for (let k = 0; k < tipN; k++) drawLeaf(g, x1, y1, LL * (oak ? 1.05 : 0.9), LW * (oak ? 1.0 : 0.85), ang + bendA * 0.5 + (k - (tipN - 1) / 2) * 0.55, col(4), shape);
+    if (C.blossom) for (let k = 0; k < 4; k++) drawBlossom(g, x1 + (R() - 0.5) * 12 * S, y1 + (R() - 0.5) * 12 * S, (4 + R() * 2) * S, R);
   };
   shoot(4 * S, 128 * S, (R() - 0.5) * 0.08, 200 * S, 2.8 * S, 0);
   g.restore();
   const t = tex(c, { wrap: false }); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
   return t;
 }
-function pineAtlas() {
-  const S = 2, c = cnv(512 * S, 256 * S), g = c.getContext("2d"), R = mulberry32(21);
-  const needle = (dl = 0) => `hsl(${lerp(112, 140, R())},${lerp(22, 40, R())}%,${lerp(13, 25, R()) + dl}%)`;
-  g.fillStyle = "hsl(130,28%,10%)"; g.fillRect(272 * S, 0, 240 * S, 256 * S); g.lineCap = "round";
+// Needle sprays: pine (long, warm green) or spruce (short, dense, dark blue-green).
+function pineAtlas(kind = "pine") {
+  const spruce = kind === "spruce", S = 2, c = cnv(512 * S, 256 * S), g = c.getContext("2d"), R = mulberry32(spruce ? 22 : 21);
+  const needle = (dl = 0) => (spruce ? `hsl(${lerp(150, 175, R())},${lerp(18, 32, R())}%,${lerp(11, 21, R()) + dl}%)` : `hsl(${lerp(112, 140, R())},${lerp(22, 40, R())}%,${lerp(13, 25, R()) + dl}%)`);
+  const NL = spruce ? 0.6 : 1;
+  g.fillStyle = spruce ? "hsl(160,26%,9%)" : "hsl(130,28%,10%)"; g.fillRect(272 * S, 0, 240 * S, 256 * S); g.lineCap = "round";
   for (let i = 0; i < 7000; i++) {
-    const x = (272 + R() * 240) * S, y = R() * 256 * S, a = R() * TAU, l = (6 + R() * 8) * S;
+    const x = (272 + R() * 240) * S, y = R() * 256 * S, a = R() * TAU, l = (6 + R() * 8) * S * NL;
     g.strokeStyle = needle(); g.lineWidth = 1.3 * S; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
   }
   const twig = (x0, y0, ang, len, w, depth) => {
     const x1 = x0 + Math.cos(ang) * len, y1 = y0 + Math.sin(ang) * len, steps = Math.floor(len / (2 * S));
     for (let k = 0; k < steps; k++) {
-      const t = k / steps, px = x0 + (x1 - x0) * t, py = y0 + (y1 - y0) * t, nl = (10 + R() * 7) * S * (1 - t * 0.35) * (depth ? 0.85 : 1);
+      const t = k / steps, px = x0 + (x1 - x0) * t, py = y0 + (y1 - y0) * t, nl = (10 + R() * 7) * S * (1 - t * 0.35) * (depth ? 0.85 : 1) * NL;
       for (const sd of [-1, 1]) {
         const a = ang + sd * (0.75 + R() * 0.35);
         g.strokeStyle = needle(t * 7 + (t > 0.86 ? 7 : 0)); g.lineWidth = 1.2 * S;
@@ -1465,12 +1517,20 @@ const SPECIES = {
   pine: { name: "소나무", hp: 7, price: 5, logR: 0.2 },
   birch: { name: "자작나무", hp: 5, price: 7, logR: 0.13 },
   oak: { name: "참나무", hp: 12, price: 12, logR: 0.27 },
+  spruce: { name: "가문비나무", hp: 7, price: 5, logR: 0.2 },
+  maple: { name: "단풍나무", hp: 10, price: 10, logR: 0.22 },
+  cherry: { name: "벚나무", hp: 8, price: 14, logR: 0.18 },
+  willow: { name: "버드나무", hp: 6, price: 4, logR: 0.26 },
 };
 // Wood: density (kg/m³), price per kilo of log, end-grain colours (heartwood, sapwood), how hard it is to fell.
 const WOOD = {
   pine: { density: 520, perKg: 0.12, heart: "#b07a45", sap: "#ead2a0", hpK: 9 },
   birch: { density: 640, perKg: 0.16, heart: "#cfb48e", sap: "#f1e4c6", hpK: 6 },
   oak: { density: 760, perKg: 0.14, heart: "#7c5230", sap: "#d6b17c", hpK: 14 },
+  spruce: { density: 450, perKg: 0.11, heart: "#d8b88a", sap: "#f2e2bc", hpK: 8 },
+  maple: { density: 700, perKg: 0.18, heart: "#b58a5e", sap: "#efdcb6", hpK: 12 },
+  cherry: { density: 600, perKg: 0.24, heart: "#9b4e2c", sap: "#e4c29c", hpK: 10 },
+  willow: { density: 420, perKg: 0.08, heart: "#a68d6c", sap: "#eadfc4", hpK: 6 },
 };
 const CUT_H = 0.7;   // felling cut (and chopping) height above the ground
 // Tree mutations. Values multiply together when a tree carries several.
@@ -1592,7 +1652,54 @@ const TREE_P = {
       { lenRatio: 0.5, radRatio: 0.55, angle: 0.75, sections: 2, radial: 3, gnarl: 0.25, taper: 0.2, leaves: 6, skipFar: true },
     ],
   },
+  // spruce: a tall dark cone, branches from low down, long and drooping at the bottom, short at the top
+  spruce: {
+    height: (R) => 13 + R() * 4, trunkR: 0.3, lean: 0.03, flare: 0.4, roots: 5, vTile: 2.2, stubs: 5,
+    leafSize: 1.1, leafSizeFar: 1.8, cardAspect: 0.8, leafAngle: 0.45, leafDroop: 0.12, leafStart: 0.12,
+    barkCol: (p, level) => (level ? 0.72 : lerp(0.6, 1, smooth(0, 1.4, p.y))),
+    levels: [
+      { sections: 14, radial: 10, gnarl: 0.02, taper: 0.04, children: 28, childStart: 0.12, childEnd: 0.985, lenFalloff: 0.92, uRep: 3 },
+      { lenRatio: 0.24, radRatio: 0.26, angle: (t) => lerp(1.85, 1.15, t), sections: 5, radial: 5, gnarl: 0.08, force: -0.08, taper: 0.25, children: 6, childStart: 0.2, lenFalloff: 0.4, leaves: 6, leavesFar: 16 },
+      { lenRatio: 0.38, radRatio: 0.5, angle: 0.75, sections: 2, radial: 3, gnarl: 0.12, force: -0.05, taper: 0.2, leaves: 5, skipFar: true },
+    ],
+  },
+  // maple: a straight grey trunk under a dense round crown that turns red and orange
+  maple: {
+    height: (R) => 7.5 + R() * 2, trunkR: 0.3, lean: 0.05, flare: 0.35, roots: 5, vTile: 2.0,
+    leafSize: 1.25, leafSizeFar: 2.1, cardAspect: 0.95, leafAngle: 0.8, leafDroop: 0.0, leafStart: 0.3,
+    barkCol: (p, level) => (level ? lerp(0.88, 1.0, level / 3) : lerp(0.68, 1.02, smooth(0, 1.2, p.y))),
+    levels: [
+      { sections: 8, radial: 11, gnarl: 0.05, taper: 0.45, children: 6, childStart: 0.42, childEnd: 1.0, uRep: 3 },
+      { lenRatio: 0.62, radRatio: 0.5, angle: 0.68, sections: 6, radial: 7, gnarl: 0.12, force: 0.12, taper: 0.3, children: 5, childStart: 0.3, lenFalloff: 0.35, uRep: 2 },
+      { lenRatio: 0.5, radRatio: 0.55, angle: 0.8, sections: 3, radial: 4, gnarl: 0.18, force: 0.05, taper: 0.25, children: 4, childStart: 0.35, leaves: 3, leavesFar: 16 },
+      { lenRatio: 0.45, radRatio: 0.55, angle: 0.7, sections: 2, radial: 3, gnarl: 0.2, taper: 0.2, leaves: 6, skipFar: true },
+    ],
+  },
+  // cherry: a short leaning trunk with wide-spreading limbs, a flat crown full of pink blossom
+  cherry: {
+    height: (R) => 5 + R() * 1.5, trunkR: 0.26, lean: 0.12, flare: 0.35, roots: 5, vTile: 1.8,
+    leafSize: 1.15, leafSizeFar: 2.0, cardAspect: 0.95, leafAngle: 0.85, leafDroop: 0.05, leafStart: 0.3,
+    barkCol: (p, level) => (level ? lerp(0.85, 1.0, level / 3) : lerp(0.62, 1.0, smooth(0, 1.0, p.y))),
+    levels: [
+      { sections: 6, radial: 10, gnarl: 0.06, taper: 0.5, children: 5, childStart: 0.45, childEnd: 1.0, uRep: 2 },
+      { lenRatio: 0.95, radRatio: 0.55, angle: 1.0, sections: 6, radial: 7, gnarl: 0.15, force: 0.05, taper: 0.3, children: 5, childStart: 0.25, lenFalloff: 0.3, uRep: 2 },
+      { lenRatio: 0.5, radRatio: 0.55, angle: 0.8, sections: 3, radial: 4, gnarl: 0.2, force: 0.0, taper: 0.25, children: 4, childStart: 0.3, leaves: 6, leavesFar: 24 },
+      { lenRatio: 0.45, radRatio: 0.5, angle: 0.7, sections: 2, radial: 3, gnarl: 0.22, taper: 0.2, leaves: 9, skipFar: true },
+    ],
+  },
+  // willow: a stout furrowed trunk by the water, limbs reaching up and long thin strands hanging to the ground
+  willow: {
+    height: (R) => 6.5 + R() * 1.5, trunkR: 0.38, lean: 0.1, flare: 0.45, roots: 6, vTile: 2.0,
+    leafSize: 1.1, leafSizeFar: 1.9, cardAspect: 0.75, leafAngle: 0.3, leafDroop: -0.9, leafStart: 0.1,
+    barkCol: (p, level) => (level ? lerp(0.85, 1.0, level / 2) : lerp(0.62, 1.0, smooth(0, 1.3, p.y))),
+    levels: [
+      { sections: 7, radial: 12, gnarl: 0.07, taper: 0.5, children: 6, childStart: 0.5, childEnd: 1.0, uRep: 4 },
+      { lenRatio: 0.7, radRatio: 0.5, angle: 0.6, sections: 6, radial: 7, gnarl: 0.12, force: 0.15, taper: 0.3, children: 7, childStart: 0.3, lenFalloff: 0.2, uRep: 2 },
+      { lenRatio: 0.85, radRatio: 0.35, angle: 1.1, sections: 6, radial: 3, gnarl: 0.08, force: -0.9, taper: 0.25, leaves: 10, leavesFar: 22 },
+    ],
+  },
 };
+const SPECIES_ALL = Object.keys(TREE_P);
 // Builds one tree in two detail levels from a single growth: the distant version is the same tree with its
 // twigs dropped, fewer tube segments and every other leaf spray enlarged, so swapping between them barely shows.
 function makeTreeLods(sp, seed) {
@@ -1750,42 +1857,50 @@ function makeVariant(sp, seed) {
 const VARIANTS = [];
 const trees = [];
 function buildTreeAssets() {
-  const pb = barkTextures("pine"), bb = barkTextures("birch"), ob = barkTextures("oak");
+  const BT = Object.fromEntries(SPECIES_ALL.map((sp) => [sp, barkTextures(sp)])), forSp = (fn) => Object.fromEntries(SPECIES_ALL.map((sp) => [sp, fn(sp)]));
+  const pb = BT.pine;
   const barkMat = (t, still = false) => treeShader(new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normal, normalScale: new THREE.Vector2(1.2, 1.2), roughness: 0.95, vertexColors: true }), { mut: true, bark: true, still });
-  MAT.bark = { pine: barkMat(pb), birch: barkMat(bb), oak: barkMat(ob) };
-  MAT.barkStill = { pine: barkMat(pb, true), birch: barkMat(bb, true), oak: barkMat(ob, true) };
+  MAT.bark = forSp((sp) => barkMat(BT[sp]));
+  MAT.barkStill = forSp((sp) => barkMat(BT[sp], true));
   // trunk shadows sway with the trunks
   MAT.barkDepth = treeShader(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), { mut: true });
   // felled logs: the trunk between two cuts (double sided for the cut faces) and the crown's limbs
   const pieceMat = (t, sp, piece) => treeShader(new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normal, normalScale: new THREE.Vector2(1.2, 1.2), roughness: 0.95, vertexColors: true, side: piece === "trunk" ? THREE.DoubleSide : THREE.FrontSide }), { mut: true, bark: true, still: true, piece, wood: piece === "trunk" ? [WOOD[sp].heart, WOOD[sp].sap] : null });
-  MAT.pieceBark = { pine: pieceMat(pb, "pine", "trunk"), birch: pieceMat(bb, "birch", "trunk"), oak: pieceMat(ob, "oak", "trunk") };
-  MAT.pieceBranch = { pine: pieceMat(pb, "pine", "branch"), birch: pieceMat(bb, "birch", "branch"), oak: pieceMat(ob, "oak", "branch") };
+  MAT.pieceBark = forSp((sp) => pieceMat(BT[sp], sp, "trunk"));
+  MAT.pieceBranch = forSp((sp) => pieceMat(BT[sp], sp, "branch"));
   MAT.pieceDepth = treeShader(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), { mut: true, still: true, piece: "trunk" });
   MAT.pieceBranchDepth = treeShader(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), { mut: true, still: true, piece: "branch" });
   const logBark = (t) => new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normal, roughness: 0.95 });
-  MAT.logBark = { pine: logBark(pb), birch: logBark(bb), oak: logBark(ob) };
+  MAT.logBark = forSp((sp) => logBark(BT[sp]));
   MAT.endGrain = new THREE.MeshStandardMaterial({ map: endGrainTexture(), roughness: 0.85 });
   const oakLeaf = leafAtlas("oak");
-  const leafMaps = { pine: pineAtlas(), birch: leafAtlas("birch"), oak: oakLeaf };
+  const leafMaps = { pine: pineAtlas(), birch: leafAtlas("birch"), oak: oakLeaf, spruce: pineAtlas("spruce"), maple: leafAtlas("maple"), cherry: leafAtlas("cherry"), willow: leafAtlas("willow") };
   MAT.leaf = {}; MAT.leafStill = {};
   for (const k in leafMaps) { MAT.leaf[k] = leafMaterial(leafMaps[k], true); MAT.leafStill[k] = leafMaterial(leafMaps[k], true, true); }
   MAT.oakLeafTex = oakLeaf;
   for (const s of [101, 102, 103, 104]) VARIANTS.push(makeVariant("pine", s));
   for (const s of [201, 202, 203]) VARIANTS.push(makeVariant("birch", s));
   for (const s of [301, 302, 303]) VARIANTS.push(makeVariant("oak", s));
+  // newer species go after the first three, so the variant numbers stored in old saves keep pointing at the same trees
+  for (const s of [401, 402]) VARIANTS.push(makeVariant("spruce", s));
+  for (const s of [501, 502]) VARIANTS.push(makeVariant("maple", s));
+  for (const s of [601, 602]) VARIANTS.push(makeVariant("cherry", s));
+  for (const s of [701, 702]) VARIANTS.push(makeVariant("willow", s));
   const logGeo = (r) => new THREE.CylinderGeometry(r, r, 1.15, 12, 1);
-  MAT.logGeo = { pine: logGeo(SPECIES.pine.logR), birch: logGeo(SPECIES.birch.logR), oak: logGeo(SPECIES.oak.logR) };
+  MAT.logGeo = forSp((sp) => logGeo(SPECIES[sp].logR));
   MAT.stumpGeo = new THREE.CylinderGeometry(1, 1.2, 1, 12, 1);
 }
+// Which species grows where: spruce and pine up high, willows and birches by the water, oaks, maples and cherries
+// in the open, mixed woods by soil patches. One random draw per tree, so every tree keeps its place.
 function speciesAt(x, z, h, f, R) {
-  const r = R();
-  if (h > 12) return r < 0.85 ? "pine" : "birch";
-  if (h < 2.6) return r < 0.55 ? "birch" : r < 0.8 ? "pine" : "oak";
-  if (f < 0.3) return r < 0.6 ? "oak" : r < 0.8 ? "birch" : "pine";
+  const r = R(), pick = (list) => { let a = 0; for (const [sp, w] of list) { a += w; if (r < a) return sp; } return list[list.length - 1][0]; };
+  if (h > 12) return pick([["spruce", 0.5], ["pine", 0.38], ["birch", 0.12]]);
+  if (h < 2.6) return pick([["willow", 0.4], ["birch", 0.32], ["pine", 0.15], ["oak", 0.13]]);
+  if (f < 0.3) return pick([["oak", 0.35], ["cherry", 0.25], ["maple", 0.2], ["birch", 0.12], ["pine", 0.08]]);
   const sn = nD(x * 0.015, z * 0.015);
-  if (sn > 0.25) return r < 0.6 ? "birch" : r < 0.9 ? "pine" : "oak";
-  if (sn < -0.2) return r < 0.55 ? "oak" : r < 0.85 ? "pine" : "birch";
-  return r < 0.65 ? "pine" : r < 0.85 ? "oak" : "birch";
+  if (sn > 0.25) return pick([["birch", 0.45], ["maple", 0.25], ["pine", 0.2], ["oak", 0.1]]);
+  if (sn < -0.2) return pick([["oak", 0.4], ["maple", 0.22], ["pine", 0.2], ["cherry", 0.1], ["birch", 0.08]]);
+  return pick([["pine", 0.45], ["spruce", 0.2], ["oak", 0.15], ["maple", 0.1], ["birch", 0.1]]);
 }
 const SPACE = { null: 2.6, big: 3.8, titan: 6 };
 function rollMaterialMut(t, R) {
@@ -1834,7 +1949,7 @@ function placeTrees() {
     if (!fits(x, z, SPACE[size])) continue;
     const sp = speciesAt(x, z, h, f, R);
     const vs = VARIANTS.map((v, i) => i).filter((i) => VARIANTS[i].sp === sp), vi = vs[Math.floor(R() * vs.length)];
-    const baseS = sp === "oak" ? 0.8 + R() * 0.5 : sp === "pine" ? 0.8 + R() * 0.45 : 0.8 + R() * 0.35;
+    const baseS = 0.8 + R() * ({ oak: 0.5, pine: 0.45, spruce: 0.45, maple: 0.4, willow: 0.4 }[sp] || 0.35);
     const t = {
       kind: "tree", x, z, y: h - 0.1, sp, v: vi, baseS, rot: R() * TAU, state: "standing", shake: 0, shakeT: 0, shakeAxis: new THREE.Vector3(1, 0, 0), growT: 1, idx: 0, near: -1, stump: null, regrowAt: 0,
       mut: { size, gold: false, crystal: false, wet: false, frost: false, shock: false }, wetT: 0, frostT: 0, fx: null,
@@ -1953,7 +2068,7 @@ function updateLOD(dt, force) {
 function bakeTreeShade() {
   const col = terrainMesh.geometry.attributes.color;
   for (const t of trees) {
-    const v = VARIANTS[t.v], R = Math.max(1.8, v.crownR * t.s * (t.sp === "oak" ? 1.05 : 0.9)), strength = t.sp === "birch" ? 0.22 : 0.34;
+    const v = VARIANTS[t.v], R = Math.max(1.8, v.crownR * t.s * (t.sp === "oak" || t.sp === "maple" ? 1.05 : 0.9)), strength = { birch: 0.22, cherry: 0.26, willow: 0.28 }[t.sp] || 0.34;
     const i0 = clamp(Math.floor((t.x - R + HALF) / CELL), 0, SEG), i1 = clamp(Math.ceil((t.x + R + HALF) / CELL), 0, SEG);
     const j0 = clamp(Math.floor((t.z - R + HALF) / CELL), 0, SEG), j1 = clamp(Math.ceil((t.z + R + HALF) / CELL), 0, SEG);
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
@@ -3296,7 +3411,10 @@ function emitChips(p, n, dir, color = 0xd9b27a) {
     parts.chips.list.push({ p: p.clone(), v, c, r: new THREE.Euler(Math.random() * 6, Math.random() * 6, 0), w: (Math.random() - 0.5) * 20, life: 2.5 + Math.random(), s: 0.6 + Math.random() * 0.8 });
   }
 }
-const LEAF_COLORS = { pine: [0x2f4d2a, 0x3c5f33, 0x6b5a33], birch: [0x8fb84a, 0xb5c44a, 0xd9c35a], oak: [0x4f7d31, 0x3f6b2a, 0x8a8a3a] };
+const LEAF_COLORS = {
+  pine: [0x2f4d2a, 0x3c5f33, 0x6b5a33], birch: [0x8fb84a, 0xb5c44a, 0xd9c35a], oak: [0x4f7d31, 0x3f6b2a, 0x8a8a3a],
+  spruce: [0x223f30, 0x2c4b3a, 0x55502e], maple: [0xc8401e, 0xe07a24, 0xd9a332], cherry: [0xf4b6c8, 0xf9d0dc, 0xe78aa8], willow: [0x9ab84a, 0xb7c75a, 0xd4c46a],
+};
 const GOLD_LEAVES = [0xffd04a, 0xffb52e, 0xfff0a0];
 function emitLeaves(p, n, sp, spread = 2, palette = null) {
   const cols = palette || LEAF_COLORS[sp];
@@ -4153,7 +4271,7 @@ function updatePlayer(dt) {
       }
     }
     if (prevT < 0.4 && c.t >= 0.4) SFX.whoosh();
-    if (prevT < CHOP_HIT && c.t >= CHOP_HIT && !carried) hitTree(c.tree);
+    if (prevT < CHOP_HIT && c.t >= CHOP_HIT && !carried) { if (c.limb) hitLimbs(c.limb); else hitTree(c.tree); }
     if (c.t >= 1) {
       player.chop = null;
       if (player.chopHeld || player.chopQueued) { player.chopQueued = false; tryChop(); }
@@ -4184,6 +4302,14 @@ function tryChop(aimFirst = false) {
   if (player.sawing) return;
   const st = sawTarget(), saw = () => { if (st.ok && state.tool !== "saw") setTool("saw"); startSaw(st); };
   const t = findTarget();
+  // a crown (pointed at, or stood in with no tree to fell in reach): limbing with the axe
+  if (st && st.crown && ((st.aimed && (aimFirst || aim.pin)) || !t)) {
+    if (!st.ok) { if (msgCooldown <= 0) { toast(`가지까지 조금 더 가까이 가세요 (${st.far.toFixed(1)}m 더)`); msgCooldown = 2.5; } SFX.deny(); return; }
+    if (state.tool !== "axe") setTool("axe");
+    player.chop = { t: 0, tree: null, limb: st.p, face: Math.atan2(st.C.x - player.pos.x, st.C.z - player.pos.y) };
+    return;
+  }
+  if (st && st.crown) { player.chop = { t: 0, tree: t, face: Math.atan2(t.x - player.pos.x, t.z - player.pos.y) }; if (state.tool !== "axe") setTool("axe"); return; }
   // with the saw in hand, or when a spot on a log was clicked or tapped, the log comes before the tree in front
   // (unless the pointed-at spot is out of reach and there is a tree to chop with the axe in hand)
   if (st && (state.tool === "saw" || (st.aimed && (aimFirst || aim.pin))) && (st.reason !== "far" || !t || state.tool === "saw")) { saw(); return; }
@@ -4225,7 +4351,7 @@ function hitTree(t) {
   emitLeaves(new THREE.Vector3(t.x, t.y + v.height * t.s * 0.7, t.z), 3 + Math.floor(Math.random() * 3), t.sp, v.crownR * t.s);
   if (U.snow.value > 0.3) emitPuff(new THREE.Vector3(t.x, t.y + v.crownY * t.s, t.z), Math.round(8 * U.snow.value), { color: [0.95, 0.97, 1], size: 1.2, spread: v.crownR * t.s * 0.6, up: -0.6, life: 1.6, alpha: 0.5, grow: 0.8 });
   t.shake = 1; t.shakeT = 0; t.shakeAxis.set(uz, 0, -ux).normalize();
-  if (t.mut.crystal) SFX.glass(); else SFX.chop(t.sp === "oak" || !!t.mut.size);
+  if (t.mut.crystal) SFX.glass(); else SFX.chop(t.sp === "oak" || t.sp === "maple" || !!t.mut.size);
   if (t.mut.gold) SFX.coin(Math.floor(Math.random() * 4));
   if (t.mut.shock) SFX.zap();
   cam.shake = Math.max(cam.shake, 0.05);
@@ -4476,7 +4602,7 @@ function fellTree(t, dirX, dirZ) {
   p.holder.position.set(c.x, t.cutY, c.z).applyAxisAngle(UP, d.rot).multiplyScalar(t.s).add(_v.set(t.x, t.y, t.z));
   scene.add(p.holder);
   falling.push({ t, p, axis: new THREE.Vector3(dirZ, 0, -dirX).normalize(), dir: new THREE.Vector3(dirX, 0, dirZ), theta: 0.05, omega: 0.12, phase: "fall", timer: 0, bounces: 0, L: (v.topY - t.cutY) * t.s });
-  state.stats.trees++; state.stats[t.sp]++;
+  state.stats.trees++; state.stats[t.sp] = (state.stats[t.sp] || 0) + 1;
   if (d.tags.length) { state.stats.mutTrees++; for (const k of d.tags) state.stats.mut[k] = (state.stats.mut[k] || 0) + 1; }
   toast(d.tags.includes("titan") ? "타이탄이 쓰러진다!!" : "쓰러진다!", true); SFX.creak(t.mut.size ? 0.7 : 1);
   if (d.tags.length) toast(`${treeLabel(d)} — 통나무 값 ×${fmtMult(mutMult(d.tags))}`);
@@ -4530,6 +4656,30 @@ function updateFalling(dt) {
 /* ---------- lying on the ground ---------- */
 const _sa = new THREE.Vector3(), _sb = new THREE.Vector3(), _sq = new THREE.Quaternion();
 // Where a piece comes to rest: both ends on the ground (the crown end held up by its limbs), keeping its heading.
+// Points spread over a variant's limbs (every few vertices of their bark), in tree space, with where each limb's
+// points start, so a top piece can find the limbs it still carries (every limb at or above its bottom cut).
+function limbSamples(v) {
+  if (v.limbPts) return v.limbPts;
+  const P = v.lod0.trunk.attributes.position, xs = [], start = [];
+  for (const sb of v.subs) { start.push(xs.length / 3); for (let i = sb.bark[0]; i < sb.bark[1]; i += 9) xs.push(P.getX(i), P.getY(i), P.getZ(i)); }
+  return (v.limbPts = { pts: new Float32Array(xs), start, n: xs.length / 3 });
+}
+// the crown a top piece still carries: its limb points, the height of its lowest limb, its centre and reach
+function crownOf(p) {
+  if (p._crown !== undefined) return p._crown;
+  return (p._crown = crownCalc(p));
+}
+function crownCalc(p) {
+  if (!pieceTop(p)) return null;
+  const v = VARIANTS[p.d.v], L = limbSamples(v), k = v.subs.findIndex((sb) => sb.y >= p.s0);
+  if (k < 0) return null;
+  const i0 = L.start[k], n = L.n - i0, c = new THREE.Vector3();
+  for (let i = i0; i < L.n; i++) c.x += L.pts[i * 3], c.y += L.pts[i * 3 + 1], c.z += L.pts[i * 3 + 2];
+  c.divideScalar(Math.max(1, n));
+  let r = 0;
+  for (let i = i0; i < L.n; i++) r = Math.max(r, Math.hypot(L.pts[i * 3] - c.x, L.pts[i * 3 + 1] - c.y, L.pts[i * 3 + 2] - c.z));
+  return { pts: L.pts, i0, n, firstY: v.subs[k].y, c, r };
+}
 // Other pieces count as ground: a piece comes to rest on top of the ones under it, never through them.
 // A piece's trunk centre line in world space as a short polyline with radii, in the pose it is in or settling into.
 function axisPts(q) {
@@ -4582,6 +4732,14 @@ function restHeight(x, z, r, lines, used) {
   }
   return h;
 }
+// The truck holds up a log that falls or is dropped across it: the cab roof, or the bonnet and the bed rails.
+function truckRest(x, z, r, used) {
+  if (!truck.group || !truck.group.visible || !(state.car.step > 0)) return -Infinity;
+  const c = Math.cos(truck.yaw), s = Math.sin(truck.yaw), dx = x - truck.x, dz = z - truck.z, lx = c * dx - s * dz, lz = s * dx + c * dz;
+  if (Math.abs(lx) > 0.95 + r * 0.5 || Math.abs(lz) > 2.3 + r * 0.5) return -Infinity;
+  used.add(truck);
+  return truck.group.position.y + (state.car.step >= ASSEMBLY.findIndex((a) => a.id === "cab") + 1 && lz > -0.4 && lz < 1.1 ? 2.3 : 1.45) + r;
+}
 // a piece leaving the ground lets whatever lay on it come down (onto the ground or whatever is now under it)
 function unsupport(q) {
   for (const r of pieces) if (r !== q && r.state === "ground" && r.restsOn && r.restsOn.has(q)) settle(r);
@@ -4613,7 +4771,7 @@ function settle(p, stump = null, quick = false) {
     const off = new THREE.Vector3().addVectors(A, B).multiplyScalar(0.5).sub(p.holder.position).applyQuaternion(_sq);
     const R = 0.6 * Math.max(rA, rB), lines = supportsNear(p, cx, cz, 1), used = new Set();
     let gy = -Infinity;
-    for (const [ox, oz] of [[0, 0], [R, 0], [-R, 0], [0, R], [0, -R]]) gy = Math.max(gy, groundY(cx + ox, cz + oz), restHeight(cx + ox, cz + oz, 0, lines, used));
+    for (const [ox, oz] of [[0, 0], [R, 0], [-R, 0], [0, R], [0, -R]]) gy = Math.max(gy, groundY(cx + ox, cz + oz), restHeight(cx + ox, cz + oz, 0, lines, used), truckRest(cx + ox, cz + oz, 0, used));
     p.toPos = new THREE.Vector3(cx, gy + L / 2 + 0.005, cz).sub(off);
     p.upright = true; p.restsOn = used;
     p.state = "settle"; p.t = quick ? 1 : 0;
@@ -4657,7 +4815,7 @@ function settle(p, stump = null, quick = false) {
       const k = i / ns, x = lerp(ax, bx, k), z = lerp(az, bz, k), r = spineAt(v.spine, lerp(ya, yb, k)).r * s;
       let h = i === ns ? gy(x, z) + prop : -Infinity;
       for (const [c, sn] of RING) { const ox = r * (c * ux + sn * wx), oy = r * sn * wy, oz = r * (c * uz + sn * wz); h = Math.max(h, gy(x + ox, z + oz) - oy); }
-      hs[i] = Math.max(h, restHeight(x, z, r, lines, used)) - _bo.copy(offs[i]).applyQuaternion(_bq).y;
+      hs[i] = Math.max(h, restHeight(x, z, r, lines, used), truckRest(x, z, r, used)) - _bo.copy(offs[i]).applyQuaternion(_bq).y;
     }
   };
   const rest = (cx, cz, hx, hz, used) => {
@@ -4735,22 +4893,55 @@ function settle(p, stump = null, quick = false) {
   // the pose that is kept, sampled finely (the samples, hs, also drive the bend below)
   ns = clamp(Math.ceil(L / 0.15), 2, 120); fillOffs();
   best = best.x !== undefined ? rest(best.x, best.z, best.hx2, best.hz2, used) : rest(cx, cz, hx, hz, used);
-  const { ax, az, bx, bz, ay, by } = best;
+  let { ax, az, bx, bz, ay, by } = best;
   // what is left hanging in the air (a felled tree still bridging a ravine snaps there when it lands)
   p.air = best.onPiece ? 0 : best.air; p.airY = lerp(ya, yb, best.airK);
   p.upright = false; p.restsOn = used;
-  const axisNow = _v.subVectors(B, A).normalize(), axisNew = _v2.set(bx - ax, by - ay, bz - az).normalize();
-  _sq.setFromUnitVectors(axisNow, axisNew);
+  // the holder's pose for given end heights and a turn about the trunk (the holder sits on the trunk's bowed centre
+  // line, not on the straight line between its ends: that offset is kept)
+  const axisNow = new THREE.Vector3().subVectors(B, A).normalize(), mid0 = new THREE.Vector3().addVectors(A, B).multiplyScalar(0.5).sub(p.holder.position);
+  const poseFor = (by2, roll) => {
+    const dir = new THREE.Vector3(bx - ax, by2 - ay, bz - az).normalize(), q = new THREE.Quaternion().setFromUnitVectors(axisNow, dir);
+    if (roll) q.premultiply(new THREE.Quaternion().setFromAxisAngle(dir, roll));
+    const mid = new THREE.Vector3(ax, ay, az).addScaledVector(dir, L / 2);
+    return { quat: q.clone().multiply(p.holder.quaternion), pos: mid.sub(mid0.clone().applyQuaternion(q)), q, dir };
+  };
+  let pose = poseFor(by, 0);
+  // A crown rests on its limbs: it turns about the trunk so they spread along the ground instead of standing up or
+  // digging in, and its end is lifted just enough that no limb goes more than a little way into the ground
+  // (crushed twigs). Its trunk then rests on the limbs, not on the ground.
+  const crown = crownOf(p);
+  if (crown && crown.n) {
+    const piv = p.pivot, rq = new THREE.Quaternion().setFromAxisAngle(UP, p.d.rot), w = new THREE.Vector3(), step = Math.max(1, Math.floor(crown.n / 600));
+    const probe = (ps) => {
+      let pen = 0, high = 0, k = 0;
+      for (let i = crown.i0; i < crown.i0 + crown.n; i += step) {
+        w.set(crown.pts[i * 3] - piv.x, crown.pts[i * 3 + 1] - piv.y, crown.pts[i * 3 + 2] - piv.z).applyQuaternion(rq).multiplyScalar(s).applyQuaternion(ps.quat).add(ps.pos);
+        const g = groundY(w.x, w.z) - w.y;
+        if (g > pen) { pen = g; k = Math.max(0.15, (w.x - ax) * ps.dir.x + (w.y - ay) * ps.dir.y + (w.z - az) * ps.dir.z) / L; }
+        high = Math.max(high, -g);
+      }
+      return { pen, high, k };
+    };
+    let bestRoll = 0, bestCost = Infinity;
+    for (let r = 0; r < 12; r++) { const ps = poseFor(by, (r / 12) * TAU), m = probe(ps), cost = m.pen + 0.35 * m.high; if (cost < bestCost) { bestCost = cost; bestRoll = (r / 12) * TAU; } }
+    for (let it = 0; it < 4; it++) {
+      const ps = poseFor(by, bestRoll), m = probe(ps);
+      if (m.pen < 0.3) { pose = ps; break; }
+      by = Math.min(ay + L * 0.6, by + (m.pen - 0.25) / m.k);
+      pose = poseFor(by, bestRoll);
+    }
+    // where the limbs begin they carry the trunk: the bend (below) stops short of them
+    kCrown *= 0.85;
+  }
   p.fromPos = p.holder.position.clone(); p.fromQuat = p.holder.quaternion.clone();
-  p.toQuat = _sq.clone().multiply(p.holder.quaternion);
-  // the holder sits on the trunk's (bowed) centre line, not on the straight line between its ends: keep that offset
-  const bow = new THREE.Vector3().addVectors(A, B).multiplyScalar(0.5).sub(p.holder.position).applyQuaternion(_sq);
-  p.toPos = new THREE.Vector3((ax + bx) / 2, (ay + by) / 2, (az + bz) / 2).sub(bow);
+  p.toQuat = pose.quat; p.toPos = pose.pos;
+  _sq.copy(pose.q);
   // A rigid log can't touch bumpy ground everywhere: it is drawn bent a hair (it reads as the trunk's own crook) so it
   // lies on the ground along its whole length. Each part goes down by at most the gap under it, never into the ground
   // (the crown end stays on its limbs, which the shader bends along with the trunk).
   // (never more than 5 % of its length, at most 0.5 m: a trunk's natural sweep, not a sag into a ravine)
-  const cap = Math.min(0.5, 0.05 * L), gapAt = (j) => clamp(lerp(ay, by, j / ns) - hs[j], 0, cap), N1 = BEND_N - 1, d = [];
+  const cap = Math.min(0.5, 0.05 * L), gapAt = (j) => (crown && j / ns >= kCrown ? 0 : clamp(lerp(ay, by, j / ns) - hs[j], 0, cap)), N1 = BEND_N - 1, d = [];
   for (let i = 0; i < BEND_N; i++) { const j = (i / N1) * ns, a = Math.min(ns - 1, Math.floor(j)); d.push(lerp(gapAt(a), gapAt(a + 1), j - a)); }
   for (let it = 0; it < 12; it++) {
     let ok = true;
@@ -4775,10 +4966,10 @@ function pieceGap(p) {
   const r = pieceReach(p, player.pos.x, player.pos.y);
   return r.d - diamAt(p.d, lerp(p.s0, pieceEnd(p), r.k)) / 2;
 }
-function nearestPiece(range = 1.4) {
+function nearestPiece(range = 1.4, accept = null) {
   let best = null, bd = 1e9;
   for (const p of pieces) {
-    if (p.state !== "ground") continue;
+    if (p.state !== "ground" || (accept && !accept(p))) continue;
     const d = pieceGap(p);
     if (d < range && d < bd) { bd = d; best = p; }
   }
@@ -4835,6 +5026,12 @@ function pickPieceAt(sx, sy) {
       if (t < bt && dist < diamAt(p.d, y) / 2 + 0.05) { bt = t; best = { p, y }; }
       _ca.copy(_cb);
     }
+    // a top's crown: a ball around its limbs (the axe takes them off)
+    const cr = crownOf(p);
+    if (cr) {
+      const C = _cr.copy(cr.c).applyMatrix4(M), R = cr.r * p.d.s * 0.7, oc = _cd.subVectors(_ro, C), b = oc.dot(_rd), c = oc.dot(oc) - R * R, disc = b * b - c;
+      if (disc > 0) { const t = -b - Math.sqrt(disc); if (t > 0 && t < bt) { bt = t; best = { p, y: cr.firstY, crown: true }; } }
+    }
   }
   return best;
 }
@@ -4851,11 +5048,37 @@ function aimedCut() {
 
 /* ---------- sawing ---------- */
 // Where the saw would cut: wherever the player points at a log, or else straight across the log in front of the woodcutter.
+// where a top's crown is (world), and how far its limbs reach
+function crownWorld(p, out) {
+  const c = crownOf(p); p.inner.updateWorldMatrix(true, false);
+  return out.copy(c.c).applyMatrix4(p.inner.matrixWorld);
+}
+// a crown the woodcutter is standing in, or pointing at: the axe can take its limbs off
+function crownTarget(h) {
+  let p = h && h.crown ? h.p : null;
+  if (!p && !h) {
+    let bd = 1e9;
+    for (const q of pieces) {
+      if (q.state !== "ground" || !crownOf(q)) continue;
+      const C = crownWorld(q, _cb), d = Math.hypot(C.x - player.pos.x, C.z - player.pos.y) - crownOf(q).r * q.d.s * 0.75;
+      if (d < 0.8 && d < bd) { bd = d; p = q; }
+    }
+    // standing at the bare trunk instead: that's a saw cut
+    if (p) { const n = nearestPiece(1.1, (q) => (pieceEnd(q) - q.s0) * q.d.s >= 0.5); if (n && pieceGap(n) < bd && !(n === p && pieceReach(p, player.pos.x, player.pos.y).k * (pieceEnd(p) - p.s0) + p.s0 > crownOf(p).firstY)) return null; }
+  }
+  if (!p) return null;
+  const C = crownWorld(p, new THREE.Vector3()), far = Math.max(0, Math.hypot(C.x - player.pos.x, C.z - player.pos.y) - crownOf(p).r * p.d.s * 0.75 - 1.6);
+  if (p.limbHp == null) p.limbHp = Math.max(3, Math.round((crownVol(p.d, p.s0) * WOOD[p.d.sp].density) / 120));
+  return { p, crown: true, C, aimed: !!h, far, ok: far <= 0, reason: far > 0 ? "far" : null, y: crownOf(p).firstY, diam: diamAt(p.d, crownOf(p).firstY) };
+}
 function sawTarget() {
   const h = aimedCut();
+  const ct = crownTarget(h);
+  if (ct) return ct;
   let p = h && h.p, y = h && h.y;
   if (!h) {
-    p = nearestPiece(1.1);
+    // the nearest log that can still be sawn (a round too short to cut doesn't hide the log beside it)
+    p = nearestPiece(1.1, (q) => (pieceEnd(q) - q.s0) * q.d.s >= 0.5 && !q.upright) || nearestPiece(1.1);
     if (!p) return null;
     const r = pieceReach(p, player.pos.x + Math.sin(player.yaw) * 0.6, player.pos.y + Math.cos(player.yaw) * 0.6);
     y = lerp(p.s0, pieceEnd(p), r.k);
@@ -4874,6 +5097,36 @@ function sawTarget() {
     if (!reason && far > 0) reason = "far";
   }
   return { p, y, diam, ok: !reason, reason, aimed: !!h, far };
+}
+/* ---------- limbing ---------- */
+// The axe takes the limbs off a felled top: every hit clears part of the crown, and when it's gone only the clean
+// trunk is left (the brush stays behind and rots away), which can be sawn, carried and sold like any log.
+function hitLimbs(p) {
+  if (!pieces.includes(p) || p.state !== "ground" || !crownOf(p)) { SFX.whoosh(); return; }
+  if (p.limbHp == null) p.limbHp = Math.max(3, Math.round((crownVol(p.d, p.s0) * WOOD[p.d.sp].density) / 120));
+  p.limbHp -= AXES[state.axe].dmg * (0.9 + Math.random() * 0.2);
+  const hp = axeHeadWorld(new THREE.Vector3()), C = crownWorld(p, new THREE.Vector3()), dir = _v.subVectors(hp, C).setY(0).normalize();
+  emitChips(hp, 6 + state.axe, dir, 0xd9b27a);
+  emitLeaves(hp.clone().lerp(C, 0.3), 5, p.d.sp, 1.5);
+  SFX.chop(false);
+  cam.shake = Math.max(cam.shake, 0.03);
+  if (p.limbHp <= 0) removeCrown(p);
+}
+function removeCrown(p) {
+  const C = crownWorld(p, new THREE.Vector3()), R = crownOf(p).r * p.d.s, end = pieceEnd(p);
+  emitLeaves(C, 40, p.d.sp, R);
+  emitPuff(C, 8, { size: 1.4, spread: R * 0.5, up: 0.5, life: 1.8, alpha: 0.3, color: [0.55, 0.5, 0.4] });
+  SFX.crash(0.4);
+  state.stats.limbed = (state.stats.limbed || 0) + 1;
+  if ((end - p.s0) * p.d.s < 0.2) { removePiece(p); unsupport(p); toast("가지를 다 쳐냈어요 — 남은 줄기가 없어요"); save(); return; }
+  const q = buildPiece({ id: pieceSeq++, d: p.d, s0: p.s0, s1: end, kind: "log", state: "ground" });
+  p.holder.updateWorldMatrix(true, false);
+  q.holder.position.copy(p.holder.position); q.holder.quaternion.copy(p.holder.quaternion);
+  q.pivot = { ...p.pivot }; q.inner.position.copy(p.inner.position);
+  scene.add(q.holder);
+  removePiece(p); pieces.push(q); settle(q); unsupport(p);
+  toast(`가지를 다 쳐냈어요 — ${treeLabel(q.d)} 통나무 ${pieceLine(q)}`);
+  checkQuest(); save();
 }
 function startSaw(st) {
   if (!st.ok) {
@@ -5472,6 +5725,9 @@ function fadeRoof(dt) {
 function updateTruck(dt) {
   fadeRoof(dt);
   if (!truck.group || !truck.group.visible) return;
+  // logs lying on the truck come down when it drives off from under them
+  const ra = truck.restAt || (truck.restAt = { x: truck.x, z: truck.z, yaw: truck.yaw });
+  if (Math.hypot(truck.x - ra.x, truck.z - ra.z) > 0.6 || Math.abs(angDiff(truck.yaw, ra.yaw)) > 0.2) { ra.x = truck.x; ra.z = truck.z; ra.yaw = truck.yaw; unsupport(truck); }
   const driving = player.vehicle === truck;
   if (driving) {
     let thr = 0, st = 0, brake = false;
@@ -6003,13 +6259,14 @@ function updateWorldHUD(dt) {
   const cs = cutView.st, sawNext = cs && (state.tool === "saw" || (touch && aim.pin) || !target);
   if (player.vehicle || player.task || player.sawing) { /* prompt set above */ }
   else if (it && !(cs && cs.ok && it.label === "무거움")) { setPrompt(`${key(it.key || "E", it.label)} ${it.text}`); use = it.label; }
+  else if (cs && cs.crown && (sawNext || cs.aimed)) setPrompt(cs.ok ? (touch ? "<b>도끼질</b> 버튼으로 가지 치기 — 가지를 다 쳐내면 통나무만 남아요" : `${cs.aimed ? "클릭" : "<kbd>Space</kbd> / 클릭"} — 도끼로 가지 치기 · 가지를 다 쳐내면 통나무만 남아요`) : "가지까지 조금 더 가까이 가세요");
   else if (sawNext && !cs.ok) setPrompt(cs.reason === "thick" ? `이 톱으로는 여기를 못 잘라요 — 더 가는 쪽을 ${touch ? "탭하거나" : "가리키거나"} 상점에서 더 큰 톱을 사세요` : cs.reason === "far" ? "조금 더 가까이 가야 자를 수 있어요" : "너무 짧아서 더 자를 수 없어요");
   else if (sawNext) setPrompt(touch ? `<b>톱질</b> 버튼을 누르고 있으면 표시한 곳을 잘라요 · ${aim.pin ? "다른 곳을 탭하면 다시 골라요" : "통나무를 탭하면 자를 곳을 고를 수 있어요"}`
     : cs.aimed ? "클릭(또는 <kbd>Space</kbd>)을 누르고 있으면 가리킨 곳을 잘라요" : "<kbd>Space</kbd> / 클릭을 누르고 있으면 표시한 곳을 잘라요 · 마우스로 통나무를 가리키면 그 자리를 잘라요");
   else if (target) setPrompt(touch ? "<b>도끼질</b> 버튼으로 나무 베기" : cs && cs.aimed && cs.ok ? "<kbd>Space</kbd> — 나무 베기 · 클릭 — 가리킨 곳 톱질" : "<kbd>Space</kbd> / 클릭 — 나무 베기");
   else setPrompt("");
   if (touch && useBtn.textContent !== use) useBtn.textContent = use;
-  if (touch) { const want = player.vehicle ? "브레이크" : player.sawing || sawNext ? "톱질" : target ? "도끼질" : state.tool === "axe" ? "도끼질" : "톱질"; if (chopBtn.textContent !== want) chopBtn.textContent = want; }
+  if (touch) { const want = player.vehicle ? "브레이크" : player.sawing ? "톱질" : cs && cs.crown ? "도끼질" : sawNext ? "톱질" : target ? "도끼질" : state.tool === "axe" ? "도끼질" : "톱질"; if (chopBtn.textContent !== want) chopBtn.textContent = want; }
   const h = Math.floor(state.hour) % 24, m = Math.floor((state.hour % 1) * 60);
   const W = WEATHER[weather.type];
   $("#clock").textContent = `${env.night > 0.5 ? "밤" : env.day > 0.5 ? "낮" : h < 12 ? "새벽" : "저녁"} ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")} · ${W.icon} ${W.name}`;
@@ -6038,6 +6295,20 @@ function updateCutMarker() {
   }
   cutRing.visible = !!st;
   if (!st) { el.classList.add("hidden"); return; }
+  if (st.crown) {
+    // limbing: a ring where the limbs start, and the label over the crown
+    const p = st.p, C = pieceWorldAt(p, st.y, new THREE.Vector3()), A = pieceWorldAt(p, p.s0, _sa), B = pieceWorldAt(p, pieceEnd(p), _sb);
+    cutRing.position.copy(C); cutRing.quaternion.setFromUnitVectors(_v.set(0, 0, 1), _v2.subVectors(B, A).normalize());
+    cutRing.scale.setScalar(st.diam / 2 + 0.08); cutRing.material.color.set(st.ok ? 0xffd36a : 0xd9d6c4);
+    const sp = screenPos(_v.copy(st.C).add(_v2.set(0, 0.6, 0)));
+    el.classList.toggle("hidden", !sp.ok);
+    el.style.transform = `translate(${sp.x}px, ${sp.y}px) translate(-50%, -100%)`;
+    const hits = Math.max(1, Math.ceil(p.limbHp / AXES[state.axe].dmg)), key = ["crown", p.id, hits, st.ok, Math.round(st.far * 5)].join();
+    if (cutView.key === key) return;
+    cutView.key = key;
+    el.innerHTML = `<div><b>가지치기</b> — 도끼로 가지를 쳐내면 통나무만 남아요</div>` + (st.ok ? `<div class="dim">${AXES[state.axe].name}로 약 ${hits}번 · ${isTouch ? "도끼질 버튼" : st.aimed ? "클릭" : "Space / 클릭"}</div>` : `<div class="bad">${st.far.toFixed(1)}m 더 가까이 가야 해요</div>`);
+    return;
+  }
   const p = st.p, C = pieceWorldAt(p, st.y, new THREE.Vector3()), A = pieceWorldAt(p, p.s0, _sa), B = pieceWorldAt(p, pieceEnd(p), _sb);
   cutRing.position.copy(C);
   cutRing.quaternion.setFromUnitVectors(_v.set(0, 0, 1), _v2.subVectors(B, A).normalize());
@@ -6263,7 +6534,7 @@ function currentInteraction() {
   const h = aimedCut(), p = (h && pieceGap(h.p) < 0.9 && h.p) || nearestPiece(0.9);
   if (p) {
     const how = haulMode(p);
-    if (how === "truck" || how === "cut") return { label: "무거움", text: `${treeLabel(p.d)} ${pieceKind(p)} ${pieceLine(p)} — 너무 무거워요. ${how === "cut" ? "트럭에도 못 실으니 더 짧게 자르세요" : "더 짧게 자르거나 트럭으로"}`, run: () => pickUp(p) };
+    if (how === "truck" || how === "cut") return { label: "무거움", text: `${treeLabel(p.d)} ${pieceKind(p)} ${pieceLine(p)} — 너무 무거워요. ${crownOf(p) ? "도끼로 가지를 쳐내거나 더 짧게 자르세요" : how === "cut" ? "트럭에도 못 실으니 더 짧게 자르세요" : "더 짧게 자르거나 트럭으로"}`, run: () => pickUp(p) };
     return { label: how === "drag" ? "끌기" : "들기", text: `${how === "drag" ? "끌기" : "들기"} — ${treeLabel(p.d)} ${pieceKind(p)} ${pieceLine(p)}`, run: () => pickUp(p) };
   }
   return null;
@@ -6572,7 +6843,7 @@ async function init() {
   mode = "title";
   $("#startBtn").focus();
 }
-window.__woodcutter = { state, player, groundY, gait, trees, cam, pieces, interact, truck, placeTruck, save, worldItems, SITES, ASSEMBLY, stepAnchor, buyBlueprint, currentInteraction, keys, enterTruck, exitVehicle, loadOnBed, startWinch, sellBed, makePlanks, sawTarget, startSaw, finishCut, splitPiece, pickUp, dropCarried, pieceKg, pieceLen, pieceValue, haulMode, setTool, buy, equip, openShop, closeShop, nearKeeper, get sawing() { return player.sawing; }, get cabinInside() { return cabin.inside; }, get carried() { return carried; }, get mode() { return mode; }, setHour: (h) => { state.hour = h; }, tryChop, teleport: (x, z) => { if (player.vehicle) exitVehicle(true); stopSawing(); player.pos.set(x, z); }, char, camera, scene, grassChunks, DEBUG, VARIANTS, fromCabinLocal, findTarget, buildAxeMesh, info: () => ({ ...renderer.info.render }), weather, setWeather, lightning, setTreeMut, U, fellTree, falling, setupTree };
+window.__woodcutter = { state, player, groundY, aim, crownOf, gait, trees, cam, pieces, interact, truck, placeTruck, save, worldItems, SITES, ASSEMBLY, stepAnchor, buyBlueprint, currentInteraction, keys, enterTruck, exitVehicle, loadOnBed, startWinch, sellBed, makePlanks, sawTarget, startSaw, finishCut, splitPiece, pickUp, dropCarried, pieceKg, pieceLen, pieceValue, haulMode, setTool, buy, equip, openShop, closeShop, nearKeeper, get sawing() { return player.sawing; }, get cabinInside() { return cabin.inside; }, get carried() { return carried; }, get mode() { return mode; }, setHour: (h) => { state.hour = h; }, tryChop, teleport: (x, z) => { if (player.vehicle) exitVehicle(true); stopSawing(); player.pos.set(x, z); }, char, camera, scene, grassChunks, DEBUG, VARIANTS, fromCabinLocal, findTarget, buildAxeMesh, info: () => ({ ...renderer.info.render }), weather, setWeather, lightning, setTreeMut, U, fellTree, falling, setupTree };
 requestAnimationFrame(frame);
 init().catch((err) => { console.error(err); $("#loadMsg").textContent = "숲을 만드는 중 오류가 났습니다: " + err.message; });
 </script>
