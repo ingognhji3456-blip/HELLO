@@ -1491,6 +1491,8 @@ const S = {
   // style rank up: an arpeggio that climbs higher with the rank, a fanfare from S
   rankUp: r => { const base = [523, 587, 659, 698, 784, 880, 988][r] || 523; [1, 1.25, 1.5].forEach((m, i) => sfx(base * m, 0.18, "square", 0.035, 0, i * 0.05)); if (r >= 4) { [1, 1.5, 2].forEach((m, i) => sfx(base * m, 0.4, "triangle", 0.04, 0, 0.18 + i * 0.07)); voice("a", 260, 330, 0.25, 0.05, 0.12); } },
   // just dodge: a reversed whoosh and a slow-time hum
+  wtStart: () => { sfx(900, 0.5, "sine", 0.05, 200); sfx(120, 1.2, "triangle", 0.06, 60); },
+  wtEnd: () => { sfx(200, 0.25, "sine", 0.05, 700); },
   jdodge: () => { sfx(300, 0.35, "sine", 0.08, 1500); sfx(70, 0.8, "sine", 0.1, 50); noise(0.25, 0.06, 3000); },
   // execution: a heavy slicing crack
   execute: () => { noise(0.18, 0.2, 2000); sfx(900, 0.12, "sawtooth", 0.05, 120); sfx(90, 0.5, "sine", 0.18, 40); },
@@ -4170,7 +4172,7 @@ function startStage(si) {
   player = newPlayer(px, py);
   cam.x = clamp(player.x - W / 2, 0, level.w * TS - W); cam.y = level.h * TS - H;
   stageScore = score; combo = 0; comboT = 0; timer = 0; kills = 0; flagOpen = false; lockMsgT = 0; maxCombo = 0; stageXP = 0; stageStones = 0;
-  shake = 0; hitstop = 0; flash = 0;
+  shake = 0; hitstop = 0; flash = 0; wtT = 0;
   state = "play"; stateT = 0;
   setSong(SONGS[STAGES[si].song] ? STAGES[si].song : "stage");
   popText(stageLabel(si) + ". " + STAGES[si].name, W / 2, 56, "#fff", true);
@@ -18877,7 +18879,9 @@ function drawFinishMarks() {
 /* just dodge */
 function justDodge(p, fromX) {
   p.jdDone = true; p.jdBuff = 3 + (stat.jdMul > 1 ? 2 : 0); p.inv = Math.max(p.inv, 0.6);
-  slowT = Math.max(slowT, 0.9); hitstop = Math.max(hitstop, 0.05);
+  hitstop = Math.max(hitstop, 0.05);
+  if (heroTeam) slowT = Math.max(slowT, 0.9);
+  else { wtT = WT_DUR + (stat.jdMul > 1 ? 0.5 : 0); wtMax = wtT; S.wtStart(); }   // 시간 감속: the world crawls, the hero does not
   popText("저스트 회피!", p.x + 5, p.y - 14, "#7fe0ff");
   S.jdodge();
   fxs.push({ kind: "ring", x: p.x + 5, y: p.y + 7, t: 0, dur: 0.4, max: 26, c: "#7fe0ff" });
@@ -19516,11 +19520,11 @@ function openGate() {
   popText("성문이 열렸다", W / 2, 50, "#ffe066", true);
   for (let i = 0; i < 16; i++) parts.push({ x: level.gateX * TS + 8, y: rnd(60, 190), vx: rnd(-40, 40), vy: rnd(-60, 0), life: 0.6, ml: 0.6, c: "#8a8aa8", sz: 2, g: 200 });
 }
-function updateWorld(dt) {
+function updateWorld(dt, dtP) {
   timer += dt;
   if (lockMsgT > 0) lockMsgT -= dt;
   if (hit("cmd") && !player.dead && typeof f1Command === "function") f1Command();
-  updatePlayer(dt);
+  updatePlayer(dtP || dt);   // 시간 감속: the hero keeps full speed
   resolveAttacks();
   if (typeof compUpdate === "function") compUpdate(dt);
   if (typeof allyUpdate === "function") allyUpdate(dt);
@@ -19617,7 +19621,7 @@ function updateWorld(dt) {
   fxs = fxs.filter(f => f.t < f.dur);
   for (const t of texts) { t.t -= dt; if (t.num) { t.x += t.vx * dt; t.y += t.vy * dt; t.vy += 160 * dt; } else if (!t.big) t.y -= 18 * dt; }
   texts = texts.filter(t => t.t > 0);
-  updateCamera(dt);
+  updateCamera(dtP || dt);
   if (pendingLevels > 0 && !player.dead && (!boss || boss.state !== "dying")) { lvT += dt; if (lvT > 0.8) openLevelUp("play"); }
   else if (state === "play" && g5PendAw() > 0 && !player.dead && (!boss || boss.state !== "dying") && cineT <= 0 && !player.ultFx) { lvT += dt; if (lvT > 0.8) { lvT = 0; g5OpenAw("play"); } }
   f4Emit("g5tick", dt);
@@ -19652,6 +19656,22 @@ function stageClear() {
   S.clear(); setSong(null);
 }
 let lastBonus = 0, realT = 0, slowT = 0, kickX = 0, kickY = 0;
+// 시간 감속 (just dodge): for WT_DUR real seconds everything but the hero runs at WT_MUL speed
+var wtT = 0, wtMax = 1;
+const WT_DUR = 1.6, WT_MUL = 0.3;
+function wtDraw() {
+  if (wtT <= 0 || !player) return;
+  const a = clamp(Math.min(wtT / 0.25, (wtMax - wtT) / 0.12), 0, 1);
+  ctx.save();
+  ctx.fillStyle = "rgba(40,60,150," + (0.2 * a).toFixed(3) + ")"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "rgba(10,20,70," + (0.35 * a).toFixed(3) + ")";
+  ctx.fillRect(0, 0, W, 6); ctx.fillRect(0, H - 6, W, 6); ctx.fillRect(0, 6, 6, H - 12); ctx.fillRect(W - 6, 6, 6, H - 12);
+  // the hero's clock: a ring that empties as the time runs out
+  const px = Math.round(player.x + 5 - cam.x), py = Math.round(player.y + 7 - cam.y), f = wtT / wtMax;
+  ctx.globalAlpha = a; ctx.strokeStyle = "#7fe0ff"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(px, py, 15, -Math.PI / 2, -Math.PI / 2 + TAU * f); ctx.stroke();
+  ctx.restore();
+}
 
 /* ---------- menus ---------- */
 const PAUSE_ITEMS = ["계속하기", "스테이지 다시 시작", "기술표", "조작 설정", "타이틀로 나가기"];
@@ -19673,7 +19693,7 @@ function pauseChoose() {
   else if (pauseSel === 3) openControls("pause");
   else toTitle();
 }
-function toTitle() { if (f4Mode) { const m = f4Mode; f4Mode = null; if (typeof m.exit === "function") { try { m.exit(); } catch (e) { f4Fail("f4Mode.exit", e); } } } f4Emit("toTitle"); if (typeof compReset === "function") compReset(); if (typeof allyReset === "function") allyReset(); tagReset(); if (player && player.holding) dropHeld(player); if (fxs) fxs = fxs.filter(f => f.drawFn !== grb_fxHeld); if (run && !run.ended) endRun(); run = null; training = false; state = "title"; stateT = 0; titleSel = Math.min(titleSel, save.unlocked - 1); setSong("title"); }
+function toTitle() { wtT = 0; if (f4Mode) { const m = f4Mode; f4Mode = null; if (typeof m.exit === "function") { try { m.exit(); } catch (e) { f4Fail("f4Mode.exit", e); } } } f4Emit("toTitle"); if (typeof compReset === "function") compReset(); if (typeof allyReset === "function") allyReset(); tagReset(); if (player && player.holding) dropHeld(player); if (fxs) fxs = fxs.filter(f => f.drawFn !== grb_fxHeld); if (run && !run.ended) endRun(); run = null; training = false; state = "title"; stateT = 0; titleSel = Math.min(titleSel, save.unlocked - 1); setSong("title"); }
 function titleChoose() {
   S.menu();
   const it = TITLE_ITEMS[titleItem];
@@ -23469,11 +23489,14 @@ function frame(now) {
     if (training) trainTick(dt);
     if (hitstop > 0) { hitstop -= dt; dt *= 0.05; }
     else if (slowT > 0) { slowT -= dt; dt *= 0.35; }
+    let dtP = 0;
+    if (wtT > 0 && hitstop <= 0 && slowT <= 0) { wtT -= dt; dtP = dt; dt *= WT_MUL; if (wtT <= 0 || player.dead) { wtT = 0; S.wtEnd(); } }
     dt = finDt(dt);
     if (shake > 0) shake = Math.max(0, shake - 40 * dt);
     if (flash > 0) flash -= dt;
-    updateWorld(dt);
+    updateWorld(dt, dtP);
     drawWorld();
+    wtDraw();
     finDraw();
   } else if (state === "pause") {
     if (mUp()) { pauseSel = (pauseSel + PAUSE_ITEMS.length - 1) % PAUSE_ITEMS.length; S.menu(); }
