@@ -69806,6 +69806,143 @@ if (typeof window === "object" && window.__blade) {
   def("spawnAllies", () => { if (typeof allyArena !== "function") return false; allyArena(); return true; });
   def("squad", () => c3Squad().map(e => ({ id: e.c3id || (e === comp ? "ren" : "?"), x: Math.round(e.x), y: Math.round(e.y), hp: e.hp, dead: !!e.dead })));
 })();
+/* ===== 환경 처치: launched monsters slam walls, crash into others, land on spikes / saws, fall to their doom;
+   explosive barrels (폭발 통) sit near monsters - hit one (or knock a monster into it) and it blows up the crowd.
+   A finisher-strength hit (kb >= ENV_KB) launches a light monster for ENV_FLY s; the barrels are trap objects
+   (TRAP_DEFS.envB), so drawing and the stage reset come with the trap system. ===== */
+const ENV_KB = 150, ENV_FLY = 0.5, ENV_R = 36;
+function env_ok(e) {
+  const d = e && EDEF[e.type];
+  return !!d && !e.dead && !e.thrown && !e.held && !e.hidden && !e.dummy && d.gravity && !d.superArmor && !d.fixed;
+}
+function env_fx(x, y, s, c) {
+  popText(s, x, y - 10, c);
+  fxs.push({ kind: "ring", x, y, t: 0, dur: 0.25, max: 14, c });
+  for (let i = 0; i < 10; i++) parts.push({ x, y, vx: rnd(-140, 140), vy: rnd(-160, 20), life: rnd(0.25, 0.5), ml: 0.5, c: i % 2 ? c : "#ffffff", sz: i % 3 ? 1 : 2, g: 380 });
+  shake = Math.max(shake, 5); hitstop = Math.max(hitstop, 0.06); S.boom();
+  styleAdd("env", 40); ultAdd(6);
+}
+{
+  const env_hurt0 = hurtEnemy;
+  hurtEnemy = function (e, dmg, kb, fromX, heavy, kind) {
+    const r = env_hurt0.apply(this, arguments);
+    if (kind !== "env" && kind !== "throw" && kb >= ENV_KB && env_ok(e) && Math.abs(e.vx) > 1) {
+      const dir = sgn(e.vx);
+      e.envFly = { t: ENV_FLY, dmg: Math.max(1, Math.ceil(dmg * 0.8)), dir, hit: new Set() };
+      e.vx = dir * Math.max(Math.abs(e.vx), 320); e.vy = Math.min(e.vy, -110); e.ground = false;
+      e.stun = Math.max(e.stun, ENV_FLY + 0.15);
+    }
+    return r;
+  };
+  const env_upd0 = updateEnemy;
+  updateEnemy = function (e, dt) {
+    const F = e.envFly;
+    if (!F) return env_upd0(e, dt);
+    const vx = e.vx;
+    env_upd0(e, dt);
+    // fell out of the level while flying: a proper kill instead of vanishing
+    if (e.dead && e.y > level.h * TS + 30 && !e.envPit) { e.dead = false; e.envPit = true; e.envFly = null; popText("낙사!", e.x + e.w / 2, level.h * TS - 30, "#ffb060"); hurtEnemy(e, e.hp + 99999, 0, e.x, true, "env"); return; }
+    if (e.dead || e.envFly !== F) return;
+    F.t -= dt;
+    const cx = e.x + e.w / 2, cy = e.y + e.h / 2;
+    if (e.hitWall && Math.abs(vx) > 90) {   // 벽꿍
+      e.envFly = null; e.vx = -F.dir * 60; e.vy = -90; e.stun = Math.max(e.stun, 0.8);
+      env_fx(cx + F.dir * e.w / 2, cy, "벽꿍!", "#ffd040"); dust(cx + F.dir * e.w / 2, cy, 3);
+      hurtEnemy(e, F.dmg + 1, 0, cx - F.dir * 10, true, "env");
+      return;
+    }
+    e.vx = vx * Math.exp(-2.5 * dt);
+    for (const o of enemies) {   // bowling: the flying monster crashes into another one
+      if (o === e || o.dead || o.held || o.hidden || F.hit.has(o) || !overlaps(e, o)) continue;
+      F.hit.add(o);
+      env_fx((cx + o.x + o.w / 2) / 2, Math.min(cy, o.y + o.h / 2), "충돌!", "#ff8a3a");
+      hurtEnemy(o, F.dmg, 120, cx - F.dir * 10, true, "env");
+      hurtEnemy(e, F.dmg, 0, cx + F.dir * 10, true, "env");
+      if (!e.dead) { e.vx = -F.dir * 50; e.vy = -100; e.envFly = null; }
+      return;
+    }
+    for (const t of traps) {   // spikes that are up, saw blades
+      const hitT = t.kind === "I" ? t.ht >= 5 && overlaps(e, { x: t.x + 2, y: t.y + TS - t.ht, w: t.w - 4, h: t.ht })
+        : t.kind === "R" ? Math.abs(t.sx - cx) < 6 + e.w / 2 && Math.abs((t.floorSaw ? t.sy - 1 : t.sy) - cy) < 6 + e.h / 2 : false;
+      if (!hitT) continue;
+      e.envFly = null; e.vy = -150; e.stun = Math.max(e.stun, 0.6);
+      env_fx(cx, cy, t.kind === "I" ? "가시 처치!" : "톱날 처치!", "#ff5050");
+      hurtEnemy(e, F.dmg * 2 + 1, 0, cx - F.dir * 10, true, "env");
+      return;
+    }
+    if (F.t <= 0 || Math.abs(e.vx) < 40) e.envFly = null;
+    else e.stun = Math.max(e.stun, 0.15);
+  };
+}
+
+/* 폭발 통: placed at stage start next to a few ground monsters (not in the boss arena, not near the start) */
+function env_ground(x, y) {
+  const tx = Math.floor(x / TS);
+  for (let ty = Math.max(1, Math.floor(y / TS)); ty < level.h; ty++) {
+    const t = tileAt(tx, ty), t2 = tileAt(Math.floor((x + 9) / TS), ty);
+    if ((t === 1 || t === 2) && (t2 === 1 || t2 === 2) && tileAt(tx, ty - 1) === 0 && tileAt(Math.floor((x + 9) / TS), ty - 1) === 0) return ty * TS;
+    if (t === 1) return -1;
+  }
+  return -1;
+}
+function env_place(si) {
+  if (training || f4Mode || !level || !player || !STAGES[si]) return;
+  const R = mulberry32(((STAGES[si].seed || si) * 7 + 4219) >>> 0), want = lwOf(si) >= 2 ? 2 : 1;
+  const arenaX = level.arenaW ? level.arenaX * TS : Infinity;
+  const pool = enemies.filter(e => EDEF[e.type] && EDEF[e.type].gravity && e.x > player.x + 120 && e.x < arenaX - 40);
+  let n = 0;
+  for (let k = 0; k < pool.length * 2 && n < want && pool.length; k++) {
+    const e = pool[Math.floor(R() * pool.length)], x = Math.round(e.x + (R() < 0.5 ? -26 : 26)), gy = env_ground(x, e.y);
+    if (gy < 0 || x < player.x + 100 || x > arenaX - 30) continue;
+    const b = { kind: "envB", x, y: gy - 12, w: 10, h: 12, fuse: -1, hitAtk: null, sw: R() * 6 };
+    b.zone = { x: b.x, y: b.y, w: b.w, h: b.h };
+    if (traps.some(t => t.kind === "envB" ? Math.abs(t.x - x) < 60 : t.zone && overlaps(t.zone, { x: x - 4, y: b.y - 4, w: 18, h: 20 }))) continue;
+    traps.push(b); n++;
+  }
+}
+f4On("stageStart", si => env_place(si));
+function env_ignite(t, fuse) { if (t.fuse < 0) { t.fuse = fuse; S.menu(); } }
+function env_boom(t) {
+  t.dead = true;
+  const cx = t.x + 5, cy = t.y + 6, dmg = Math.max(4, Math.round(stat.dmg * 2.5));
+  popText("폭발!", cx, t.y - 10, "#ff9a3a");
+  fxs.push({ kind: "ring", x: cx, y: cy, t: 0, dur: 0.3, max: ENV_R, c: "#ffb050" });
+  fxs.push({ kind: "ring", x: cx, y: cy, t: 0, dur: 0.2, max: ENV_R * 0.6, c: "#ffffff" });
+  for (let i = 0; i < 26; i++) { const a = rnd(0, TAU), sp = rnd(40, 220); parts.push({ x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60, life: rnd(0.3, 0.7), ml: 0.7, c: i % 3 === 0 ? "#ffffff" : i % 3 === 1 ? "#ffb050" : "#ff5a2a", sz: i % 4 ? 1 : 2, g: 260 }); }
+  flash = Math.max(flash, 0.1); flashC = "#ffb050"; shake = Math.max(shake, 7); hitstop = Math.max(hitstop, 0.07); S.boom();
+  const near = (x, y, w, h) => { const qx = clamp(cx, x, x + w), qy = clamp(cy, y, y + h); return (cx - qx) ** 2 + (cy - qy) ** 2 < ENV_R * ENV_R; };
+  let hits = 0;
+  for (const e of enemies.slice()) if (!e.dead && !e.hidden && near(e.x, e.y, e.w, e.h)) { hurtEnemy(e, dmg, 220, cx, true, "blast"); hits++; }
+  if (boss && !boss.dead && boss.state !== "dying" && !boss.hidden && near(boss.x, boss.y, boss.w, boss.h)) { hurtBoss(dmg * 2, 0, cx, true, "blast"); hits++; }
+  if (player && !player.dead && near(player.x, player.y, player.w, player.h)) { player.vx = sgn(player.x + 5 - cx || 1) * 160; player.vy = Math.min(player.vy, -150); player.ground = false; }   // pushed, never hurt
+  for (const o of traps) if (o.kind === "envB" && !o.dead && Math.abs(o.x - t.x) < ENV_R + 10 && Math.abs(o.y - t.y) < ENV_R) env_ignite(o, 0.12);
+  if (hits) { styleAdd("barrel", 30 + 10 * Math.min(hits, 4)); ultAdd(4 + 2 * Math.min(hits, 4)); }
+  if (hits >= 3) texts.push({ s: hits + "마리 폭발 처치!", x: W / 2, y: 70, t: 1.4, ml: 1.4, c: "#ffb050", big: true, small: true });
+}
+TRAP_DEFS.envB = {
+  update(t, dt) {
+    if (t.fuse >= 0) {
+      t.fuse -= dt;
+      if (Math.random() < dt * 40) parts.push({ x: t.x + 5, y: t.y - 2, vx: rnd(-30, 30), vy: rnd(-70, -20), life: 0.25, ml: 0.25, c: Math.random() < 0.5 ? "#ffe066" : "#ff7a2a", sz: 1, g: 200 });
+      if (t.fuse <= 0) env_boom(t);
+      return;
+    }
+    const box = { x: t.x, y: t.y, w: t.w, h: t.h }, a = player && player.atk;
+    if (a && a !== t.hitAtk && a.t >= a.d.a0 && a.t <= a.d.a1 + 0.02 && overlaps(attackBox(), box)) { t.hitAtk = a; env_ignite(t, 0.45); return; }
+    for (const b of bullets) if (b.owner === "player" && !b.dead && overlaps({ x: b.x - b.r, y: b.y - b.r, w: b.r * 2, h: b.r * 2 }, box)) { env_ignite(t, 0.3); return; }
+    for (const e of enemies) if ((e.envFly || e.thrown) && !e.dead && overlaps(e, box)) { env_ignite(t, 0.08); return; }
+  },
+  draw(t, front) {
+    if (front || !trpVis(t.x, t.y, t.w, t.h)) return;
+    const x = Math.round(t.x - cam.x), y = Math.round(t.y - cam.y), lit = t.fuse >= 0 && Math.floor(t.fuse * 20) % 2 === 0;
+    trpR(x, y + 1, 10, 11, OUTLINE); trpR(x + 1, y, 8, 13, OUTLINE);
+    trpR(x + 1, y + 1, 8, 10, lit ? "#ffffff" : "#b0402a"); trpR(x + 1, y + 1, 2, 10, lit ? "#ffffff" : "#d8603a"); trpR(x + 7, y + 1, 2, 10, lit ? "#ffe0c0" : "#7a2418");
+    trpR(x + 1, y + 3, 8, 1, "#3a2a2a"); trpR(x + 1, y + 8, 8, 1, "#3a2a2a");
+    trpR(x + 3, y + 4, 4, 3, "#ffe066"); trpR(x + 4, y + 5, 2, 1, OUTLINE);   // the warning plate
+    trpR(x + 4, y - 2, 2, 2, OUTLINE); trpR(x + 5, y - 3, 1, 2, "#c8b090");   // the fuse
+    if (t.fuse >= 0) trpR(x + 4 + (Math.floor(realT * 30) & 1), y - 4, 2, 2, "#ffe066");
+  }
+};
 })();
 </script>
 </body>
