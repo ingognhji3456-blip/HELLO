@@ -69943,6 +69943,103 @@ TRAP_DEFS.envB = {
     if (t.fuse >= 0) trpR(x + 4 + (Math.floor(realT * 30) & 1), y - 4, 2, 2, "#ffe066");
   }
 };
+/* ===== 고스트 레이스: the best clear of each story stage is recorded (10 samples/s, 3 chars each) and replayed as a
+   see-through silhouette of the hero who set it. Stored apart from the save (localStorage "bladerush.ghost"). ===== */
+const GH_HZ = 10, GH_MAX = 6 * 60 * GH_HZ, GH_KEY = "bladerush.ghost";
+let gh_db = null, gh_rec = null, gh_play = null, gh_on = true;
+function gh_load() {
+  if (gh_db) return gh_db;
+  try { const s = JSON.parse(localStorage.getItem(GH_KEY) || "{}"); gh_db = s && typeof s === "object" && !Array.isArray(s) ? s : {}; } catch (e) { gh_db = {}; }
+  try { gh_on = localStorage.getItem(GH_KEY + ".off") !== "1"; } catch (e) { /* private mode: on */ }
+  return gh_db;
+}
+function gh_save() {
+  const db = gh_load();
+  for (let k = 0; k < 40; k++) {
+    try { localStorage.setItem(GH_KEY, JSON.stringify(db)); return true; }
+    catch (e) { const keys = Object.keys(db).filter(x => x !== String(stageIdx)); if (!keys.length) return false; delete db[keys[Math.floor(Math.random() * keys.length)]]; }
+  }
+  return false;
+}
+function gh_story() { return !run && !training && !f4Mode; }
+// a sample: dx, dy (35..125 = -45..45) and a flag char (dir bit + state: 0 idle, 1 run, 2 air, 3 attack); "~" = an absolute jump
+function gh_enc(v) { return String.fromCharCode(80 + v); }
+function gh_sample() {
+  const p = player, R = gh_rec;
+  const x = Math.round(p.x), y = Math.round(p.y), st = p.atk ? 3 : !p.ground ? 2 : Math.abs(p.vx) > 20 ? 1 : 0, f = (p.dir < 0 ? 4 : 0) + st;
+  const dx = x - R.x, dy = y - R.y;
+  R.s += Math.abs(dx) <= 45 && Math.abs(dy) <= 45 ? gh_enc(dx) + gh_enc(dy) + f : "~" + x.toString(36) + "," + y.toString(36) + "," + f + ";";
+  R.x = x; R.y = y; R.n++;
+}
+function gh_decode(G) {
+  const out = [], s = G.d;
+  let x = G.x, y = G.y;
+  for (let i = 0; i < s.length;) {
+    if (s[i] === "~") { const j = s.indexOf(";", i); const [a, b, f] = s.slice(i + 1, j).split(","); x = parseInt(a, 36); y = parseInt(b, 36); out.push(x, y, +f); i = j + 1; }
+    else { x += s.charCodeAt(i) - 80; y += s.charCodeAt(i + 1) - 80; out.push(x, y, +s[i + 2]); i += 3; }
+  }
+  return out;
+}
+f4On("stageStart", si => {
+  gh_rec = null; gh_play = null;
+  if (!gh_story() || !player) return;
+  gh_rec = { si, x: Math.round(player.x), y: Math.round(player.y), s: "", n: 0, x0: Math.round(player.x), y0: Math.round(player.y), ci: charIdx };
+  const G = gh_load()[String(si)];
+  if (G && G.d) { try { gh_play = { t: G.t, ci: G.ci, a: gh_decode(G) }; } catch (e) { gh_play = null; } }
+});
+f4On("clear", si => {
+  if (!gh_rec || gh_rec.si !== si || !gh_story()) return;
+  const G = gh_load()[String(si)];
+  if (gh_play && G) {
+    const d = timer - G.t, s = (d < 0 ? "-" : "+") + Math.abs(d).toFixed(1) + "초";
+    texts.push({ s: d < 0 ? "고스트보다 " + s + " 빨랐다! 새 기록" : "고스트보다 " + s + " 느렸다", x: W / 2, y: 104, t: 3, ml: 3, c: d < 0 ? "#7fffb0" : "#ff9a8a", big: true, small: true });
+  }
+  if ((!G || timer < G.t) && gh_rec.n > 3 && gh_rec.n <= GH_MAX) {
+    gh_load()[String(si)] = { t: +timer.toFixed(2), ci: gh_rec.ci, x: gh_rec.x0, y: gh_rec.y0, d: gh_rec.s };
+    gh_save();
+  }
+  gh_rec = null;
+});
+{
+  const gh_upd0 = updateWorld;
+  updateWorld = function (dt, dtP) {
+    gh_upd0.apply(this, arguments);
+    const R = gh_rec;
+    if (!R || state !== "play" || !player || player.dead || R.si !== stageIdx) return;
+    if (R.n >= GH_MAX) { gh_rec = null; return; }
+    while (R.n < Math.floor(timer * GH_HZ) + 1) gh_sample();
+  };
+  const gh_draw0 = drawPlayer;
+  drawPlayer = function () { gh_draw(); return gh_draw0.apply(this, arguments); };
+}
+function gh_draw() {
+  const P = gh_play;
+  if (!P || !gh_on || !gh_story() || state !== "play" && state !== "pause") return;
+  const k = timer * GH_HZ, i = Math.floor(k), n = P.a.length / 3;
+  if (i >= n - 1) return;   // the ghost reached the flag
+  const f = k - i, a = P.a, x = a[i * 3] + (a[i * 3 + 3] - a[i * 3]) * f, y = a[i * 3 + 1] + (a[i * 3 + 4] - a[i * 3 + 1]) * f, fl = a[i * 3 + 2];
+  if (x + 20 < cam.x || x - 20 > cam.x + W) return;
+  const ch = CHARS[P.ci] || curChar(), st = fl & 3, o = showPose(ch, timer, false);
+  if (st === 1) o.legs = Math.floor(timer * 10) % 2 ? P_LEGS.run1 : P_LEGS.run3;
+  else if (st === 2) o.legs = P_LEGS.jump;
+  else if (st === 3) { o.ang = 0.5 + Math.sin(timer * 30) * 0.6; o.lean = 1; o.legs = P_LEGS.lunge; }
+  ctx.save();
+  ctx.globalAlpha = 0.32 + 0.06 * Math.sin(realT * 4);
+  ctx.translate(Math.round(x + 5 - cam.x), Math.round(y + 14 - cam.y));
+  if (fl & 4) ctx.scale(-1, 1);
+  heroDraw(o, "#9fe8ff", 0, 0, false, ch);
+  ctx.restore();
+  ctx.globalAlpha = 0.55;
+  shadowText("최고 기록", Math.round(x + 5 - cam.x), Math.round(y - 12 - cam.y), "#9fe8ff", 1, "center");
+  ctx.globalAlpha = 1;
+}
+// G: the ghost on / off (remembered)
+f4On("g5tick", () => {
+  if (!pressed.KeyG || isBound("KeyG") || !gh_story()) return;
+  gh_on = !gh_on;
+  try { if (gh_on) localStorage.removeItem(GH_KEY + ".off"); else localStorage.setItem(GH_KEY + ".off", "1"); } catch (e) { /* private mode */ }
+  popText(gh_on ? "고스트 켜짐" : "고스트 꺼짐", W / 2, 60, "#9fe8ff", true);
+});
 })();
 </script>
 </body>
