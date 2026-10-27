@@ -148,9 +148,9 @@ img { image-rendering: pixelated; image-rendering: crisp-edges; }
 .narrow .card { padding: var(--p); }
 .narrow .key { display: none; }
 
-@media (max-height: 480px) and (orientation: landscape) {
+@media (max-height: 480px) and (orientation: landscape) and (min-width: 600px) {
   .card { flex-direction: row; gap: var(--p); padding: var(--p) 0; }
-  .ccost .coin { display: none; }
+  .ccost .coin, .card .key { display: none; }
 }
 #bWave { display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 7.5em; white-space: nowrap; }
 #bWave .sub { color: #d6f5cf; }
@@ -346,12 +346,15 @@ function readSave() {
   } catch (e) { return null; }
 }
 // Keep the better record of two saves, so another open tab cannot erase progress.
+const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 function mergeBest(into, from) {
   if (!from || typeof from !== "object" || Array.isArray(from)) return;
   for (const id in from) {
+    // a stored "__proto__" key would otherwise write into Object.prototype
+    if (id === "__proto__" || !own(from, id)) continue;
     const b = from[id];
     if (!b || typeof b !== "object") continue;
-    const cur = into[id] || (into[id] = {});
+    const cur = own(into, id) ? into[id] : (into[id] = {});
     const stars = Math.min(3, Math.floor(+b.stars) || 0), endless = Math.floor(+b.endless) || 0;
     if (stars > (cur.stars || 0)) cur.stars = stars;
     if (endless > (cur.endless || 0)) cur.endless = endless;
