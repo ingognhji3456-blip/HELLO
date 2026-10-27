@@ -7,10 +7,11 @@
 <title>픽셀 타워 디펜스</title>
 <style>
 /* Layout: HUD on top, the 20x12-tile field in the middle, the tower bar below.
-   The script sets --p (one UI pixel) and --fs (font size, a multiple of 11 so the pixel font stays sharp)
-   and sizes the canvas to the space that is left. Single dark look by choice. */
+   The script sets --p (one UI pixel), --ic (tower icon pixel) and --fs (font size, a multiple of 11
+   so the pixel font stays sharp) and sizes the canvas to the space that is left. Single dark look by choice. */
 :root {
   --p: 2px;
+  --ic: 2px;
   --fs: 11px;
   --bg: #100c1a;
   --panel: #241a37;
@@ -96,7 +97,7 @@ img { image-rendering: pixelated; image-rendering: crisp-edges; }
     0 calc(var(--p) * -1) 0 var(--edge), 0 var(--p) 0 var(--edge),
     calc(var(--p) * -1) 0 0 var(--edge), var(--p) 0 0 var(--edge),
     inset 0 calc(var(--p) * -2) 0 #5e2020, inset 0 var(--p) 0 #c86060; }
-@media (hover: hover) { .btn:hover:not(:disabled), .card:hover { filter: brightness(1.15); } }
+@media (hover: hover) { .btn:hover:not(:disabled), .card:hover, .mapcard:not(.locked):hover { filter: brightness(1.15); } }
 
 #stage { display: flex; justify-content: center; background: #0d0a14; }
 #field { position: relative; overflow: hidden; }
@@ -113,18 +114,17 @@ img { image-rendering: pixelated; image-rendering: crisp-edges; }
   padding: calc(var(--p) * 3) calc(var(--p) * 4);
   border-top: var(--p) solid var(--edge);
 }
-#shop { display: flex; gap: calc(var(--p) * 3); flex: 1; min-width: 0; }
+#shop { display: flex; gap: var(--p); flex: 1; min-width: 0; }
 .card {
   position: relative; flex: 1 1 0; min-width: 0;
-  display: flex; align-items: center; gap: calc(var(--p) * 3);
-  padding: calc(var(--p) * 2) calc(var(--p) * 3);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--p);
+  padding: calc(var(--p) * 2) var(--p);
   background: var(--panel2);
   box-shadow:
     0 calc(var(--p) * -1) 0 var(--edge), 0 var(--p) 0 var(--edge),
     calc(var(--p) * -1) 0 0 var(--edge), var(--p) 0 0 var(--edge),
     inset 0 calc(var(--p) * -2) 0 var(--lo), inset 0 var(--p) 0 var(--hi);
   margin: var(--p);
-  text-align: left;
 }
 .card.sel { background: #5a4520; box-shadow:
     0 calc(var(--p) * -1) 0 var(--gold), 0 var(--p) 0 var(--gold),
@@ -132,13 +132,13 @@ img { image-rendering: pixelated; image-rendering: crisp-edges; }
     inset 0 calc(var(--p) * -2) 0 #3a2c12, inset 0 var(--p) 0 #9a7a3a; }
 .card.poor { opacity: 0.55; }
 .card.poor .ccost { color: var(--red); }
-.cbody { display: flex; flex-direction: column; min-width: 0; }
-.cname { white-space: nowrap; overflow: hidden; text-overflow: clip; }
-.ccost { display: flex; align-items: center; gap: var(--p); color: var(--gold); }
-.key { position: absolute; top: var(--p); right: calc(var(--p) * 2); color: var(--dim); }
+.card.locked { background: #231a33; }
+.card.locked .tic { filter: brightness(0); opacity: 0.4; }
+.ccost { display: flex; align-items: center; gap: var(--p); color: var(--gold); white-space: nowrap; }
+.key { position: absolute; top: var(--p); left: calc(var(--p) * 2); color: var(--dim); }
+.narrow #shop { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.narrow .card { padding: var(--p); }
 .narrow .key { display: none; }
-.narrow .card { flex-direction: column; gap: var(--p); justify-content: center; text-align: center; padding: var(--p); }
-.narrow .cbody { align-items: center; }
 
 #bWave { display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 7.5em; white-space: nowrap; }
 #bWave .sub { color: #d6f5cf; }
@@ -153,7 +153,6 @@ img { image-rendering: pixelated; image-rendering: crisp-edges; }
 #bTgt .sub { color: var(--text); }
 .narrow #info .ibody { display: none; }
 .narrow #info .ticon { margin: 0; }
-#tip .up { color: var(--green); }
 
 /* Overlays on the field */
 #toast {
@@ -175,6 +174,8 @@ img { image-rendering: pixelated; image-rendering: crisp-edges; }
 #tip:empty { display: none; }
 #tip .t { color: var(--gold); }
 #tip .d { color: var(--dim); }
+#tip .up { color: var(--green); }
+#tip .lock { color: var(--red); }
 #bossbar {
   position: absolute; left: 50%; top: calc(var(--p) * 4); transform: translateX(-50%);
   width: min(60%, 40em); display: flex; align-items: center; gap: calc(var(--p) * 3);
@@ -202,28 +203,35 @@ img { image-rendering: pixelated; image-rendering: crisp-edges; }
 .panel h2 { font-size: calc(var(--fs) * 2); font-weight: normal; margin: 0 0 calc(var(--p) * 3); }
 .panel p { margin: calc(var(--p) * 2) 0; }
 .panel .dim { color: var(--dim); }
+.panel .good { color: var(--gold); }
 .panel .row { display: flex; gap: calc(var(--p) * 3); justify-content: center; flex-wrap: wrap; margin-top: calc(var(--p) * 4); }
-.maps { display: flex; gap: calc(var(--p) * 5); justify-content: center; flex-wrap: wrap; margin-top: calc(var(--p) * 4); }
+.maps { display: grid; grid-template-columns: repeat(2, minmax(0, calc(var(--p) * 190))); gap: calc(var(--p) * 3) calc(var(--p) * 4); justify-content: center; margin-top: calc(var(--p) * 4); }
 .mapcard {
-  width: calc(var(--p) * 92);
-  display: flex; flex-direction: column; gap: var(--p); align-items: stretch;
+  position: relative;
+  display: flex; flex-direction: row; gap: calc(var(--p) * 4); align-items: center;
   background: var(--panel2); padding: calc(var(--p) * 3);
+  text-align: left;
   box-shadow:
     0 calc(var(--p) * -1) 0 var(--edge), 0 var(--p) 0 var(--edge),
     calc(var(--p) * -1) 0 0 var(--edge), var(--p) 0 0 var(--edge),
     inset 0 calc(var(--p) * -2) 0 var(--lo), inset 0 var(--p) 0 var(--hi);
   margin: var(--p);
 }
-.mapcard img { width: 100%; aspect-ratio: 5 / 3; display: block; box-shadow: 0 0 0 var(--p) var(--edge); margin-bottom: calc(var(--p) * 2); }
+.mapcard .thumb { position: relative; display: block; width: 42%; flex: none; }
+.mapcard .thumb img { width: 100%; aspect-ratio: 5 / 3; display: block; box-shadow: 0 0 0 var(--p) var(--edge); }
+.mapcard .lockover { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); }
+.mapcard .lockover img { width: auto; aspect-ratio: auto; box-shadow: none; margin: 0; }
+.mapcard.locked { cursor: default; background: #231a33; }
+.mapcard.locked .thumb > img { filter: grayscale(1) brightness(0.4); }
+.mapcard.locked .mname { color: var(--dim); }
 .mtext { display: flex; flex-direction: column; gap: var(--p); }
-.narrow .panel { padding: calc(var(--p) * 4); }
-.narrow .maps { flex-direction: column; align-items: stretch; gap: calc(var(--p) * 3); }
-.narrow .mapcard { width: auto; flex-direction: row; align-items: center; gap: calc(var(--p) * 4); text-align: left; }
-.narrow .mapcard img { width: 40%; flex: none; margin: 0; }
 .mapcard .stars { color: var(--gold); }
-.mapcard .best { color: var(--dim); }
-@media (hover: hover) { .mapcard:hover { filter: brightness(1.15); } }
-.help { text-align: left; max-width: 46em; }
+.mapcard .reward { color: var(--blue); }
+.mapcard .reward.got { color: var(--green); }
+.narrow .panel { padding: calc(var(--p) * 4); }
+.narrow .maps { grid-template-columns: 1fr; gap: calc(var(--p) * 2); }
+.narrow .mapcard .thumb { width: 36%; }
+.help { text-align: left; max-width: 52em; }
 .help h2 { text-align: center; }
 .help ul { margin: calc(var(--p) * 2) 0; padding-left: 1.4em; }
 .help li { margin: var(--p) 0; }
@@ -231,11 +239,21 @@ img { image-rendering: pixelated; image-rendering: crisp-edges; }
 .narrow .help .grid { grid-template-columns: auto 1fr; }
 .help .grid img { justify-self: center; }
 .help .t { color: var(--gold); }
+.help .lock { color: var(--dim); }
 .big-stars { font-size: calc(var(--fs) * 2); color: var(--gold); letter-spacing: 0.2em; }
+.unlock {
+  display: flex; align-items: center; gap: calc(var(--p) * 5); justify-content: center; text-align: left;
+  margin: calc(var(--p) * 4) auto; padding: calc(var(--p) * 3) calc(var(--p) * 6); max-width: 36em;
+  background: #3a2c55;
+  animation: glow 1.2s ease-in-out infinite alternate;
+}
+.unlock .t { color: var(--gold); }
+@keyframes glow { from { background: #3a2c55; } to { background: #5a4478; } }
+@media (prefers-reduced-motion: reduce) { .unlock { animation: none; } #toast { transition: none; } }
 .credit { color: var(--dim); margin-top: calc(var(--p) * 4); }
 </style>
 <style id="font-face">/* Galmuri11 subset (c) Lee Minseo, SIL Open Font License 1.1; regenerate with tools/embed_font.py */
-@font-face { font-family: "TDPixel"; src: url(data:font/woff2;base64,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) format("woff2"); font-display: block; }
+@font-face { font-family: "TDPixel"; src: url(data:font/woff2;base64,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) format("woff2"); font-display: block; }
 </style>
 </head>
 <body>
@@ -243,7 +261,7 @@ img { image-rendering: pixelated; image-rendering: crisp-edges; }
   <div id="hud">
     <div class="stat" title="생명"><img id="icoHeart" alt="생명"><b id="lives">20</b></div>
     <div class="stat" title="골드"><img id="icoCoin" alt="골드"><b id="gold">0</b></div>
-    <div class="stat" title="웨이브"><img id="icoSkull" alt="웨이브"><b id="wave">0/20</b></div>
+    <div class="stat" title="웨이브"><img id="icoSkull" alt="웨이브"><b id="wave">0/10</b></div>
     <div class="next" id="next"></div>
     <div class="grow"></div>
     <button class="btn sq" id="bSpeed" title="속도 (F)">×1</button>
@@ -278,11 +296,11 @@ img { image-rendering: pixelated; image-rendering: crisp-edges; }
 /* ================= Basics ================= */
 const T = 16, COLS = 20, ROWS = 12, W = COLS * T, H = ROWS * T, TAU = Math.PI * 2;
 const OUT = "#1b1325";
-const TOTAL = 20;        // waves to win
 const BETWEEN = 15;      // seconds between waves
 const SELL = 0.7;        // refund share
-const hpScale = (w) => 1 + 0.1 * (w - 1) + 0.0075 * (w - 1) * (w - 1);
-const rewardScale = (w) => 1 + 0.03 * (w - 1);
+// g is the difficulty index of a wave; each stage plays a window of it (see STAGES)
+const hpScale = (g) => 1 + 0.1 * (g - 1) + 0.0075 * (g - 1) * (g - 1);
+const rewardScale = (g) => 1 + 0.03 * (g - 1);
 
 const $ = (id) => document.getElementById(id);
 const cv = $("cv"), ctx = cv.getContext("2d");
@@ -303,6 +321,8 @@ function rng(seed) {
 }
 
 /* ================= Save ================= */
+// best[stageId] = { stars, endless }. A stage counts as cleared once it has stars;
+// clearing a stage opens the next one and unlocks its reward tower.
 const SAVE_KEY = "pixelTD.v1";
 const save = { best: {}, sound: true };
 try {
@@ -352,9 +372,12 @@ const Sound = (() => {
   }
   const FX = {
     arrow() { tone("square", 1300, 520, 0.05, 0.035); },
+    bolt() { tone("square", 240, 90, 0.08, 0.06); noise(0.06, 0.08, 2500, "highpass"); },
     cannon() { noise(0.16, 0.2, 700); tone("sine", 150, 50, 0.16, 0.25); },
     boom() { noise(0.32, 0.22, 900); tone("sine", 95, 35, 0.28, 0.2); },
     frost() { tone("triangle", 1500, 2400, 0.1, 0.06); tone("sine", 2600, 2000, 0.14, 0.03, 0.03); },
+    venom() { tone("sine", 420, 160, 0.14, 0.07); tone("sine", 260, 120, 0.1, 0.04, 0.05); },
+    fire() { noise(0.22, 0.12, 1200, "bandpass"); tone("sawtooth", 140, 90, 0.18, 0.03); },
     zap() { noise(0.1, 0.14, 3000, "highpass"); tone("sawtooth", 900, 200, 0.09, 0.045); },
     die() { tone("square", 520, 130, 0.08, 0.04); },
     build() { tone("square", 330, 330, 0.07, 0.07); tone("square", 494, 494, 0.1, 0.07, 0.07); },
@@ -369,6 +392,7 @@ const Sound = (() => {
     click() { tone("square", 660, 660, 0.03, 0.035); },
     bonus() { [784, 988, 1175].forEach((f, i) => tone("square", f, f, 0.07, 0.05, i * 0.05)); },
     win() { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone("square", f, f, 0.14, 0.07, i * 0.12)); },
+    unlock() { [659, 784, 988, 1319].forEach((f, i) => tone("triangle", f, f, 0.18, 0.08, 0.8 + i * 0.09)); },
     lose() { [392, 330, 262, 196].forEach((f, i) => tone("triangle", f, f * 0.98, 0.25, 0.1, i * 0.2)); },
   };
   return {
@@ -490,11 +514,12 @@ function canvasOf(w, h, draw) {
   return c;
 }
 const padTop = (rows, h) => Array(h - rows.length).fill("").concat(rows);
-// normal / hit flash / slowed
-const set3 = (frames) => ({
+// normal / hit flash / slowed / poisoned
+const set4 = (frames) => ({
   n: frames,
   f: frames.map((f) => tint(f, "#ffffff", 0.7)),
   s: frames.map((f) => tint(f, "#80d8ff", 0.45)),
+  p: frames.map((f) => tint(f, "#8ae04a", 0.45)),
 });
 
 const R = {
@@ -680,6 +705,52 @@ const R = {
     "..ksssssssssdk..",
     "..kkkkkkkkkkkk..",
   ],
+  tSniper: [
+    "..kkkkkkkkkkkk..",
+    "..kttttttttttk..",
+    "..kkkkkkkkkkkk..",
+    "...kwk....kwk...",
+    "...kwkv..vkwk...",
+    "...kwk.vv.kwk...",
+    "...kwkv..vkwk...",
+    "...kwk....kwk...",
+    "..kkkkkkkkkkkk..",
+    "..ksssnsssnssk..",
+    ".ksssssssssssdk.",
+    ".kkkkkkkkkkkkkk.",
+  ],
+  tPoison: [
+    "...kkkkkkkkkk...",
+    "..kqppppppppqk..",
+    "..kqqqqqqqqqqk..",
+    "...kqqqqqqqqk...",
+    "....kqqqqqqk....",
+    "...kkkkkkkkkk...",
+    "...kttttttttk...",
+    "..kssnssssnssk..",
+    "..kssssssssssk..",
+    "..ksssssssssdk..",
+    "..kkkkkkkkkkkk..",
+  ],
+  tFlame: [
+    "..kkkkkkkkkkkk..",
+    "..kqqqqqqqqqqk..",
+    "...kqqqqqqqqk...",
+    "....kkqqqqkk....",
+    "...kkkkkkkkkk...",
+    "...kttttttttk...",
+    "..kssnssssnssk..",
+    "..ksssssssssdk..",
+    "..kkkkkkkkkkkk..",
+  ],
+  tBanner: [
+    "....kkkkkkkk....",
+    "...kttttttttk...",
+    "..kssnssssnssk..",
+    "..kssssssssssk..",
+    "..ksssssssssdk..",
+    "..kkkkkkkkkkkk..",
+  ],
   heart: [
     ".kkk.kkk.",
     "krwrkrrrk",
@@ -709,6 +780,16 @@ const R = {
     ".kwwwwwk.",
     "..kwkwk..",
     "..kkkkk..",
+  ],
+  lock: [
+    ".kkkkk.",
+    ".k...k.",
+    ".k...k.",
+    "kkkkkkk",
+    "kyyoyyk",
+    "kyyoyyk",
+    "kyyyyyk",
+    "kkkkkkk",
   ],
   tree: [
     ".....kkkk.....",
@@ -765,6 +846,65 @@ const R = {
     "....kbbk....",
     "....kkkk....",
   ],
+  deadtree: [
+    "k....k...k..",
+    "kk..kbk.kk..",
+    ".kbk.kbkbk..",
+    "..kbkkbbk...",
+    "...kbbbk.kk.",
+    "....kbbkkbk.",
+    "....kbbbbk..",
+    ".....kbbk...",
+    ".....kbbk...",
+    ".....kbbk...",
+    ".....kbdk...",
+    "....kkbdkk..",
+    "...kbbkkbbk.",
+    "...kkk..kkk.",
+  ],
+  mushroom: [
+    "...kkkk...",
+    ".kkrrrrkk.",
+    "krrwrrrwrk",
+    "krrrrwrrrk",
+    ".kkkkkkkk.",
+    "...kwwk...",
+    "...kwwk...",
+    "..kkwwkk..",
+    "..kkkkkk..",
+  ],
+  spike: [
+    "...k....",
+    "...kk...",
+    "..knk...",
+    "..knsk..",
+    ".knssk..",
+    ".knssk..",
+    ".knsssk.",
+    "knssssk.",
+    "knsssssk",
+    "kkkkkkkk",
+  ],
+  lavapool: [
+    "...kkkkkkkk...",
+    ".kkoooyyoookk.",
+    "kooyyyooooyook",
+    "koooooyyoooook",
+    ".kooooooooook.",
+    "..kkkkkkkkkk..",
+  ],
+  tomb: [
+    "...kkkk...",
+    "..knnnnk..",
+    ".knsssssk.",
+    ".knssdssk.",
+    ".knsdddsk.",
+    ".knssdssk.",
+    ".knsssssk.",
+    ".knssssdk.",
+    "kkkkkkkkkk",
+    "kddddddddk",
+  ],
 };
 
 const PAL = {
@@ -775,13 +915,15 @@ const PAL = {
   bat: { p: "#7f52b8", r: "#ff4a4a", w: "#ffffff" },
   orc: { g: "#5f9e4c", m: "#8e98ad", n: "#cfd6e4", y: "#ff4040", w: "#f2ead0", r: "#c83a3a", b: "#6a4222", d: "#3a3346" },
   golem: { s: "#8d8676", n: "#b9b19f", d: "#5d574b", e: "#5ff3ff", c: "#3fc8ff" },
+  giant: { s: "#6e5248", n: "#93705e", d: "#42302a", e: "#ffb03a", c: "#ff6a1a" },
   dragon: { r: "#d8402a", y: "#ffc860", d: "#8a2018", e: "#ffff80", w: "#ffffff", h: "#f0e0c0", o: "#ff8a3a" },
   archer: { g: "#3f8a4a", s: "#f0c090", b: "#a0682e" },
   crystal: { w: "#ffffff", i: "#9fe9ff", c: "#3fa0e0" },
-  stone: { s: "#9a94a6", n: "#c4bfcc", d: "#6e687a", w: "#b07a42", v: "#7a4e2a", y: "#fff59a", c: "#d08040", m: "#8890a0" },
+  stone: { s: "#9a94a6", n: "#c4bfcc", d: "#6e687a", w: "#b07a42", v: "#7a4e2a", y: "#fff59a", c: "#d08040", m: "#8890a0", q: "#3e3a4a", p: "#8ae04a" },
   heart: { r: "#ff4a5a", w: "#ffd0d0" },
   coin: { y: "#ffd34a", w: "#fff6c0", o: "#c88a1a" },
   skull: { w: "#efe6d6" },
+  lock: { y: "#ffd34a", o: "#5a3a10" },
 };
 const TRIM = ["#a07850", "#6fb4ff", "#ffd34a"];
 
@@ -799,6 +941,7 @@ function buildSprites() {
   SPR.orcA = mk(R.orcTop.concat(R.orcA), PAL.orc);
   SPR.orcB = mk(R.orcTop.concat(R.orcB), PAL.orc);
   SPR.golem = mk(R.golem, PAL.golem);
+  SPR.giant = mk(R.golem, PAL.giant);
   const body = mk(R.dragon, PAL.dragon), wing = mk(R.wing, PAL.dragon), wingDown = flipV(wing);
   SPR.dragonA = canvasOf(13, 9, (g) => { g.drawImage(body, 0, 2); g.drawImage(wing, 2, 0); });
   SPR.dragonB = canvasOf(13, 9, (g) => { g.drawImage(body, 0, 2); g.drawImage(wingDown, 2, 4); });
@@ -807,16 +950,21 @@ function buildSprites() {
   SPR.heart = mk(R.heart, PAL.heart);
   SPR.coin = mk(R.coin, PAL.coin);
   SPR.skull = mk(R.skull, PAL.skull);
+  SPR.lock = mk(R.lock, PAL.lock);
 
-  SETS.slime = set3([SPR.slime]);
-  SETS.king = set3([SPR.king]);
-  SETS.goblin = set3([SPR.goblinA, SPR.goblinB]);
-  SETS.bat = set3([SPR.batA, SPR.batB]);
-  SETS.orc = set3([SPR.orcA, SPR.orcB]);
-  SETS.golem = set3([SPR.golem]);
-  SETS.dragon = set3([SPR.dragonA, SPR.dragonB]);
+  SETS.slime = set4([SPR.slime]);
+  SETS.king = set4([SPR.king]);
+  SETS.goblin = set4([SPR.goblinA, SPR.goblinB]);
+  SETS.bat = set4([SPR.batA, SPR.batB]);
+  SETS.orc = set4([SPR.orcA, SPR.orcB]);
+  SETS.golem = set4([SPR.golem]);
+  SETS.giant = set4([SPR.giant]);
+  SETS.dragon = set4([SPR.dragonA, SPR.dragonB]);
 
-  const towerRows = { archer: R.tArcher, cannon: R.tCannon, frost: R.tFrost, storm: R.tStorm };
+  const towerRows = {
+    archer: R.tArcher, cannon: R.tCannon, frost: R.tFrost, storm: R.tStorm,
+    sniper: R.tSniper, poison: R.tPoison, flame: R.tFlame, banner: R.tBanner,
+  };
   SPR.tower = {};
   for (const k in towerRows) {
     SPR.tower[k] = TRIM.map((t) => mk(padTop(towerRows[k], 18), Object.assign({ t }, PAL.stone)));
@@ -824,17 +972,20 @@ function buildSprites() {
 }
 
 /* ================= Definitions ================= */
+// split: [type, count] spawned where the monster dies
 const ENEMY = {
   slime: { name: "슬라임", hp: 30, speed: 20, reward: 4, armor: 0, lives: 1, set: "slime", parts: ["#5ccf4a", "#b4f58a"], desc: "기본 몬스터" },
   goblin: { name: "고블린", hp: 22, speed: 32, reward: 4, armor: 0, lives: 1, set: "goblin", parts: ["#8cc43c", "#8a4a2a"], desc: "빠르게 달려요" },
   bat: { name: "박쥐", hp: 26, speed: 26, reward: 5, armor: 0, lives: 1, flying: true, set: "bat", parts: ["#7f52b8", "#3a2a5a"], desc: "하늘을 날아요. 대포탑은 못 맞혀요" },
   orc: { name: "오크 전사", hp: 85, speed: 15, reward: 10, armor: 0.4, lives: 2, set: "orc", parts: ["#8e98ad", "#5f9e4c"], desc: "갑옷이 화살과 포탄 피해를 40% 막아요" },
   golem: { name: "바위 골렘", hp: 340, speed: 10, reward: 30, armor: 0.55, lives: 5, set: "golem", parts: ["#8d8676", "#5ff3ff"], desc: "아주 단단한 갑옷 (55%)" },
-  king: { name: "슬라임 킹", hp: 480, speed: 9, reward: 150, armor: 0.15, lives: 6, boss: true, scale: 2, split: 8, set: "king", parts: ["#b25ce2", "#ffd84a"], desc: "보스. 쓰러지면 슬라임 8마리로 나뉘어요" },
-  dragon: { name: "화염 드래곤", hp: 850, speed: 12, reward: 300, armor: 0.25, lives: 12, boss: true, flying: true, scale: 2, set: "dragon", parts: ["#d8402a", "#ffc860"], desc: "날아다니는 최종 보스" },
+  king: { name: "슬라임 킹", hp: 480, speed: 9, reward: 150, armor: 0.15, lives: 6, boss: true, scale: 2, split: ["slime", 8], set: "king", parts: ["#b25ce2", "#ffd84a"], desc: "보스. 쓰러지면 슬라임 8마리로 나뉘어요" },
+  giant: { name: "거대 골렘", hp: 620, speed: 7, reward: 200, armor: 0.5, lives: 8, boss: true, scale: 2, split: ["golem", 2], set: "giant", parts: ["#6e5248", "#ffb03a"], desc: "보스. 갑옷 50%, 쓰러지면 골렘 2마리로 나뉘어요" },
+  dragon: { name: "화염 드래곤", hp: 850, speed: 12, reward: 300, armor: 0.25, lives: 12, boss: true, flying: true, scale: 2, set: "dragon", parts: ["#d8402a", "#ffc860"], desc: "날아다니는 보스" },
 };
 const EKEYS = Object.keys(ENEMY);
 
+// Towers in bar order. Which stage unlocks each one is set by STAGES[].reward.
 const TOWER = {
   archer: {
     name: "궁수탑", cost: 50, air: true, ground: true, magic: false,
@@ -872,12 +1023,49 @@ const TOWER = {
       { cost: 180, dmg: 44, rate: 1.0, range: 3.3, chain: 5 },
     ],
   },
+  sniper: {
+    name: "저격탑", cost: 120, air: true, ground: true, magic: false, mode: "strong",
+    desc: "아주 멀리서 큰 화살을 쏩니다. 갑옷을 뚫어요.",
+    levels: [
+      { dmg: 50, rate: 0.45, range: 4.2, pierce: 0.5 },
+      { cost: 120, dmg: 95, rate: 0.5, range: 4.8, pierce: 0.6 },
+      { cost: 190, dmg: 170, rate: 0.55, range: 5.4, pierce: 0.75 },
+    ],
+  },
+  poison: {
+    name: "독탑", cost: 90, air: true, ground: true, magic: true,
+    desc: "독을 뿌려 시간이 지나는 동안 피해를 줍니다. 갑옷을 무시해요.",
+    levels: [
+      { dmg: 4, rate: 0.8, range: 2.7, poison: 6, poisonDur: 4, splash: 14 },
+      { cost: 80, dmg: 6, rate: 0.9, range: 3.0, poison: 11, poisonDur: 4, splash: 16 },
+      { cost: 130, dmg: 10, rate: 1.0, range: 3.2, poison: 19, poisonDur: 4, splash: 19 },
+    ],
+  },
+  flame: {
+    name: "화염탑", cost: 100, air: true, ground: true, magic: true, aura: true, mode: "close",
+    desc: "가까이 온 적을 한꺼번에 불태웁니다. 사거리가 짧아요.",
+    levels: [
+      { dmg: 8, rate: 1.1, range: 1.8, burn: 5 },
+      { cost: 90, dmg: 14, rate: 1.25, range: 2.0, burn: 9 },
+      { cost: 150, dmg: 24, rate: 1.4, range: 2.3, burn: 15 },
+    ],
+  },
+  banner: {
+    name: "지원탑", cost: 100, air: false, ground: false, magic: false, support: true,
+    desc: "공격은 안 하지만 주변 탑의 공격력을 올려 줍니다.",
+    levels: [
+      { range: 2.0, buff: 0.15 },
+      { cost: 100, range: 2.3, buff: 0.25, haste: 0.05 },
+      { cost: 150, range: 2.6, buff: 0.35, haste: 0.12 },
+    ],
+  },
 };
-const TKEYS = ["archer", "cannon", "frost", "storm"];
+const TKEYS = Object.keys(TOWER);
 const TARGETS = ["first", "last", "strong", "close"];
 const TARGET_NAME = { first: "선두", last: "후미", strong: "강한 적", close: "가까운 적" };
+const BURN_DUR = 2;
 
-// [type, count, gap seconds, start delay]
+// [type, count, gap seconds, start delay]; index = difficulty g - 1
 const WAVES = [
   [["slime", 8, 1.2, 0]],
   [["slime", 10, 1.0, 0], ["goblin", 4, 0.9, 6]],
@@ -900,10 +1088,10 @@ const WAVES = [
   [["bat", 28, 0.4, 0], ["orc", 18, 0.6, 1], ["golem", 4, 2.5, 6]],
   [["bat", 16, 0.6, 0], ["orc", 12, 0.8, 2], ["dragon", 1, 1, 10]],
 ];
-function waveDef(n) {
-  if (n <= WAVES.length) return WAVES[n - 1];
-  // Endless: a seeded mix that grows each wave, with a boss every 10th wave.
-  const r = rng(n * 7919), k = n - WAVES.length, out = [];
+function waveDef(g) {
+  if (g <= WAVES.length) return WAVES[g - 1];
+  // Past the table: a seeded mix that grows each wave, with a boss every 10th.
+  const r = rng(g * 7919), k = g - WAVES.length, out = [];
   const pool = ["slime", "goblin", "bat", "orc"];
   for (let i = 0; i < 3; i++) {
     const type = pool[(r() * pool.length) | 0];
@@ -911,16 +1099,20 @@ function waveDef(n) {
     out.push([type, Math.round(base + k * 1.5), type === "orc" ? 0.6 : 0.35, i * 3]);
   }
   out.push(["golem", 2 + Math.floor(k / 2), 2.2, 4]);
-  if (n % 10 === 0) out.push([n % 20 === 0 ? "dragon" : "king", 1 + Math.floor(k / 20), 3, 8]);
+  if (g % 10 === 0) out.push([g % 20 === 0 ? "dragon" : "king", 1 + Math.floor(k / 20), 3, 8]);
   return out;
 }
 
-/* ================= Maps ================= */
-const MAPS = [
+/* ================= Stages ================= */
+// Each stage plays difficulty g = from .. from + count - 1, drops the table's own bosses
+// and puts its own: mid = [[wave, type]], boss = types added to the last wave.
+// hpMul grows from 1 on the first wave to its full value on the last one.
+// reward = tower unlocked by the first clear (the next stage opens too).
+const STAGES = [
   {
-    id: "meadow", name: "초록 들판", diff: 1, seed: 11, hpMul: 1, gold: 250, lives: 20, deco: ["tree", "rock"], amb: "petal",
-    desc: "길이 길고 구불구불해서 처음 하기 좋아요.",
-    wps: [[-1, 2], [3, 2], [3, 9], [8, 9], [8, 3], [12, 3], [12, 9], [16, 9], [16, 5], [19, 5]],
+    id: "meadow", name: "초록 들판", from: 1, count: 10, boss: ["king"], reward: "storm",
+    seed: 11, hpMul: 1, gold: 250, lives: 20, deco: ["tree", "rock"], detail: "flower", amb: "petal",
+    paths: [[[-1, 2], [3, 2], [3, 9], [8, 9], [8, 3], [12, 3], [12, 9], [16, 9], [16, 5], [19, 5]]],
     pal: {
       g0: "#4d9a38", g1: "#57a742", g2: "#438a30", gs: ["#5fb247", "#3f8030", "#62b84a"], tuft: "#72c856", tuftD: "#38762b",
       p0: "#c9a065", p1: "#b88d52", p2: "#dcb97e", pe: "#7c5a34",
@@ -930,9 +1122,9 @@ const MAPS = [
     },
   },
   {
-    id: "desert", name: "모래 협곡", diff: 2, seed: 23, hpMul: 1.15, gold: 260, lives: 20, deco: ["cactus", "rock"], amb: "dust",
-    desc: "몬스터가 더 단단해요.",
-    wps: [[-1, 6], [5, 6], [5, 1], [10, 1], [10, 10], [15, 10], [15, 4], [19, 4]],
+    id: "desert", name: "모래 협곡", from: 2, count: 12, boss: ["giant"], reward: "sniper",
+    seed: 23, hpMul: 1.05, gold: 260, lives: 20, deco: ["cactus", "rock"], detail: "pebble", amb: "dust",
+    paths: [[[-1, 6], [5, 6], [5, 1], [10, 1], [10, 10], [15, 10], [15, 4], [19, 4]]],
     pal: {
       g0: "#d8b068", g1: "#e2bd78", g2: "#cba05a", gs: ["#e8c888", "#c0954e", "#d0a862"], tuft: "#a2a04e", tuftD: "#77743a",
       p0: "#a87648", p1: "#956640", p2: "#ba8a58", pe: "#6a4628",
@@ -942,9 +1134,9 @@ const MAPS = [
     },
   },
   {
-    id: "snow", name: "얼음 고개", diff: 3, seed: 37, hpMul: 1.3, gold: 280, lives: 20, deco: ["pine", "rock"], amb: "snow",
-    desc: "길이 짧아서 막아낼 시간이 적어요.",
-    wps: [[-1, 10], [7, 10], [7, 2], [13, 2], [13, 7], [19, 7]],
+    id: "snow", name: "얼음 고개", from: 3, count: 14, mid: [[7, "king"]], boss: ["dragon"], reward: "poison",
+    seed: 37, hpMul: 1.1, gold: 280, lives: 20, deco: ["pine", "rock"], detail: "pebble", amb: "snow",
+    paths: [[[-1, 10], [7, 10], [7, 2], [13, 2], [13, 7], [19, 7]]],
     pal: {
       g0: "#e4edf6", g1: "#f2f6fb", g2: "#d4e0ec", gs: ["#ffffff", "#c8d6e6", "#dce6f0"], tuft: "#b8c8da", tuftD: "#9aaec4",
       p0: "#7f93ab", p1: "#71859c", p2: "#90a4bb", pe: "#4f6078",
@@ -953,28 +1145,87 @@ const MAPS = [
       rock: { s: "#8a96a8", n: "#f4f8ff", d: "#5a6478" },
     },
   },
+  {
+    id: "swamp", name: "안개 늪", from: 4, count: 15, mid: [[8, "giant"]], boss: ["king", "giant"], reward: "flame",
+    seed: 41, hpMul: 1.3, gold: 320, lives: 20, deco: ["deadtree", "mushroom"], detail: "puddle", amb: "firefly",
+    paths: [[[-1, 5], [3, 5], [3, 1], [8, 1], [8, 10], [13, 10], [13, 3], [17, 3], [17, 8], [19, 8]]],
+    pal: {
+      g0: "#45603c", g1: "#4f6b42", g2: "#3a5234", gs: ["#557546", "#34492e", "#5e7e4c"], tuft: "#6c8c48", tuftD: "#2c4426",
+      p0: "#7a6648", p1: "#6a583c", p2: "#8a7656", pe: "#3a3022",
+      small: ["#6aa04a", "#d070ff"],
+      deadtree: { b: "#5a4a3a", d: "#3a2e24" },
+      mushroom: { r: "#a050d0", w: "#e8e0d0" },
+    },
+  },
+  {
+    id: "volcano", name: "불꽃 화산", from: 5, count: 16, mid: [[9, "king"]], boss: ["giant", "dragon"], reward: "banner",
+    seed: 53, hpMul: 1.35, gold: 380, lives: 20, deco: ["spike", "lavapool"], detail: "crack", amb: "ember",
+    paths: [[[-1, 2], [6, 2], [6, 9], [12, 9], [12, 4], [19, 4]]],
+    pal: {
+      g0: "#3a2f35", g1: "#44373d", g2: "#30272c", gs: ["#4e3f45", "#2a2226", "#58484a"], tuft: "#5a4848", tuftD: "#2a2020",
+      p0: "#7a6e6a", p1: "#6a5e5a", p2: "#8a7e78", pe: "#241c20",
+      small: ["#ff6a1a"],
+      spike: { s: "#2e2838", n: "#6a5a8a" },
+      lavapool: { o: "#e8501a", y: "#ffc040", k: "#2a1a1a" },
+    },
+  },
+  {
+    id: "castle", name: "어둠의 성채", from: 6, count: 20, mid: [[7, "king"], [14, "giant"]], boss: ["dragon", "king", "giant"], reward: null,
+    seed: 67, hpMul: 1.5, gold: 420, lives: 20, deco: ["tomb", "deadtree"], detail: "bone", amb: "wisp",
+    paths: [
+      [[-1, 2], [6, 2], [6, 6], [11, 6], [11, 2], [16, 2], [16, 8], [19, 8]],
+      [[-1, 10], [6, 10], [6, 6], [11, 6], [11, 2], [16, 2], [16, 8], [19, 8]],
+    ],
+    pal: {
+      g0: "#353047", g1: "#3d3751", g2: "#2d2940", gs: ["#453e5b", "#27233a", "#4d4665"], tuft: "#4a5a50", tuftD: "#262e2a",
+      p0: "#777089", p1: "#666078", p2: "#8a849f", pe: "#211d2e",
+      small: ["#e8e4f0", "#b0a8c8"],
+      tomb: { s: "#8a8a9a", n: "#b0b0c0", d: "#5a5a6a" },
+      deadtree: { b: "#4a4458", d: "#2e2a3a" },
+    },
+  },
 ];
+const STAGE_DESC = {
+  meadow: "길이 길고 구불구불해요.",
+  desert: "마지막에 거대 골렘이 나와요.",
+  snow: "길이 짧고 드래곤이 날아와요.",
+  swamp: "보스가 셋이나 나와요.",
+  volcano: "길이 아주 짧아요.",
+  castle: "동굴 두 곳에서 몰려와요.",
+};
 
+/* ---------- Progress ---------- */
+const cleared = (i) => !!(save.best[STAGES[i].id] && save.best[STAGES[i].id].stars > 0);
+const stageOpen = (i) => i === 0 || cleared(i - 1) || cleared(i);
+const towerStage = (k) => STAGES.findIndex((s) => s.reward === k);
+const towerOpen = (k) => { const i = towerStage(k); return i < 0 || cleared(i); };
+
+/* ================= Maps ================= */
 function buildMap(def) {
   const grid = Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
-  const segs = [];
-  let len = 0;
-  for (let i = 0; i < def.wps.length - 1; i++) {
-    const [c0, r0] = def.wps[i], [c1, r1] = def.wps[i + 1];
-    const ax = c0 * T + T / 2, ay = r0 * T + T / 2, bx = c1 * T + T / 2, by = r1 * T + T / 2;
-    const l = Math.hypot(bx - ax, by - ay);
-    segs.push({ ax, ay, dx: (bx - ax) / l, dy: (by - ay) / l, l, s: len });
-    len += l;
-    let c = c0, r = r0;
-    const sc = Math.sign(c1 - c0), sr = Math.sign(r1 - r0);
-    for (;;) {
-      if (c >= 0 && c < COLS && r >= 0 && r < ROWS) grid[r][c] = 1;
-      if (c === c1 && r === r1) break;
-      c += sc; r += sr;
+  const paths = def.paths.map((wps) => {
+    const segs = [];
+    let len = 0;
+    for (let i = 0; i < wps.length - 1; i++) {
+      const [c0, r0] = wps[i], [c1, r1] = wps[i + 1];
+      const ax = c0 * T + T / 2, ay = r0 * T + T / 2, bx = c1 * T + T / 2, by = r1 * T + T / 2;
+      const l = Math.hypot(bx - ax, by - ay);
+      segs.push({ ax, ay, dx: (bx - ax) / l, dy: (by - ay) / l, l, s: len });
+      len += l;
+      let c = c0, r = r0;
+      const sc = Math.sign(c1 - c0), sr = Math.sign(r1 - r0);
+      for (;;) {
+        if (c >= 0 && c < COLS && r >= 0 && r < ROWS) grid[r][c] = 1;
+        if (c === c1 && r === r1) break;
+        c += sc; r += sr;
+      }
     }
-  }
-  const rs = def.wps[0][1], re = def.wps[def.wps.length - 1][1];
-  for (const [c, r] of [[0, rs - 1], [0, rs + 1], [COLS - 1, re - 1], [COLS - 1, re + 1]]) {
+    return { segs, len, rs: wps[0][1] };
+  });
+  const lastWp = def.paths[0][def.paths[0].length - 1], re = lastWp[1];
+  const blocked = [[COLS - 1, re - 1], [COLS - 1, re + 1]];
+  for (const p of paths) blocked.push([0, p.rs - 1], [0, p.rs + 1]);
+  for (const [c, r] of blocked) {
     if (r >= 0 && r < ROWS && grid[r][c] === 0) grid[r][c] = 3;
   }
   // Blocking scenery only on tiles that do not touch the path, so the good spots stay open.
@@ -992,13 +1243,13 @@ function buildMap(def) {
       decos.push({ c, r, kind: rnd() < 0.72 ? def.deco[0] : def.deco[1] });
     }
   }
-  const md = { def, grid, segs, len, rs, re, decos };
+  const md = { def, grid, paths, re, decos };
   md.bg = renderMap(md);
   return md;
 }
 
-function posAt(md, d, out) {
-  const S = md.segs;
+function posAt(path, d, out) {
+  const S = path.segs;
   let i = 0;
   while (i < S.length - 1 && d > S[i].s + S[i].l) i++;
   const s = S[i], t = clamp(d - s.s, 0, s.l);
@@ -1033,8 +1284,7 @@ function renderMap(md) {
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
       if (!isPath(c, r)) continue;
       const x0 = c * T, y0 = r * T;
-      const sides = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-      for (const [dc, dr] of sides) {
+      for (const [dc, dr] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
         const nc = c + dc, nr = r + dr;
         if (nc < 0 || nc >= COLS || nr < 0 || nr >= ROWS || isPath(nc, nr)) continue;
         for (let i = 0; i < T; i++) {
@@ -1051,13 +1301,24 @@ function renderMap(md) {
         }
       }
     }
-    // little non-blocking details (flowers, pebbles, ice)
+    // little non-blocking details
+    const det = md.def.detail;
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
       if (md.grid[r][c] !== 0 || rnd() > 0.28) continue;
-      const x = c * T + 3 + rnd() * 10, y = r * T + 3 + rnd() * 10, col = P.small[(rnd() * P.small.length) | 0];
-      if (md.def.id === "meadow") {
+      const x = Math.round(c * T + 3 + rnd() * 10), y = Math.round(r * T + 3 + rnd() * 10), col = P.small[(rnd() * P.small.length) | 0];
+      if (det === "flower") {
         rect(g, x, y - 1, 1, 1, col); rect(g, x - 1, y, 1, 1, col); rect(g, x + 1, y, 1, 1, col); rect(g, x, y + 1, 1, 1, col);
         rect(g, x, y, 1, 1, "#ffe066");
+      } else if (det === "puddle") {
+        if (rnd() < 0.55) { oval(g, x, y, 3, 1, "#2c4644"); rect(g, x - 1, y - 1, 2, 1, "#5a8a86"); }
+        else { rect(g, x, y, 2, 2, col); rect(g, x + 1, y, 1, 1, P.g0); }
+      } else if (det === "crack") {
+        let cx = x - 2, cy = y;
+        for (let k = 0; k < 5; k++) { rect(g, cx, cy, 1, 1, k === 2 ? "#ffd04a" : "#e8501a"); cx++; cy += rnd() < 0.5 ? 1 : -1; }
+        rect(g, x - 2, y + 2, 5, 1, "rgba(0,0,0,0.2)");
+      } else if (det === "bone") {
+        rect(g, x, y, 3, 1, col); rect(g, x - 1, y - 1, 1, 1, col); rect(g, x - 1, y + 1, 1, 1, col);
+        rect(g, x + 3, y - 1, 1, 1, col); rect(g, x + 3, y + 1, 1, 1, col);
       } else {
         rect(g, x, y, 2, 1, col); rect(g, x, y + 1, 2, 1, "rgba(0,0,0,0.18)");
       }
@@ -1085,7 +1346,7 @@ function drawCave(g, r, t) {
   oval(g, 0, cy + 1, 10, 8, OUT);
   oval(g, 0, cy + 1, 9, 7, "#120a18");
   oval(g, -1, cy + 2, 6, 5, "#06030a");
-  const blink = Math.sin(t * 1.7) > 0.93;
+  const blink = Math.sin(t * 1.7 + r) > 0.93;
   if (!blink) { rect(g, 3, cy, 1, 1, "#ff3a4a"); rect(g, 6, cy, 1, 1, "#ff3a4a"); }
   const glow = 0.2 + 0.15 * Math.sin(t * 3);
   ring(g, 0, cy + 1, 9, "rgba(170,90,255," + glow.toFixed(2) + ")");
@@ -1128,12 +1389,12 @@ function drawCastle(g, r, t, hurt) {
 
 /* ================= Game state ================= */
 const G = {
-  scene: "title", mi: 0, md: null, titleMi: 0,
-  gold: 0, lives: 0, wave: 0, phase: "build", countdown: 0, endless: false, bestWave: 0,
+  scene: "title", si: 0, st: null, md: null, titleSi: 0,
+  gold: 0, lives: 0, wave: 0, phase: "build", countdown: 0, endless: false,
   spawners: [], enemies: [], towers: [], projs: [], fx: [], parts: [], pops: [], amb: [],
   tmap: null, sel: null, build: null, hover: null, pending: null,
   speed: 1, paused: false, time: 0, rt: 0, shake: 0, flash: 0, castleHurt: 0, kills: 0,
-  boss: null, waveCleared: true,
+  seenBat: false, seenOrc: false,
 };
 const MD = [];
 let uid = 0;
@@ -1141,27 +1402,30 @@ const tmp = { x: 0, y: 0, dx: 0, dy: 0 };
 
 function resetAmbient() {
   G.amb = [];
-  const kind = (G.md || MD[G.titleMi]).def.amb;
-  const n = kind === "snow" ? 70 : kind === "dust" ? 26 : 16;
+  const kind = (G.md || MD[G.titleSi]).def.amb;
+  const n = { snow: 70, dust: 26, ember: 30, firefly: 18, wisp: 14 }[kind] || 16;
   for (let i = 0; i < n; i++) G.amb.push({ x: Math.random() * W, y: Math.random() * H, s: Math.random(), p: Math.random() * TAU });
 }
 
-function startMap(i) {
-  const md = MD[i];
+function startStage(i) {
+  if (!stageOpen(i)) return;
+  const md = MD[i], st = STAGES[i];
   Object.assign(G, {
-    scene: "play", mi: i, md,
-    gold: md.def.gold, lives: md.def.lives, wave: 0, phase: "build", countdown: 0, endless: false, bestWave: 0,
+    scene: "play", si: i, st, md,
+    gold: st.gold, lives: st.lives, wave: 0, phase: "build", countdown: 0, endless: false,
     spawners: [], enemies: [], towers: [], projs: [], fx: [], parts: [], pops: [],
     tmap: Array.from({ length: ROWS }, () => new Array(COLS).fill(null)),
     sel: null, build: null, hover: null, pending: null,
-    speed: 1, paused: false, time: 0, shake: 0, flash: 0, castleHurt: 0, kills: 0, boss: null, waveCleared: true,
+    speed: 1, paused: false, time: 0, shake: 0, flash: 0, castleHurt: 0, kills: 0,
+    seenBat: false, seenOrc: false,
   });
+  $("bPause").textContent = "II";
   resetAmbient();
   hideOverlay();
   showInfo(null);
   refreshShop();
   ui.next = -1;
-  toast("탑을 짓고 웨이브를 시작하세요", "");
+  toast((i + 1) + ". " + st.name + " · 탑을 짓고 웨이브를 시작하세요", "");
   showTip("");
 }
 
@@ -1170,14 +1434,22 @@ function canBuild(c, r) {
 }
 
 /* ================= Waves ================= */
+function waveGroups(n) {
+  const st = G.st, g = st.from + n - 1;
+  if (n > st.count) return waveDef(g); // endless keeps the table's own bosses
+  const out = waveDef(g).filter((gr) => !ENEMY[gr[0]].boss);
+  for (const [w, type] of st.mid || []) if (w === n) out.push([type, 1, 1, 6]);
+  if (n === st.count) st.boss.forEach((type, i) => out.push([type, 1, 1, 8 + i * 7]));
+  return out;
+}
 function earlyBonus() {
   const secs = G.phase === "between" ? Math.ceil(G.countdown) : BETWEEN;
-  return secs * (1 + Math.floor(G.wave / 5));
+  return secs * (1 + Math.floor((G.st.from + G.wave - 1) / 5));
 }
 function canCallWave() {
   if (G.scene !== "play" || G.phase === "over" || G.phase === "won") return false;
   if (G.spawners.length) return false;
-  if (!G.endless && G.wave >= TOTAL) return false;
+  if (!G.endless && G.wave >= G.st.count) return false;
   return true;
 }
 function callWave() {
@@ -1193,14 +1465,13 @@ function callWave() {
   startWave();
 }
 function startWave() {
-  const n = G.wave + 1;
+  const n = G.wave + 1, g = G.st.from + n - 1, groups = waveGroups(n);
   G.wave = n;
   G.phase = "wave";
-  G.waveCleared = false;
-  for (const [type, count, gap, delay] of waveDef(n)) G.spawners.push({ type, left: count, gap, t: delay, wave: n });
-  const types = new Set(waveDef(n).map((g) => g[0]));
-  const bossType = [...types].find((k) => ENEMY[k].boss);
-  if (bossType) { toast("보스 출현! " + ENEMY[bossType].name, "boss"); Sound.play("boss"); }
+  for (const [type, count, gap, delay] of groups) G.spawners.push({ type, left: count, gap, t: delay, g, pi: 0 });
+  const types = new Set(groups.map((gr) => gr[0]));
+  const bosses = [...types].filter((k) => ENEMY[k].boss);
+  if (bosses.length) { toast("보스 출현! " + bosses.map((k) => ENEMY[k].name).join(", "), "boss"); Sound.play("boss"); }
   else if (types.has("bat") && !G.seenBat) { G.seenBat = true; toast("하늘을 나는 박쥐! 대포탑은 못 맞혀요", "boss"); Sound.play("wave"); }
   else if (types.has("orc") && !G.seenOrc) { G.seenOrc = true; toast("갑옷 입은 오크! 마법 탑이 잘 통해요", "boss"); Sound.play("wave"); }
   else { toast("웨이브 " + n, ""); Sound.play("wave"); }
@@ -1208,25 +1479,29 @@ function startWave() {
 }
 
 /* ================= Entities ================= */
-function spawnEnemy(type, wave, dist = 0, small = false) {
+function stageMul(g) {
+  const st = G.st, n = g - st.from + 1;
+  return 1 + (st.hpMul - 1) * clamp((n - 1) / Math.max(1, st.count - 1), 0, 1);
+}
+function spawnEnemy(type, g, dist = 0, pi = 0, small = false) {
   const d = ENEMY[type];
-  let hp = Math.round(d.hp * hpScale(wave) * G.md.def.hpMul);
+  let hp = Math.round(d.hp * hpScale(g) * stageMul(g));
   if (small) hp = Math.round(hp * 0.7);
   const e = {
-    id: ++uid, type, d, hp, maxHp: hp, dist,
+    id: ++uid, type, d, hp, maxHp: hp, dist, g, pi, path: G.md.paths[pi],
     x: 0, y: 0, cy: 0, foot: 0, ox: d.boss ? 0 : Math.round(rand(-3, 3)), oy: d.boss ? 0 : Math.round(rand(-3, 2)),
-    slowT: 0, slowAmt: 0, flash: 0, anim: Math.random() * 10, face: 1, alive: true, spd: d.speed,
-    reward: small ? 1 : Math.round(d.reward * rewardScale(wave)),
+    slowT: 0, slowAmt: 0, poisonT: 0, poisonDps: 0, poisonBy: null, burnT: 0, burnDps: 0, burnBy: null,
+    flash: 0, anim: Math.random() * 10, face: 1, alive: true, spd: d.speed,
+    reward: Math.max(1, Math.round(d.reward * rewardScale(g) * (small ? 0.25 : 1))),
   };
   const fr = SETS[d.set].n[0], sc = d.scale || 1;
   e.w = fr.width * sc; e.h = fr.height * sc;
   placeEnemy(e);
   G.enemies.push(e);
-  if (d.boss) G.boss = e;
   return e;
 }
 function placeEnemy(e) {
-  posAt(G.md, e.dist, tmp);
+  posAt(e.path, e.dist, tmp);
   e.x = tmp.x + e.ox; e.y = tmp.y + e.oy;
   if (tmp.dx < -0.5) e.face = -1; else if (tmp.dx > 0.5) e.face = 1;
   if (e.d.flying) {
@@ -1236,14 +1511,31 @@ function placeEnemy(e) {
   }
   e.cy = e.foot - e.h / 2;
 }
-function hurt(e, dmg, magic, tower) {
+// pierce: share of armor ignored by a physical hit
+function hurt(e, dmg, magic, tower, pierce = 0) {
   if (!e.alive) return;
-  if (!magic) dmg *= 1 - e.d.armor;
+  if (!magic) dmg *= 1 - e.d.armor * (1 - pierce);
   const real = Math.min(e.hp, dmg);
   e.hp -= dmg;
   if (!e.d.boss || e.flash < -0.2) e.flash = 0.06;
   if (tower) tower.dealt += real;
   if (e.hp <= 0) kill(e, tower);
+}
+// damage over time: no hit flash
+function dot(e, amt, tower) {
+  if (!e.alive) return;
+  const real = Math.min(e.hp, amt);
+  e.hp -= amt;
+  if (tower) tower.dealt += real;
+  if (e.hp <= 0) kill(e, tower);
+}
+function poisonOn(e, dps, dur, tower) {
+  if (dps >= e.poisonDps || e.poisonT <= 0) { e.poisonDps = dps; e.poisonBy = tower; }
+  e.poisonT = Math.max(e.poisonT, dur);
+}
+function burnOn(e, dps, tower) {
+  if (dps >= e.burnDps || e.burnT <= 0) { e.burnDps = dps; e.burnBy = tower; }
+  e.burnT = Math.max(e.burnT, BURN_DUR);
 }
 function kill(e, tower) {
   e.alive = false;
@@ -1263,14 +1555,14 @@ function kill(e, tower) {
     toast(e.d.name + " 처치!", "good");
   } else Sound.play("die");
   if (e.d.split) {
+    const [type, count] = e.d.split;
     Sound.play("split");
-    for (let i = 0; i < e.d.split; i++) {
-      const c = spawnEnemy("slime", G.wave, Math.max(0, e.dist + (i - e.d.split / 2) * 5), true);
+    for (let i = 0; i < count; i++) {
+      const c = spawnEnemy(type, e.g, Math.max(0, e.dist + (i - (count - 1) / 2) * 6), e.pi, true);
       c.ox = Math.round(rand(-4, 4)); c.oy = Math.round(rand(-4, 3));
       placeEnemy(c);
     }
   }
-  if (G.boss === e) G.boss = null;
 }
 function leak(e) {
   e.alive = false;
@@ -1279,7 +1571,6 @@ function leak(e) {
   G.flash = 0.35;
   G.castleHurt = 0.3;
   Sound.play("leak");
-  if (G.boss === e) G.boss = null;
   if (G.lives <= 0) lose();
 }
 function addFx(f) { G.fx.push(f); }
@@ -1287,11 +1578,12 @@ function popText(x, y, s, col) { G.pops.push({ x, y, s, col, t: 0 }); }
 
 function build(type, c, r) {
   const d = TOWER[type];
-  if (!canBuild(c, r) || G.gold < d.cost) return null;
+  if (!towerOpen(type) || !canBuild(c, r) || G.gold < d.cost) return null;
   G.gold -= d.cost;
   const t = {
     type, c, r, lv: 0, x: c * T + T / 2, y: r * T + T / 2, yb: r * T + T,
-    cd: 0, aim: -Math.PI / 4, face: 1, spent: d.cost, kills: 0, dealt: 0, mode: "first", recoil: 0, anim: Math.random() * 10,
+    cd: 0, aim: -Math.PI / 4, face: 1, spent: d.cost, kills: 0, dealt: 0, mode: d.mode || "first",
+    recoil: 0, fireT: 0, bd: 0, br: 0, anim: Math.random() * 10,
   };
   G.towers.push(t);
   G.tmap[r][c] = t;
@@ -1331,33 +1623,72 @@ function findTarget(t, def, s) {
     if (!e.alive || !canHit(def, e)) continue;
     const d2 = (e.x - t.x) ** 2 + (e.y - t.y) ** 2;
     if (d2 > r2) continue;
+    const left = e.path.len - e.dist; // distance still to walk; paths can differ in length
     let v;
     switch (t.mode) {
-      case "last": v = -e.dist; break;
-      case "strong": v = e.hp * 1000 + e.dist; break;
+      case "last": v = left; break;
+      case "strong": v = e.hp * 1000 - left; break;
       case "close": v = -d2; break;
-      default: v = e.dist;
+      default: v = -left;
     }
     if (v > bv) { bv = v; best = e; }
   }
   return best;
 }
+// Support towers: each tower takes the best boost among the banners that reach it.
+function applyBuffs() {
+  for (const t of G.towers) { t.bd = 0; t.br = 0; }
+  for (const b of G.towers) {
+    if (b.type !== "banner") continue;
+    const s = TOWER.banner.levels[b.lv], r2 = rangePx(s) ** 2;
+    for (const t of G.towers) {
+      if (t.type === "banner" || (t.x - b.x) ** 2 + (t.y - b.y) ** 2 > r2) continue;
+      t.bd = Math.max(t.bd, s.buff);
+      t.br = Math.max(t.br, s.haste || 0);
+    }
+  }
+}
+function muzzle(t) {
+  if (t.type === "sniper") return [t.x + Math.cos(t.aim) * 5, t.yb - 14 + Math.sin(t.aim) * 4];
+  return [t.x + Math.cos(t.aim) * 7, t.yb - 11 + Math.sin(t.aim) * 5.6];
+}
 function fire(t, def, s, e) {
+  const dmg = (s.dmg || 0) * (1 + t.bd);
   if (t.type === "archer") {
-    G.projs.push({ kind: "arrow", x: t.x + t.face * 2, y: t.yb - 15, tgt: e, tx: e.x, ty: e.cy, speed: 230, dmg: s.dmg, tower: t, ang: 0 });
+    G.projs.push({ kind: "arrow", x: t.x + t.face * 2, y: t.yb - 15, tgt: e, tx: e.x, ty: e.cy, speed: 230, dmg, tower: t, ang: 0 });
     Sound.play("arrow");
+  } else if (t.type === "sniper") {
+    const [mx, my] = muzzle(t);
+    G.projs.push({ kind: "bolt", x: mx, y: my, tgt: e, tx: e.x, ty: e.cy, speed: 420, dmg, pierce: s.pierce, tower: t, ang: t.aim });
+    t.recoil = 0.35;
+    Sound.play("bolt");
   } else if (t.type === "cannon") {
     const dur = 0.42 + Math.hypot(e.x - t.x, e.y - t.y) / 380;
-    posAt(G.md, Math.min(G.md.len, e.dist + e.spd * dur), tmp);
+    posAt(e.path, Math.min(e.path.len, e.dist + e.spd * dur), tmp);
     const tx = tmp.x + e.ox, ty = tmp.y + e.oy;
-    const mx = t.x + Math.cos(t.aim) * 7, my = t.yb - 11 + Math.sin(t.aim) * 5.6;
-    G.projs.push({ kind: "shell", sx: mx, sy: my, tx, ty, x: mx, y: my, t: 0, dur, dmg: s.dmg, splash: s.splash, tower: t, h: 0 });
+    const [mx, my] = muzzle(t);
+    G.projs.push({ kind: "shell", sx: mx, sy: my, tx, ty, x: mx, y: my, t: 0, dur, dmg, splash: s.splash, tower: t, h: 0 });
     t.recoil = 0.15;
     for (let i = 0; i < 5; i++) G.parts.push({ x: mx, y: my, vx: rand(-12, 12), vy: rand(-25, -8), g: -10, life: 0.5, max: 0.5, col: pick(["#d8d0c8", "#a8a098"]), sz: 1 });
     Sound.play("cannon");
   } else if (t.type === "frost") {
-    G.projs.push({ kind: "frost", x: t.x, y: t.yb - 14, tgt: e, tx: e.x, ty: e.cy, speed: 150, dmg: s.dmg, tower: t, s });
+    G.projs.push({ kind: "frost", x: t.x, y: t.yb - 14, tgt: e, tx: e.x, ty: e.cy, speed: 150, dmg, tower: t, s });
     Sound.play("frost");
+  } else if (t.type === "poison") {
+    G.projs.push({ kind: "venom", x: t.x, y: t.yb - 12, tgt: e, tx: e.x, ty: e.cy, speed: 140, dmg, dps: s.poison * (1 + t.bd), tower: t, s });
+    t.fireT = 0.25;
+    Sound.play("venom");
+  } else if (t.type === "flame") {
+    const r2 = rangePx(s) ** 2, burn = s.burn * (1 + t.bd);
+    for (const o of G.enemies) {
+      if (!o.alive || (o.x - t.x) ** 2 + (o.y - t.y) ** 2 > r2) continue;
+      hurt(o, dmg, true, t);
+      if (o.alive) burnOn(o, burn, t);
+      for (let i = 0; i < 2; i++) G.parts.push({ x: o.x + rand(-3, 3), y: o.cy + rand(-3, 3), vx: rand(-10, 10), vy: rand(-30, -10), g: 0, life: 0.3, max: 0.3, col: pick(["#ffd84a", "#ff8a2a", "#e8401a"]), sz: 1 });
+    }
+    addFx({ kind: "flame", x: t.x, y: t.y, r: rangePx(s), t: 0, dur: 0.3 });
+    t.fireT = 0.3;
+    Sound.play("fire");
   } else if (t.type === "storm") {
     const hit = [e], pts = [[t.x, t.yb - 16], [e.x, e.cy]];
     let cur = e;
@@ -1371,8 +1702,8 @@ function fire(t, def, s, e) {
       if (!nb) break;
       hit.push(nb); pts.push([nb.x, nb.cy]); cur = nb;
     }
-    let dmg = s.dmg;
-    for (const o of hit) { hurt(o, dmg, true, t); dmg *= 0.8; }
+    let d = dmg;
+    for (const o of hit) { hurt(o, d, true, t); d *= 0.8; }
     addFx({ kind: "bolt", pts, t: 0, dur: 0.18 });
     for (const [x, y] of pts.slice(1)) for (let i = 0; i < 3; i++) G.parts.push({ x, y, vx: rand(-40, 40), vy: rand(-40, 40), g: 0, life: 0.2, max: 0.2, col: pick(["#ffffff", "#9fe8ff", "#fff59a"]), sz: 1 });
     Sound.play("zap");
@@ -1382,10 +1713,14 @@ function fire(t, def, s, e) {
 /* ================= Update ================= */
 function update(dt) {
   G.time += dt;
-  // spawning
+  // spawning; with two caves the monsters take turns
   for (const s of G.spawners) {
     s.t -= dt;
-    while (s.left > 0 && s.t <= 0) { spawnEnemy(s.type, s.wave); s.left--; s.t += s.gap; }
+    while (s.left > 0 && s.t <= 0) {
+      spawnEnemy(s.type, s.g, 0, s.pi);
+      s.pi = (s.pi + 1) % G.md.paths.length;
+      s.left--; s.t += s.gap;
+    }
   }
   if (G.spawners.length) G.spawners = G.spawners.filter((s) => s.left > 0);
 
@@ -1394,25 +1729,40 @@ function update(dt) {
     if (!e.alive) continue;
     e.flash -= dt;
     if (e.slowT > 0) e.slowT -= dt;
+    if (e.poisonT > 0) {
+      e.poisonT -= dt;
+      dot(e, e.poisonDps * dt, e.poisonBy);
+      if (Math.random() < dt * 5) G.parts.push({ x: e.x + rand(-3, 3), y: e.cy, vx: 0, vy: -14, g: 0, life: 0.45, max: 0.45, col: pick(["#8ae04a", "#c8ff9a"]), sz: 1 });
+      if (!e.alive) continue;
+    }
+    if (e.burnT > 0) {
+      e.burnT -= dt;
+      dot(e, e.burnDps * dt, e.burnBy);
+      if (Math.random() < dt * 9) G.parts.push({ x: e.x + rand(-3, 3), y: e.cy + rand(-2, 3), vx: rand(-4, 4), vy: -22, g: 0, life: 0.3, max: 0.3, col: pick(["#ffd84a", "#ff8a2a", "#e8401a"]), sz: 1 });
+      if (!e.alive) continue;
+    }
     e.spd = e.d.speed * (e.slowT > 0 ? 1 - e.slowAmt : 1);
     e.dist += e.spd * dt;
     e.anim += dt * (0.4 + e.spd / 25);
-    if (e.dist >= G.md.len) { leak(e); continue; }
+    if (e.dist >= e.path.len) { leak(e); continue; }
     placeEnemy(e);
   }
 
   // towers
+  applyBuffs();
   for (const t of G.towers) {
     const def = TOWER[t.type], s = def.levels[t.lv];
     t.anim += dt;
     if (t.recoil > 0) t.recoil -= dt;
+    if (t.fireT > 0) t.fireT -= dt;
+    if (def.support) continue;
     t.cd = Math.max(0, t.cd - dt);
     const e = findTarget(t, def, s);
     t.target = e;
     if (!e) continue;
     t.face = e.x < t.x - 1 ? -1 : e.x > t.x + 1 ? 1 : t.face;
-    t.aim = Math.atan2(e.cy - (t.yb - 11), e.x - t.x);
-    if (t.cd <= 0) { fire(t, def, s, e); t.cd = 1 / s.rate; }
+    t.aim = Math.atan2(e.cy - (t.yb - (t.type === "sniper" ? 14 : 11)), e.x - t.x);
+    if (t.cd <= 0) { fire(t, def, s, e); t.cd = 1 / (s.rate * (1 + t.br)); }
   }
 
   // projectiles
@@ -1431,15 +1781,19 @@ function update(dt) {
     p.ang = Math.atan2(dy, dx);
     if (d <= step + 2) {
       p.dead = true;
-      if (p.kind === "arrow") {
-        if (p.tgt.alive) hurt(p.tgt, p.dmg, false, p.tower);
-        for (let i = 0; i < 2; i++) G.parts.push({ x: p.tx, y: p.ty, vx: rand(-25, 25), vy: rand(-25, 5), g: 60, life: 0.2, max: 0.2, col: "#fff2c0", sz: 1 });
+      if (p.kind === "arrow" || p.kind === "bolt") {
+        if (p.tgt.alive) hurt(p.tgt, p.dmg, false, p.tower, p.pierce || 0);
+        const n = p.kind === "bolt" ? 5 : 2;
+        for (let i = 0; i < n; i++) G.parts.push({ x: p.tx, y: p.ty, vx: rand(-25, 25), vy: rand(-25, 5), g: 60, life: 0.2, max: 0.2, col: "#fff2c0", sz: 1 });
+      } else if (p.kind === "venom") {
+        venomHit(p);
       } else {
         frostHit(p);
       }
     } else {
       p.x += (dx / d) * step; p.y += (dy / d) * step;
       if (p.kind === "frost" && Math.random() < 0.5) G.parts.push({ x: p.x, y: p.y, vx: rand(-6, 6), vy: rand(-6, 6), g: 0, life: 0.25, max: 0.25, col: pick(["#bff0ff", "#ffffff"]), sz: 1 });
+      if (p.kind === "venom" && Math.random() < 0.4) G.parts.push({ x: p.x, y: p.y, vx: rand(-5, 5), vy: rand(0, 10), g: 20, life: 0.3, max: 0.3, col: pick(["#8ae04a", "#5aa02a"]), sz: 1 });
     }
   }
   if (G.projs.length) G.projs = G.projs.filter((p) => !p.dead);
@@ -1459,13 +1813,12 @@ function update(dt) {
 
   // wave flow
   if (G.phase === "wave" && !G.spawners.length && !G.enemies.length) {
-    if (!G.endless && G.wave >= TOTAL) { win(); return; }
+    if (!G.endless && G.wave >= G.st.count) { win(); return; }
     const bonus = 8 + G.wave;
     G.gold += bonus;
     toast("웨이브 " + G.wave + " 클리어! +" + bonus + "G", "good");
     G.phase = "between";
     G.countdown = BETWEEN;
-    if (G.endless) G.bestWave = Math.max(G.bestWave, G.wave);
   } else if (G.phase === "between") {
     G.countdown -= dt;
     if (G.countdown <= 0) startWave();
@@ -1493,42 +1846,58 @@ function frostHit(p) {
     const d2 = (e.x - p.tx) ** 2 + (e.cy - p.ty) ** 2;
     if (e !== p.tgt && d2 > r2) continue;
     const amt = e.d.boss ? s.slow * 0.5 : s.slow;
-    if (amt >= e.slowAmt || e.slowT <= 0) { e.slowAmt = amt; }
+    if (amt >= e.slowAmt || e.slowT <= 0) e.slowAmt = amt;
     e.slowT = Math.max(e.slowT, s.slowDur);
-    if (e === p.tgt) hurt(e, s.dmg, true, p.tower);
-    else hurt(e, s.dmg * 0.5, true, p.tower);
+    hurt(e, e === p.tgt ? p.dmg : p.dmg * 0.5, true, p.tower);
   }
   addFx({ kind: "frost", x: p.tx, y: p.ty, r: s.splash, t: 0, dur: 0.25 });
   for (let i = 0; i < 6; i++) G.parts.push({ x: p.tx, y: p.ty, vx: rand(-30, 30), vy: rand(-30, 20), g: 40, life: 0.35, max: 0.35, col: pick(["#ffffff", "#9fe9ff", "#3fa0e0"]), sz: 1 });
 }
+function venomHit(p) {
+  const s = p.s, r2 = s.splash * s.splash;
+  for (const e of G.enemies) {
+    if (!e.alive) continue;
+    const d2 = (e.x - p.tx) ** 2 + (e.cy - p.ty) ** 2;
+    if (e !== p.tgt && d2 > r2) continue;
+    poisonOn(e, p.dps, s.poisonDur, p.tower);
+    if (e === p.tgt) hurt(e, p.dmg, true, p.tower);
+  }
+  addFx({ kind: "venom", x: p.tx, y: p.ty, r: s.splash, t: 0, dur: 0.3 });
+  for (let i = 0; i < 7; i++) G.parts.push({ x: p.tx, y: p.ty, vx: rand(-30, 30), vy: rand(-35, 5), g: 80, life: 0.4, max: 0.4, col: pick(["#8ae04a", "#c8ff9a", "#4a8a2a"]), sz: 1 });
+}
 
 function win() {
   G.phase = "won";
+  const st = G.st, b = save.best[st.id] || {}, first = !(b.stars > 0);
   const stars = G.lives >= 18 ? 3 : G.lives >= 10 ? 2 : 1;
-  const b = save.best[G.md.def.id] || {};
   b.stars = Math.max(b.stars || 0, stars);
-  save.best[G.md.def.id] = b;
+  save.best[st.id] = b;
   persist();
   Sound.play("win");
+  const newTower = first && st.reward ? st.reward : null;
+  const next = STAGES[G.si + 1] || null;
+  if (newTower || (first && next)) Sound.play("unlock");
   showInfo(null);
   G.build = null;
+  showTip("");
   refreshShop();
-  overlayResult(true, stars);
+  overlayResult(true, stars, { newTower, nextOpened: first ? next : null, allClear: first && !next });
 }
 function lose() {
   if (G.phase === "over") return;
   G.phase = "over";
   if (G.endless) {
-    const b = save.best[G.md.def.id] || {};
+    const b = save.best[G.st.id] || {};
     b.endless = Math.max(b.endless || 0, G.wave);
-    save.best[G.md.def.id] = b;
+    save.best[G.st.id] = b;
     persist();
   }
   Sound.play("lose");
   showInfo(null);
   G.build = null;
+  showTip("");
   refreshShop();
-  overlayResult(false, 0);
+  overlayResult(false, 0, {});
 }
 
 /* ================= Rendering ================= */
@@ -1581,12 +1950,59 @@ function drawTowerTo(g, type, lv, x0, yb, st) {
       line(g, cx, yb - 16, cx + Math.cos(a) * 5, yb - 16 + Math.sin(a) * 4, "#bff4ff", 1);
     }
     if (lv >= 1) { rect(g, cx - 4, yb - 12, 1, 1, TRIM[lv]); rect(g, cx + 3, yb - 12, 1, 1, TRIM[lv]); }
+  } else if (type === "sniper") {
+    // ballista: stock along the aim, bow arms across its front, string pulled back when loaded
+    const ang = st.aim ?? -Math.PI / 4, ca = Math.cos(ang), sa = Math.sin(ang) * 0.8;
+    const px0 = cx, py0 = yb - 14;
+    disk(g, px0, py0 + 1, 2, "#4a3a2e");
+    const bx = px0 - ca * 4, by = py0 - sa * 4, fx = px0 + ca * 4, fy = py0 + sa * 4;
+    line(g, bx, by, fx, fy, OUT, 3);
+    line(g, bx, by, fx, fy, "#b07a42", 1);
+    const nx = -sa, ny = ca, ax = fx - ca * 2, ay = fy - sa * 2;
+    const t1x = ax + nx * 4, t1y = ay + ny * 4, t2x = ax - nx * 4, t2y = ay - ny * 4;
+    line(g, fx, fy, t1x, t1y, OUT, 2); line(g, fx, fy, t2x, t2y, OUT, 2);
+    line(g, fx, fy, t1x, t1y, "#7a4e2a", 1); line(g, fx, fy, t2x, t2y, "#7a4e2a", 1);
+    const loaded = !(st.recoil > 0);
+    const sx = loaded ? bx : ax, sy = loaded ? by : ay;
+    line(g, t1x, t1y, sx, sy, "#e8e0d0", 1); line(g, t2x, t2y, sx, sy, "#e8e0d0", 1);
+    if (loaded) rect(g, fx, fy, 1, 1, "#ffffff");
+    if (lv >= 1) { rect(g, cx - 5, yb - 9, 1, 1, TRIM[lv]); rect(g, cx + 4, yb - 9, 1, 1, TRIM[lv]); }
+  } else if (type === "poison") {
+    const sy = yb - 11;
+    for (let i = 0; i < 3; i++) {
+      const ph = (t * 1.3 + i / 3) % 1, sz = ph > 0.6 ? 1 : 2;
+      rect(g, cx - 4 + i * 3 + Math.round(Math.sin(t * 3 + i) * 0.6), sy - 1 - Math.round(ph * (st.fireT > 0 ? 9 : 6)), sz, sz, ph > 0.7 ? "#c8ff9a" : "#8ae04a");
+    }
+    if (lv >= 1) { rect(g, cx - 6, yb - 9, 1, 1, TRIM[lv]); rect(g, cx + 5, yb - 9, 1, 1, TRIM[lv]); }
+  } else if (type === "flame") {
+    const hgt = 7 + lv + (st.fireT > 0 ? 3 : 0), base = yb - 10;
+    for (let i = 0; i < hgt; i++) {
+      const f = 1 - i / hgt, hw = Math.max(0, Math.round(f * 4 + Math.sin(t * 14 + i * 1.7) * 0.8));
+      const x = cx + Math.round(Math.sin(t * 9 + i) * (i / hgt) * 1.5);
+      rect(g, x - hw, base - i, hw * 2 + 1, 1, i > hgt * 0.65 ? "#e8401a" : "#ff8a2a");
+      if (hw >= 2 && i < hgt * 0.6) rect(g, x - hw + 2, base - i, hw * 2 - 3, 1, "#ffd84a");
+    }
+  } else if (type === "banner") {
+    const px = cx - 4;
+    rect(g, px - 1, yb - 22, 3, 1, "#ffd34a");
+    rect(g, px, yb - 21, 2, 16, OUT);
+    rect(g, px, yb - 20, 1, 14, "#c8b08a");
+    const col = ["#d83a4a", "#4a8ae0", "#ffd34a"][lv], dark = ["#8a2030", "#2a5aa0", "#b88a1a"][lv];
+    for (let j = 0; j < 9; j++) {
+      const yo = Math.round(Math.sin(t * 5 - j * 0.7)), x = px + 2 + j, y = yb - 20 + yo;
+      rect(g, x, y - 1, 1, 1, OUT);
+      rect(g, x, y, 1, 6, j === 8 ? dark : col);
+      rect(g, x, y + 6, 1, 1, OUT);
+    }
+    const ey = yb - 18 + Math.round(Math.sin(t * 5 - 3.5));
+    rect(g, px + 5, ey, 3, 2, lv === 2 ? "#fff6c0" : "#ffd34a");
   }
   if (lv === 2 && Math.sin(t * 3 + x0) > 0.97) rect(g, cx + 5, yb - 16, 1, 1, "#ffffff");
 }
 
 function drawEnemy(e) {
-  const d = e.d, S = SETS[d.set], fr = e.flash > 0 ? S.f : e.slowT > 0 ? S.s : S.n, sc = d.scale || 1;
+  const d = e.d, S = SETS[d.set], sc = d.scale || 1;
+  const fr = e.flash > 0 ? S.f : e.slowT > 0 ? S.s : e.poisonT > 0 ? S.p : S.n;
   const x = Math.round(e.x), foot = Math.round(e.foot);
   let img = fr[0], w = e.w, h = e.h, yoff = 0;
   if (d.set === "slime" || d.set === "king") {
@@ -1594,8 +2010,8 @@ function drawEnemy(e) {
     if (sq) { w += sc; h -= sc; }
   } else if (fr.length > 1) {
     img = fr[Math.floor(e.anim * (d.flying ? 7 : 5)) % fr.length];
-  } else if (d.set === "golem") {
-    yoff = Math.sin(e.anim * 5) > 0 ? -1 : 0;
+  } else if (d.set === "golem" || d.set === "giant") {
+    yoff = Math.sin(e.anim * 5) > 0 ? -sc : 0;
   }
   blit(img, x - (w >> 1), foot - h + yoff, w, h, e.face);
 }
@@ -1611,13 +2027,17 @@ function drawHp(e) {
   rect(ctx, x, y, bw, 2, "#4a1a24");
   rect(ctx, x, y, Math.max(1, Math.round(bw * f)), 2, f > 0.5 ? "#6ee05a" : f > 0.25 ? "#ffd34a" : "#ff5050");
 }
+function upArrow(x, y, col) {
+  x = Math.round(x); y = Math.round(y);
+  rect(ctx, x, y, 1, 1, col); rect(ctx, x - 1, y + 1, 3, 1, col); rect(ctx, x, y + 2, 1, 2, col);
+}
 
 function render(rdt) {
-  const md = G.md || MD[G.titleMi];
+  const md = G.md || MD[G.titleSi];
   ctx.save();
   if (G.shake > 0) ctx.translate(Math.round(rand(-2, 2)), Math.round(rand(-2, 2)));
   ctx.drawImage(md.bg, 0, 0);
-  drawCave(ctx, md.rs, G.rt);
+  for (const p of md.paths) drawCave(ctx, p.rs, G.rt);
 
   const playing = G.scene === "play";
   const sel = G.sel;
@@ -1635,7 +2055,7 @@ function render(rdt) {
   if (playing && sel) {
     const s = TOWER[sel.type].levels[sel.lv];
     ctx.globalAlpha = 0.14;
-    disk(ctx, sel.x, sel.y, rangePx(s), "#ffffff");
+    disk(ctx, sel.x, sel.y, rangePx(s), sel.type === "banner" ? "#ffd34a" : "#ffffff");
     ctx.globalAlpha = 1;
   }
 
@@ -1649,7 +2069,8 @@ function render(rdt) {
     if (it.e) drawEnemy(it.e);
     else if (it.t) {
       const t = it.t;
-      drawTowerTo(ctx, t.type, t.lv, t.c * T, t.yb, { t: t.anim, face: t.face, aim: t.aim, recoil: t.recoil, charged: t.type === "storm" && t.target && t.cd < 0.25 });
+      drawTowerTo(ctx, t.type, t.lv, t.c * T, t.yb, { t: t.anim, face: t.face, aim: t.aim, recoil: t.recoil, fireT: t.fireT, charged: t.type === "storm" && t.target && t.cd < 0.25 });
+      if (t.bd > 0 && Math.sin(G.rt * 3 + t.c) > 0.2) upArrow(t.c * T + 13, t.yb - 6, "#ffd34a");
     } else drawCastle(ctx, md.re, G.rt, G.castleHurt);
   }
 
@@ -1660,11 +2081,15 @@ function render(rdt) {
       disk(ctx, p.x, p.y - p.h, 2, OUT);
       rect(ctx, p.x - 1, p.y - p.h - 1, 2, 2, "#4a4a5a");
       rect(ctx, p.x - 1, p.y - p.h - 1, 1, 1, "#9a9ab0");
-    } else if (p.kind === "arrow") {
-      const cx = Math.cos(p.ang), sy = Math.sin(p.ang);
-      line(ctx, p.x - cx * 4, p.y - sy * 4, p.x, p.y, "#8a5a2a", 1);
+    } else if (p.kind === "arrow" || p.kind === "bolt") {
+      const L = p.kind === "bolt" ? 7 : 4, cx = Math.cos(p.ang), sy = Math.sin(p.ang);
+      if (p.kind === "bolt") line(ctx, p.x - cx * (L + 4), p.y - sy * (L + 4), p.x - cx * L, p.y - sy * L, "rgba(255,255,255,0.35)", 1);
+      line(ctx, p.x - cx * L, p.y - sy * L, p.x, p.y, p.kind === "bolt" ? "#6a4022" : "#8a5a2a", 1);
       rect(ctx, p.x, p.y, 1, 1, "#e8e8f0");
-      rect(ctx, p.x - cx * 4, p.y - sy * 4, 1, 1, "#ffffff");
+      rect(ctx, p.x - cx * L, p.y - sy * L, 1, 1, "#ffffff");
+    } else if (p.kind === "venom") {
+      disk(ctx, p.x, p.y, 2, "#3a7a1a");
+      rect(ctx, p.x - 1, p.y - 1, 2, 2, "#a8f070");
     } else {
       disk(ctx, p.x, p.y, 2, "#3fa0e0");
       rect(ctx, p.x - 1, p.y - 1, 2, 2, "#dff8ff");
@@ -1684,6 +2109,21 @@ function render(rdt) {
       else ring(ctx, f.x, f.y, Math.round(f.r * (1 + (u - 0.6))), "rgba(255,150,70," + (1 - u).toFixed(2) + ")");
     } else if (f.kind === "frost") {
       ring(ctx, f.x, f.y, Math.max(1, Math.round(f.r * u)), "rgba(190,240,255," + (1 - u).toFixed(2) + ")");
+    } else if (f.kind === "venom") {
+      const rr = Math.max(1, Math.round(f.r * (0.4 + u * 0.6)));
+      ctx.globalAlpha = (1 - u) * 0.35;
+      disk(ctx, f.x, f.y, rr, "#7be04a");
+      ctx.globalAlpha = 1;
+      ring(ctx, f.x, f.y, rr, "rgba(170,255,120," + (1 - u).toFixed(2) + ")");
+    } else if (f.kind === "flame") {
+      const rr = f.r * (0.35 + 0.65 * u), n = Math.round(TAU * rr * 0.5);
+      ctx.globalAlpha = 1 - u * 0.7;
+      for (let i = 0; i < n; i++) {
+        if (Math.random() < 0.3) continue;
+        const a = (i / n) * TAU + Math.random() * 0.1, rj = rr + rand(-2, 2);
+        rect(ctx, f.x + Math.cos(a) * rj, f.y + Math.sin(a) * rj * 0.8, 2, 2, pick(["#ffd84a", "#ff8a2a", "#e8401a"]));
+      }
+      ctx.globalAlpha = 1;
     } else if (f.kind === "bolt") {
       const a = (1 - u).toFixed(2);
       for (let i = 0; i < f.pts.length - 1; i++) {
@@ -1734,12 +2174,19 @@ function render(rdt) {
   }
   if (playing && sel) {
     const s = TOWER[sel.type].levels[sel.lv];
-    ring(ctx, sel.x, sel.y, rangePx(s), "rgba(255,255,255,0.8)", 2, Math.floor(G.rt * 8));
+    ring(ctx, sel.x, sel.y, rangePx(s), sel.type === "banner" ? "rgba(255,211,74,0.9)" : "rgba(255,255,255,0.8)", 2, Math.floor(G.rt * 8));
     const x = sel.c * T, y = sel.yb - 19, col = Math.floor(G.rt * 3) % 2 ? "#ffd34a" : "#fff6c0";
     rect(ctx, x - 1, y, 3, 1, col); rect(ctx, x - 1, y, 1, 3, col);
     rect(ctx, x + 14, y, 3, 1, col); rect(ctx, x + 16, y, 1, 3, col);
     rect(ctx, x - 1, sel.yb, 3, 1, col); rect(ctx, x - 1, sel.yb - 2, 1, 3, col);
     rect(ctx, x + 14, sel.yb, 3, 1, col); rect(ctx, x + 16, sel.yb - 2, 1, 3, col);
+    if (sel.type === "banner") {
+      const r2 = rangePx(s) ** 2, bob = Math.floor(G.rt * 4) % 2;
+      for (const t of G.towers) {
+        if (t === sel || t.type === "banner" || (t.x - sel.x) ** 2 + (t.y - sel.y) ** 2 > r2) continue;
+        upArrow(t.x, t.yb - 24 - bob, "#ffd34a");
+      }
+    }
   }
   for (const p of G.pops) {
     const u = p.t / 0.9;
@@ -1765,26 +2212,38 @@ function drawAmbient(kind, dt) {
     } else if (kind === "dust") {
       a.x += (14 + a.s * 18) * dt; a.y += Math.sin(G.rt * 2 + a.p) * 4 * dt;
       rect(ctx, a.x, a.y, 2, 1, "rgba(255,236,190,0.35)");
+    } else if (kind === "ember") {
+      a.y -= (10 + a.s * 16) * dt; a.x += Math.sin(G.rt * 2 + a.p) * 5 * dt;
+      rect(ctx, a.x, a.y, 1, 1, a.s > 0.5 ? "rgba(255,190,70,0.85)" : "rgba(255,110,40,0.7)");
+      if (a.y < -2) { a.y = H + 1; a.x = Math.random() * W; }
+    } else if (kind === "firefly") {
+      a.x += Math.sin(G.rt * 0.7 + a.p) * 8 * dt; a.y += Math.cos(G.rt * 0.9 + a.p * 2) * 6 * dt;
+      const on = Math.sin(G.rt * 2.5 + a.p * 3);
+      if (on > 0) rect(ctx, a.x, a.y, 1, 1, "rgba(220,255,120," + (0.4 + on * 0.6).toFixed(2) + ")");
+    } else if (kind === "wisp") {
+      a.x += (4 + a.s * 5) * dt; a.y += Math.sin(G.rt + a.p) * 5 * dt;
+      rect(ctx, a.x, a.y, 2, 1, "rgba(190,160,255,0.35)");
     } else {
       a.x += (6 + a.s * 6) * dt; a.y += (5 + Math.sin(G.rt * 2 + a.p) * 8) * dt;
       rect(ctx, a.x, a.y, 1, 1, a.s > 0.5 ? "#ffd0e0" : "#ffffff");
     }
     if (a.y > H + 2) { a.y = -2; a.x = Math.random() * W; }
+    if (a.y < -3) a.y = H + 1;
     if (a.x > W + 2) { a.x = -2; a.y = Math.random() * H; }
     if (a.x < -3) a.x = W + 1;
   }
 }
 
 /* ================= UI ================= */
-const ui = { lives: null, gold: null, wave: null, next: -1, wmain: null, wsub: null, won: null, speed: null, sound: null, boss: null, infoTick: 0, tipLock: false };
+const ui = { lives: null, gold: null, wave: null, next: -1, wmain: null, wsub: null, won: null, speed: null, sound: null, boss: null, infoTick: 0, infoKey: "" };
 const ICON = {};
 const url = (c) => c.toDataURL();
-function iconImg(src, cls = "") {
-  return `<img class="${cls}" src="${url(src)}" alt="" style="width:calc(var(--p) * ${src.width});height:calc(var(--p) * ${src.height})">`;
+function iconImg(src, unit = "--p", cls = "") {
+  return `<img class="${cls}" src="${url(src)}" alt="" style="width:calc(var(${unit}) * ${src.width});height:calc(var(${unit}) * ${src.height})">`;
 }
 function buildIcons() {
   ICON.tower = {};
-  for (const k of TKEYS) ICON.tower[k] = TRIM.map((_, lv) => canvasOf(16, 19, (g) => drawTowerTo(g, k, lv, 0, 19, { t: 1, face: 1, aim: -Math.PI / 4 })));
+  for (const k of TKEYS) ICON.tower[k] = TRIM.map((_, lv) => canvasOf(16, 22, (g) => drawTowerTo(g, k, lv, 0, 22, { t: 1, face: 1, aim: -Math.PI / 4 })));
   ICON.enemy = {};
   for (const k of EKEYS) ICON.enemy[k] = SETS[ENEMY[k].set].n[0];
   for (const [id, spr] of [["icoHeart", SPR.heart], ["icoCoin", SPR.coin], ["icoSkull", SPR.skull]]) {
@@ -1795,6 +2254,10 @@ function buildIcons() {
   }
 }
 
+function lockText(k) {
+  const i = towerStage(k);
+  return (i + 1) + ". " + STAGES[i].name + "을(를) 깨면 열려요";
+}
 function buildShop() {
   const shop = $("shop");
   shop.innerHTML = "";
@@ -1803,9 +2266,8 @@ function buildShop() {
     const b = document.createElement("button");
     b.className = "card";
     b.dataset.t = k;
-    b.title = d.name + " (" + (i + 1) + ")";
-    b.innerHTML = iconImg(ICON.tower[k][0]) +
-      `<span class="cbody"><span class="cname">${d.name}</span><span class="ccost">${iconImg(SPR.coin)}${d.cost}</span></span><span class="key">${i + 1}</span>`;
+    b.innerHTML = iconImg(ICON.tower[k][0], "--ic", "tic") +
+      `<span class="ccost">${iconImg(SPR.coin)}<span>${d.cost}</span></span><span class="key">${i + 1}</span>`;
     b.addEventListener("click", () => { Sound.unlock(); selectBuild(k); });
     b.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") showTip(towerTip(k)); });
     b.addEventListener("pointerleave", () => showTip(G.build ? towerTip(G.build) : ""));
@@ -1814,15 +2276,29 @@ function buildShop() {
 }
 function refreshShop() {
   for (const b of $("shop").children) {
-    const k = b.dataset.t;
+    const k = b.dataset.t, open = towerOpen(k);
     b.classList.toggle("sel", G.build === k);
-    b.classList.toggle("poor", G.scene === "play" && G.gold < TOWER[k].cost);
+    b.classList.toggle("locked", !open);
+    b.classList.toggle("poor", open && G.scene === "play" && G.gold < TOWER[k].cost);
+    const cost = b.querySelector(".ccost");
+    if (cost.dataset.locked !== String(!open)) {
+      cost.dataset.locked = String(!open);
+      cost.innerHTML = open ? iconImg(SPR.coin) + "<span>" + TOWER[k].cost + "</span>" : iconImg(SPR.lock);
+    }
+    b.title = open ? TOWER[k].name + " (" + (TKEYS.indexOf(k) + 1) + ")" : TOWER[k].name + " - " + lockText(k);
   }
+}
+function towerTags(d) {
+  if (d.support) return "공격 안 함 · 주변 탑 강화";
+  const tags = [d.air ? "공중 공격 가능" : "땅 위 적만", d.magic ? "마법 (갑옷 무시)" : "물리"];
+  if (d.levels[0].pierce) tags.push("갑옷 " + Math.round(d.levels[0].pierce * 100) + "% 관통");
+  if (d.aura) tags.push("주변 전체 공격");
+  return tags.join(" · ");
 }
 function towerTip(k) {
   const d = TOWER[k], s = d.levels[0];
-  const tags = [d.air ? "공중 공격 가능" : "땅 위 적만", d.magic ? "마법 (갑옷 무시)" : "물리"];
-  return `<span class="t">${d.name} · ${d.cost}G</span><br>${d.desc}<br><span class="d">${tags.join(" · ")} · 사거리 ${s.range}</span>`;
+  if (!towerOpen(k)) return `<span class="t">${d.name}</span> <span class="lock">잠김</span><br>${d.desc}<br><span class="d">${lockText(k)}</span>`;
+  return `<span class="t">${d.name} · ${d.cost}G</span><br>${d.desc}<br><span class="d">${towerTags(d)} · 사거리 ${s.range}</span>`;
 }
 let tipHtml = "";
 function showTip(html) {
@@ -1833,6 +2309,7 @@ function showTip(html) {
 
 function selectBuild(k) {
   if (G.scene !== "play" || G.phase === "over" || G.phase === "won") return;
+  if (!towerOpen(k)) { Sound.play("deny"); toast(TOWER[k].name + ": " + lockText(k), ""); return; }
   if (G.build === k) { G.build = null; G.pending = null; showTip(""); refreshShop(); return; }
   showInfo(null);
   G.build = k;
@@ -1851,15 +2328,22 @@ function cancelSel() {
 
 function statLine(def, s, n) {
   const parts = [];
-  const add = (label, a, b, unit = "") => {
-    parts.push(b !== undefined && b !== a ? `${label} ${a}${unit} <span class="up">→ ${b}${unit}</span>` : `${label} ${a}${unit}`);
+  const add = (label, a, b, unit = "", pre = "") => {
+    if (a === undefined) return;
+    parts.push(b !== undefined && b !== a ? `${label} ${pre}${a}${unit} <span class="up">→ ${pre}${b}${unit}</span>` : `${label} ${pre}${a}${unit}`);
   };
+  const pct = (v) => (v === undefined ? undefined : Math.round(v * 100));
   add("공격력", s.dmg, n && n.dmg);
   add("속도", s.rate, n && n.rate, "/초");
   add("사거리", s.range, n && n.range);
-  if (s.splash && def !== TOWER.frost) add("폭발", s.splash, n && n.splash);
-  if (s.slow) add("둔화", Math.round(s.slow * 100), n && Math.round(n.slow * 100), "%");
-  if (s.chain) add("연쇄", s.chain, n && n.chain);
+  if (s.splash && def === TOWER.cannon) add("폭발", s.splash, n && n.splash);
+  add("둔화", pct(s.slow), n && pct(n.slow), "%");
+  add("연쇄", s.chain, n && n.chain);
+  add("관통", pct(s.pierce), n && pct(n.pierce), "%");
+  add("독", s.poison, n && n.poison, "/초");
+  add("화상", s.burn, n && n.burn, "/초");
+  add("강화", pct(s.buff), n && pct(n.buff), "%", "+");
+  if (s.haste || (n && n.haste)) add("공격 속도", pct(s.haste || 0), n && pct(n.haste), "%", "+");
   return parts.join(" · ");
 }
 function showInfo(t) {
@@ -1877,42 +2361,53 @@ function showInfo(t) {
   ui.infoKey = "";
   updateInfo();
 }
+function buffedCount(b) {
+  const r2 = rangePx(TOWER.banner.levels[b.lv]) ** 2;
+  return G.towers.filter((t) => t.type !== "banner" && (t.x - b.x) ** 2 + (t.y - b.y) ** 2 <= r2).length;
+}
 function updateInfo() {
   const t = G.sel;
   if (!t) return;
   const def = TOWER[t.type], s = def.levels[t.lv], n = def.levels[t.lv + 1];
-  const key = [t.type, t.lv, t.mode, t.kills, Math.floor(t.dealt), G.gold >= (n ? n.cost : 0)].join("|");
+  const extra = def.support ? buffedCount(t) : 0;
+  const key = [t.type, t.lv, t.mode, t.kills, Math.floor(t.dealt), G.gold >= (n ? n.cost : 0), t.bd, extra].join("|");
   if (key === ui.infoKey) return;
   ui.infoKey = key;
   const ic = ICON.tower[t.type][t.lv];
   const img = $("iIcon");
   img.src = url(ic);
-  img.style.width = "calc(var(--p) * " + ic.width + ")";
-  img.style.height = "calc(var(--p) * " + ic.height + ")";
+  img.style.width = "calc(var(--ic) * " + ic.width + ")";
+  img.style.height = "calc(var(--ic) * " + ic.height + ")";
   $("iName").textContent = def.name;
   $("iLv").textContent = "Lv." + (t.lv + 1) + (n ? "" : " 최대");
-  showTip(`<span class="t">${def.name} Lv.${t.lv + 1}</span><br>${statLine(def, s, n)}<br><span class="d">처치 ${fmt(t.kills)} · 준 피해 ${fmt(t.dealt)}${def.air ? "" : " · 공중 공격 불가"}</span>`);
+  let meta;
+  if (def.support) meta = "강화 중인 탑 " + extra + "개";
+  else meta = "처치 " + fmt(t.kills) + " · 준 피해 " + fmt(t.dealt) + (def.air ? "" : " · 공중 공격 불가");
+  if (t.bd > 0) meta += ` · <span class="up">지원 +${Math.round(t.bd * 100)}%</span>`;
+  showTip(`<span class="t">${def.name} Lv.${t.lv + 1}</span><br>${statLine(def, s, n)}<br><span class="d">${meta}</span>`);
   const up = $("bUp");
   up.querySelector(".main").textContent = n ? "업그레이드" : "최대 레벨";
   up.querySelector(".sub").textContent = n ? n.cost + "G" : "-";
   up.disabled = !n || G.gold < n.cost;
   $("bSell").querySelector(".sub").textContent = "+" + sellValue(t) + "G";
-  $("bTgt").querySelector(".sub").textContent = TARGET_NAME[t.mode];
+  const tg = $("bTgt"), fixed = def.support || def.aura;
+  tg.disabled = !!fixed;
+  tg.querySelector(".sub").textContent = def.support ? "-" : def.aura ? "주변 전체" : TARGET_NAME[t.mode];
 }
 
 function waveButton() {
   if (G.scene !== "play" || G.phase === "over" || G.phase === "won") return { on: false, main: "웨이브", sub: "-" };
-  if (G.phase === "build") return { on: true, main: "▶ 웨이브 시작", sub: "1 / " + TOTAL };
+  if (G.phase === "build") return { on: true, main: "▶ 웨이브 시작", sub: "1 / " + G.st.count };
   if (G.spawners.length) return { on: false, main: "웨이브 " + G.wave, sub: "몬스터 출현 중" };
-  if (!G.endless && G.wave >= TOTAL) return { on: false, main: "마지막 웨이브", sub: "모두 물리치세요" };
+  if (!G.endless && G.wave >= G.st.count) return { on: false, main: "마지막 웨이브", sub: "모두 물리치세요" };
   const b = earlyBonus();
   if (G.phase === "between") return { on: true, main: "▶ 다음 웨이브", sub: Math.ceil(G.countdown) + "초 · +" + b + "G" };
   return { on: true, main: "▶ 지금 부르기", sub: "보너스 +" + b + "G" };
 }
 function nextPreviewHtml(n) {
-  if (!G.endless && n > TOTAL) return "";
+  if (!G.endless && n > G.st.count) return "";
   const counts = {};
-  for (const [type, count] of waveDef(n)) counts[type] = (counts[type] || 0) + count;
+  for (const [type, count] of waveGroups(n)) counts[type] = (counts[type] || 0) + count;
   let html = "<span>다음</span>";
   for (const k in counts) {
     const d = ENEMY[k], ic = ICON.enemy[k];
@@ -1923,11 +2418,11 @@ function nextPreviewHtml(n) {
 function syncUi() {
   const play = G.scene === "play";
   const lives = play ? G.lives : "-", gold = play ? fmt(G.gold) : "-";
-  const wave = play ? (G.endless ? G.wave + "/∞" : G.wave + "/" + TOTAL) : "-";
+  const wave = play ? G.wave + "/" + (G.endless ? "∞" : G.st.count) : "-";
   if (ui.lives !== lives) { $("lives").textContent = lives; ui.lives = lives; }
   if (ui.gold !== gold) { $("gold").textContent = gold; ui.gold = gold; refreshShop(); ui.infoKey = ""; }
   if (ui.wave !== wave) { $("wave").textContent = wave; ui.wave = wave; }
-  const nextKey = play ? G.wave + (G.endless ? 1000 : 0) : -2;
+  const nextKey = play ? G.si * 10000 + G.wave + (G.endless ? 1000 : 0) : -2;
   if (ui.next !== nextKey) { ui.next = nextKey; $("next").innerHTML = play ? nextPreviewHtml(G.wave + 1) : ""; }
   const wb = waveButton(), bw = $("bWave");
   if (ui.wmain !== wb.main) { bw.querySelector(".main").textContent = wb.main; ui.wmain = wb.main; }
@@ -1936,7 +2431,9 @@ function syncUi() {
   const sp = "×" + G.speed;
   if (ui.speed !== sp) { $("bSpeed").textContent = sp; ui.speed = sp; }
   if (ui.sound !== save.sound) { $("bSound").classList.toggle("off", !save.sound); ui.sound = save.sound; }
-  const boss = play && G.boss && G.boss.alive ? G.boss : null;
+  // boss bar follows the boss closest to the castle
+  let boss = null;
+  if (play) for (const e of G.enemies) if (e.alive && e.d.boss && (!boss || e.path.len - e.dist < boss.path.len - boss.dist)) boss = e;
   if (boss) {
     if (ui.boss !== boss.id) { ui.boss = boss.id; $("bossName").textContent = boss.d.name; $("bossbar").hidden = false; }
     $("bossFill").style.width = (clamp(boss.hp / boss.maxHp, 0, 1) * 100).toFixed(1) + "%";
@@ -1961,50 +2458,77 @@ function starText(n) { return "★".repeat(n) + "☆".repeat(3 - n); }
 function showTitle() {
   G.scene = "title";
   G.md = null;
+  G.st = null;
   G.enemies = []; G.towers = []; G.projs = []; G.fx = []; G.parts = []; G.pops = [];
-  G.sel = null; G.build = null; G.boss = null;
+  G.sel = null; G.build = null; G.paused = false;
+  $("bPause").textContent = "II";
   showInfo(null);
   showTip("");
   refreshShop();
   resetAmbient();
-  const cards = MAPS.map((m, i) => {
-    const b = save.best[m.id] || {};
-    const best = (b.stars ? "최고 " + starText(b.stars) : "아직 못 깼어요") + (b.endless ? " · 무한 " + b.endless + "웨이브" : "");
-    return `<button class="mapcard" data-act="map" data-i="${i}"><img src="${THUMB[i]}" alt=""><span class="mtext"><span>${m.name}</span><span class="stars">난이도 ${"■".repeat(m.diff)}${"□".repeat(3 - m.diff)}</span><span class="dim">${m.desc}</span><span class="best">${best}</span></span></button>`;
+  const opened = TKEYS.filter(towerOpen).length, done = STAGES.filter((_, i) => cleared(i)).length;
+  const cards = STAGES.map((st, i) => {
+    const b = save.best[st.id] || {}, open = stageOpen(i);
+    let reward;
+    if (!st.reward) reward = `<span class="reward${b.stars ? " got" : ""}">${b.stars ? "모든 스테이지 클리어!" : "마지막 스테이지"}</span>`;
+    else reward = `<span class="reward${b.stars ? " got" : ""}">${b.stars ? "해금함" : "보상"}: ${TOWER[st.reward].name}</span>`;
+    const stars = `<span class="stars">${starText(b.stars || 0)}</span> <span class="dim">· ${st.count}웨이브${b.endless ? " · 무한 " + b.endless : ""}</span>`;
+    const lockover = open ? "" : `<span class="lockover">${iconImg(SPR.lock, "--ic")}</span>`;
+    const body = open
+      ? `<span class="mname">${i + 1}. ${st.name}</span><span>${stars}</span><span class="dim">${STAGE_DESC[st.id]}</span>${reward}`
+      : `<span class="mname">${i + 1}. ${st.name}</span><span class="dim">${i}. ${STAGES[i - 1].name}을(를) 깨면 열려요</span>${reward}`;
+    return `<button class="mapcard${open ? "" : " locked"}" data-act="${open ? "map" : "locked"}" data-i="${i}"><span class="thumb"><img src="${THUMB[i]}" alt="">${lockover}</span><span class="mtext">${body}</span></button>`;
   }).join("");
-  overlay(`<div class="panel px"><h1>픽셀 타워 디펜스</h1><p class="dim">길을 따라 몰려오는 몬스터를 탑으로 막아 성을 지키세요!</p><div class="maps">${cards}</div><div class="row"><button class="btn" data-act="help">도움말</button></div></div>`, "title");
+  overlay(`<div class="panel px"><h1>픽셀 타워 디펜스</h1><p class="dim">길을 따라 몰려오는 몬스터를 탑으로 막아 성을 지키세요! 스테이지를 깨면 새 탑과 다음 스테이지가 열려요.</p>
+    <p>클리어 <span class="good">${done}/${STAGES.length}</span> · 해금한 탑 <span class="good">${opened}/${TKEYS.length}</span></p>
+    <div class="maps">${cards}</div><div class="row"><button class="btn" data-act="help">도움말</button></div></div>`, "title");
 }
 function showHelp(back) {
   const enemyRows = EKEYS.map((k) => `${iconImg(ICON.enemy[k])}<span><span class="t">${ENEMY[k].name}</span> · ${ENEMY[k].desc}</span>`).join("");
-  const towerRows = TKEYS.map((k) => `${iconImg(ICON.tower[k][0])}<span><span class="t">${TOWER[k].name} ${TOWER[k].cost}G</span> · ${TOWER[k].desc}</span>`).join("");
+  const towerRows = TKEYS.map((k) => {
+    const d = TOWER[k], open = towerOpen(k);
+    return `${iconImg(ICON.tower[k][0], "--ic")}<span><span class="t">${d.name} ${d.cost}G</span> · ${d.desc}${open ? "" : ` <span class="lock">(${lockText(k)})</span>`}</span>`;
+  }).join("");
   overlay(`<div class="panel px help"><h2>도움말</h2>
     <ul>
       <li>아래 칸에서 탑을 고른 뒤 풀밭을 눌러 짓습니다. 휴대폰은 같은 칸을 한 번 더 누르면 지어져요.</li>
       <li>지은 탑을 누르면 업그레이드, 판매(${Math.round(SELL * 100)}% 환불), 공격 대상을 바꿀 수 있어요.</li>
-      <li>몬스터가 성에 들어가면 생명이 줄어요. 생명이 0이 되면 패배, ${TOTAL}웨이브를 버티면 승리!</li>
+      <li>몬스터가 성에 들어가면 생명이 줄어요. 생명이 0이 되면 패배, 마지막 웨이브까지 버티면 승리!</li>
+      <li>스테이지를 처음 깨면 새 탑이 해금되고 다음 스테이지가 열려요.</li>
       <li>다음 웨이브를 일찍 부르면 남은 시간만큼 보너스 골드를 받아요.</li>
-      <li>갑옷 입은 적은 화살과 포탄 피해를 덜 받아요. 얼음탑과 번개탑은 마법이라 갑옷을 무시해요.</li>
+      <li>갑옷 입은 적은 화살과 포탄 피해를 덜 받아요. 마법 탑은 갑옷을 무시하고, 저격탑은 갑옷을 뚫어요.</li>
     </ul>
     <div class="grid">${towerRows}</div>
     <div class="grid">${enemyRows}</div>
-    <p class="dim">단축키: 1~4 탑 고르기 · Space 웨이브 · U 업그레이드 · S 판매 · T 공격 대상 · F 속도 · P 일시정지 · M 소리 · Esc 취소</p>
+    <p class="dim">단축키: 1~8 탑 고르기 · Space 웨이브 · U 업그레이드 · S 판매 · T 공격 대상 · F 속도 · P 일시정지 · M 소리 · Esc 취소</p>
     <div class="row"><button class="btn go" data-act="${back}">돌아가기</button></div>
     <p class="credit">글꼴: 갈무리11 (© 이민서, SIL Open Font License 1.1)</p></div>`, "help");
 }
 function showPause() {
-  overlay(`<div class="panel px"><h2>일시정지</h2><p class="dim">${G.md.def.name} · 웨이브 ${G.wave}</p>
-    <div class="row"><button class="btn go" data-act="resume">계속하기</button><button class="btn" data-act="restart">다시 시작</button><button class="btn" data-act="help-pause">도움말</button><button class="btn warn" data-act="title">맵 선택</button></div></div>`, "pause");
+  overlay(`<div class="panel px"><h2>일시정지</h2><p class="dim">${G.si + 1}. ${G.st.name} · 웨이브 ${G.wave}</p>
+    <div class="row"><button class="btn go" data-act="resume">계속하기</button><button class="btn" data-act="restart">다시 시작</button><button class="btn" data-act="help-pause">도움말</button><button class="btn warn" data-act="title">스테이지 선택</button></div></div>`, "pause");
 }
-function overlayResult(won, stars) {
+function overlayResult(won, stars, info) {
+  const next = STAGES[G.si + 1];
   if (won) {
-    overlay(`<div class="panel px"><h1>승리!</h1><div class="big-stars">${starText(stars)}</div><p>${G.md.def.name}을(를) 지켜냈어요. 남은 생명 ${G.lives} · 처치 ${fmt(G.kills)}</p>
-      <p class="dim">무한 모드에서 몇 웨이브까지 버틸 수 있는지 도전해 보세요.</p>
-      <div class="row"><button class="btn go" data-act="endless">무한 모드 계속</button><button class="btn" data-act="restart">다시 하기</button><button class="btn" data-act="title">맵 선택</button></div></div>`, "result");
+    let extra = "";
+    if (info.newTower) {
+      const d = TOWER[info.newTower];
+      extra += `<div class="unlock px">${iconImg(ICON.tower[info.newTower][0], "--ic")}<div><div class="t">새 탑 해금! ${d.name}</div><div>${d.desc}</div></div></div>`;
+    }
+    if (info.nextOpened) extra += `<p class="good">다음 스테이지 '${info.nextOpened.name}'이(가) 열렸어요!</p>`;
+    if (info.allClear) extra += `<p class="good">모든 스테이지를 깼어요! 무한 모드로 기록에 도전해 보세요.</p>`;
+    const nextBtn = next && stageOpen(G.si + 1) ? `<button class="btn go" data-act="next">다음 스테이지 ▶</button>` : "";
+    overlay(`<div class="panel px"><h1>승리!</h1><div class="big-stars">${starText(stars)}</div><p>${G.st.name}을(를) 지켜냈어요. 남은 생명 ${G.lives} · 처치 ${fmt(G.kills)}</p>${extra}
+      <div class="row">${nextBtn}<button class="btn${nextBtn ? "" : " go"}" data-act="endless">무한 모드 계속</button><button class="btn" data-act="restart">다시 하기</button><button class="btn" data-act="title">스테이지 선택</button></div></div>`, "result");
   } else {
     const extra = G.endless ? "무한 모드 " + G.wave + "웨이브까지 버텼어요." : "웨이브 " + G.wave + "에서 성이 무너졌어요.";
+    const hints = ["갑옷 입은 적에게는 마법 탑이 좋아요.", "박쥐와 드래곤은 대포탑이 못 맞혀요. 궁수탑과 번개탑을 섞으세요.", "얼음탑으로 느리게 하면 다른 탑이 더 오래 때려요."];
+    if (towerOpen("sniper")) hints.push("보스와 골렘은 저격탑으로 멀리서 노리세요.");
+    if (towerOpen("banner")) hints.push("지원탑 둘레에 탑을 모아 지으면 더 강해져요.");
     overlay(`<div class="panel px"><h1 style="color:var(--red)">패배</h1><p>${extra} 처치 ${fmt(G.kills)}</p>
-      <p class="dim">갑옷 입은 적에게는 마법 탑, 박쥐에게는 궁수탑과 번개탑이 좋아요.</p>
-      <div class="row"><button class="btn go" data-act="restart">다시 도전</button><button class="btn" data-act="title">맵 선택</button></div></div>`, "result");
+      <p class="dim">${hints[G.wave % hints.length]}</p>
+      <div class="row"><button class="btn go" data-act="restart">다시 도전</button><button class="btn" data-act="title">스테이지 선택</button></div></div>`, "result");
   }
 }
 function setPaused(p) {
@@ -2018,26 +2542,28 @@ ov.addEventListener("click", (e) => {
   const b = e.target.closest("[data-act]");
   if (!b) return;
   Sound.unlock();
-  Sound.play("click");
   const act = b.dataset.act;
-  if (act === "map") startMap(+b.dataset.i);
+  if (act === "locked") { Sound.play("deny"); return; }
+  Sound.play("click");
+  if (act === "map") startStage(+b.dataset.i);
   else if (act === "help") showHelp("back-title");
   else if (act === "back-title") showTitle();
   else if (act === "help-pause") showHelp("back-pause");
   else if (act === "back-pause") showPause();
   else if (act === "resume") setPaused(false);
-  else if (act === "restart") startMap(G.mi);
+  else if (act === "restart") startStage(G.si);
+  else if (act === "next") startStage(G.si + 1);
   else if (act === "title") showTitle();
   else if (act === "endless") {
-    G.endless = true; G.phase = "between"; G.countdown = BETWEEN; G.bestWave = G.wave;
+    G.endless = true; G.phase = "between"; G.countdown = BETWEEN;
     ui.next = -1;
     hideOverlay();
     toast("무한 모드 시작!", "good");
   }
 });
 ov.addEventListener("pointerover", (e) => {
-  const b = e.target.closest("[data-act=map]");
-  if (b && G.scene === "title" && G.titleMi !== +b.dataset.i) { G.titleMi = +b.dataset.i; resetAmbient(); }
+  const b = e.target.closest(".mapcard");
+  if (b && G.scene === "title" && G.titleSi !== +b.dataset.i) { G.titleSi = +b.dataset.i; resetAmbient(); }
 });
 
 $("bWave").addEventListener("click", () => { Sound.unlock(); callWave(); });
@@ -2056,8 +2582,9 @@ function toggleSound() {
   if (save.sound) { Sound.unlock(); Sound.play("click"); }
 }
 function cycleTarget() {
-  if (!G.sel) return;
-  G.sel.mode = TARGETS[(TARGETS.indexOf(G.sel.mode) + 1) % TARGETS.length];
+  const t = G.sel;
+  if (!t || TOWER[t.type].support || TOWER[t.type].aura) return;
+  t.mode = TARGETS[(TARGETS.indexOf(t.mode) + 1) % TARGETS.length];
   Sound.play("click");
   updateInfo();
 }
@@ -2125,7 +2652,7 @@ addEventListener("keydown", (ev) => {
   if (k === "KeyP") { setPaused(!G.paused); return; }
   if (k === "KeyM") { toggleSound(); return; }
   if (G.paused || G.phase === "over" || G.phase === "won") return;
-  if (/^Digit[1-4]$/.test(k) || /^Numpad[1-4]$/.test(k)) selectBuild(TKEYS[+k.slice(-1) - 1]);
+  if (/^(Digit|Numpad)[1-8]$/.test(k)) selectBuild(TKEYS[+k.slice(-1) - 1]);
   else if (k === "Space") { ev.preventDefault(); callWave(); }
   else if (k === "KeyF") cycleSpeed();
   else if (k === "KeyU" && G.sel) { if (upgrade(G.sel)) { ui.infoKey = ""; updateInfo(); } }
@@ -2144,6 +2671,7 @@ function layout() {
   // HUD and bar get their size from --p; the field takes what is left, in whole pixels when it can.
   const fit = (p) => {
     root.setProperty("--p", p + "px");
+    root.setProperty("--ic", (p >= 4 ? 3 : 2) + "px");
     root.setProperty("--fs", (p >= 3 ? 22 : 11) + "px");
     let u = 1;
     for (let pass = 0; pass < 2; pass++) {
@@ -2172,11 +2700,11 @@ addEventListener("resize", layout);
 const THUMB = [];
 function boot() {
   buildSprites();
-  for (const def of MAPS) MD.push(buildMap(def));
+  for (const def of STAGES) MD.push(buildMap(def));
   MD.forEach((md, i) => {
     THUMB[i] = url(canvasOf(W, H, (g) => {
       g.drawImage(md.bg, 0, 0);
-      drawCave(g, md.rs, 0);
+      for (const p of md.paths) drawCave(g, p.rs, 0);
       drawCastle(g, md.re, 0, 0);
     }));
   });
@@ -2203,7 +2731,10 @@ function boot() {
   }
   requestAnimationFrame(frame);
   if (/[?&]test\b/.test(location.search)) {
-    window.__td = { G, MD, MAPS, TOWER, ENEMY, TKEYS, update, render, startMap, build, upgrade, sell, callWave, canBuild, waveDef, hpScale, posAt };
+    window.__td = {
+      G, MD, STAGES, TOWER, ENEMY, TKEYS, save, update, render, startStage, showTitle, build, upgrade, sell, callWave,
+      canBuild, waveGroups, waveDef, hpScale, posAt, towerOpen, stageOpen, persist,
+    };
   }
 }
 boot();
